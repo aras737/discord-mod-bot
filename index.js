@@ -1,3 +1,8 @@
+await rest.put(
+  Routes.applicationCommands(client.user.id),
+  { body: commands }
+);
+
 const { Client, GatewayIntentBits } = require('discord.js');
 const client = new Client({ intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildMessages, GatewayIntentBits.MessageContent, GatewayIntentBits.GuildMembers] });
 
