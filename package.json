@@ -1,7 +1,7 @@
 {
   "name": "discord-mod-bot",
   "version": "1.0.0",
-  "description": "Basit bir Discord moderasyon botu",
+  "description": "Render için basit Discord botu",
   "main": "index.js",
   "scripts": {
     "start": "node index.js"
