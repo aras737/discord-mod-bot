@@ -1,13 +1,17 @@
 {
   "name": "discord-mod-bot",
   "version": "1.0.0",
-  "description": "Discord moderation bot",
+  "description": "Simple Discord moderation bot",
   "main": "index.js",
   "scripts": {
     "start": "node index.js"
   },
-"dependencies": {
-  "discord.js": "^14.11.0",
-  "@discordjs/rest": "^1.7.0",
-  "dotenv": "^16.0.3"
+  "engines": {
+    "node": ">=16.6.0"
+  },
+  "dependencies": {
+    "discord.js": "^14.11.0",
+    "@discordjs/rest": "^1.7.0",
+    "dotenv": "^16.0.3"
+  }
 }
