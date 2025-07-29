@@ -1,42 +1,35 @@
-require('dotenv').config();
 const { REST, Routes } = require('discord.js');
-const fs = require('node:fs');
-const path = require('node:path');
+const fs = require('fs');
+require('dotenv').config();
 
-// Gerekli değişkenler
-const clientId = 'BOT_ID_HERE'; // BOT ID'ni buraya yaz
-const guildId = 'GUILD_ID_HERE'; // TEST sunucunun ID'sini buraya yaz (global yüklenecekse kaldır)
+const clientId = process.env.CLIENT_ID;
+const token = process.env.TOKEN;
 
 const commands = [];
-const commandsPath = path.join(__dirname, 'commands');
-const commandFiles = fs.readdirSync(commandsPath).filter(file => file.endsWith('.js'));
+const commandFiles = fs.readdirSync('./commands').filter(file => file.endsWith('.js'));
 
 for (const file of commandFiles) {
-  const filePath = path.join(commandsPath, file);
-  const command = require(filePath);
+  const command = require(`./commands/${file}`);
   if ('data' in command && 'execute' in command) {
     commands.push(command.data.toJSON());
   } else {
-    console.log(`[UYARI] ${filePath} geçerli bir komut değil.`);
+    console.log(`[UYARI] Komut atlandı: ${file}`);
   }
 }
 
-// Discord REST API
-const rest = new REST().setToken(process.env.TOKEN);
+const rest = new REST({ version: '10' }).setToken(token);
 
-// Komutları yükle
 (async () => {
   try {
-    console.log(`⏳ ${commands.length} komut yükleniyor...`);
+    console.log(`📤 ${commands.length} komut global olarak yükleniyor...`);
 
     await rest.put(
-      Routes.applicationGuildCommands(clientId, guildId), // test sunucusu için
-      // Routes.applicationCommands(clientId), // global yüklenecekse bu satırı kullan
-      { body: commands },
+      Routes.applicationCommands(clientId),
+      { body: commands }
     );
 
-    console.log('✅ Komutlar başarıyla yüklendi.');
+    console.log('✅ Komutlar global olarak başarıyla yüklendi!');
   } catch (error) {
-    console.error('🚨 Komut yükleme hatası:', error);
+    console.error('❌ HATA:', error);
   }
 })();
