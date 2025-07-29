@@ -1,7 +1,7 @@
 {
-  "name": "discord-bot-v13",
+  "name": "discord-bot-minimal",
   "version": "1.0.0",
-  "description": "Simple Discord bot with discord.js v13",
+  "description": "Minimal discord.js v13 bot",
   "main": "index.js",
   "scripts": {
     "start": "node index.js"
