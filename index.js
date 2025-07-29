@@ -8,6 +8,7 @@ client.once('ready', () => {
   console.log(`✅ Bot aktif: ${client.user.tag}`);
 });
 
-client.login(process.env.TOKEN).catch(err => {
-  console.error('❌ Bot girişi başarısız:', err);
+// Environment değişkeninden token alınır
+client.login(process.env.TOKEN).catch((err) => {
+  console.error('❌ Bot giriş hatası:', err);
 });
