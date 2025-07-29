@@ -1,36 +1,47 @@
+const { Client, GatewayIntentBits, Collection } = require('discord.js');
+const http = require('http');
 const fs = require('fs');
 const path = require('path');
-const { Client, Collection, GatewayIntentBits } = require('discord.js');
-const client = new Client({ intents: [GatewayIntentBits.Guilds] });
 
+const client = new Client({ intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildBans, GatewayIntentBits.GuildMembers] });
 client.commands = new Collection();
 
+const TOKEN = process.env.TOKEN;
+
+// Komutları yükleme (örnek: ./commands klasöründeki tüm komutlar)
 const commandsPath = path.join(__dirname, 'commands');
 const commandFiles = fs.readdirSync(commandsPath).filter(file => file.endsWith('.js'));
 
 for (const file of commandFiles) {
-  const filePath = path.join(commandsPath, file);
-  const command = require(filePath);
+  const command = require(path.join(commandsPath, file));
   if ('data' in command && 'execute' in command) {
     client.commands.set(command.data.name, command);
-    console.log(`Komut yüklendi: ${command.data.name}`);
-  } else {
-    console.log(`[UYARI] ${file} geçerli komut yapısında değil.`);
   }
 }
 
-client.on('interactionCreate', async interaction => {
-  if (!interaction.isChatInputCommand()) return;
+// Bot hazır olduğunda
+client.once('ready', () => {
+  console.log(`✅ Bot aktif: ${client.user.tag}`);
 
-  const command = client.commands.get(interaction.commandName);
-  if (!command) return;
-
-  try {
-    await command.execute(interaction);
-  } catch (error) {
-    console.error(error);
-    await interaction.reply({ content: 'Komutta hata oluştu.', ephemeral: true });
+  // Konsola komutlar hakkında bilgi yaz
+  if (client.commands.size > 0) {
+    console.log(`📂 Yüklü komut sayısı: ${client.commands.size}`);
+    if (client.commands.has('ban')) {
+      console.log('🔨 Ban komutu yüklendi ve aktif.');
+    }
+    // İstersen başka komutlar için de ekleyebilirsin
+  } else {
+    console.log('⚠️ Komut bulunamadı!');
   }
 });
 
-client.login(process.env.TOKEN);
+// Basit sahte HTTP server (Render için port açmak amacıyla)
+const PORT = process.env.PORT || 3000;
+http.createServer((req, res) => {
+  res.writeHead(200);
+  res.end('Bot çalışıyor ve port aktif.');
+}).listen(PORT, () => {
+  console.log(`🌐 Sahte port aktif: http://localhost:${PORT}`);
+});
+
+client.login(TOKEN);
