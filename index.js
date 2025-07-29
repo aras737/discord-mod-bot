@@ -1,5 +1,7 @@
 const { Client, GatewayIntentBits } = require('discord.js');
 
+const TOKEN = process.env.TOKEN || "MTM5NDQyODEwMTM2NjI1NTY1Ng.GzEEMI._hveV9ZzqvKshoQIzL4Qp91HjQ5CcWRhcCFTvc"; // Render'dan alır, yoksa kod içinden alır
+
 const client = new Client({
   intents: [GatewayIntentBits.Guilds]
 });
@@ -8,6 +10,11 @@ client.once('ready', () => {
   console.log(`✅ Bot aktif: ${client.user.tag}`);
 });
 
-client.login(process.env.TOKEN).catch(err => {
-  console.error("❌ Token hatası:", err);
+client.on('error', (err) => {
+  console.error('Bot hatası (yutuldu):', err.message);
+});
+
+client.login(TOKEN).catch(err => {
+  console.error("❌ Token geçersiz veya bot başlatılamadı.");
+  // Burada çıkış yapmıyoruz, uygulama açık kalıyor
 });
