@@ -1,7 +1,7 @@
 {
   "name": "phantom-bot",
   "version": "1.0.0",
-  "description": "Gelişmiş Discord botu",
+  "description": "Basit Discord botu",
   "main": "index.js",
   "scripts": {
     "start": "node index.js"
