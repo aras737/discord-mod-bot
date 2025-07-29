@@ -1,35 +1,33 @@
 const { REST, Routes, SlashCommandBuilder } = require('discord.js');
 require('dotenv').config();
 
-// .env'den alınan bilgiler
 const TOKEN = process.env.TOKEN;
 const CLIENT_ID = process.env.CLIENT_ID;
 const GUILD_ID = process.env.GUILD_ID;
 
-// Yeni komutları buraya yaz
+// KOMUTLAR: sırayla yaz, sırayla yüklenir
 const commands = [
   new SlashCommandBuilder()
+    .setName('ban')
+    .setDescription('Kullanıcıyı sunucudan banlar.'),
+
+  new SlashCommandBuilder()
+    .setName('kick')
+    .setDescription('Kullanıcıyı sunucudan atar.'),
+
+  new SlashCommandBuilder()
     .setName('ping')
-    .setDescription('Botun tepki süresini gösterir.'),
-
-  new SlashCommandBuilder()
-    .setName('selam')
-    .setDescription('Bot sana selam verir.'),
-
-  new SlashCommandBuilder()
-    .setName('yardım')
-    .setDescription('Tüm komutları listeler.')
+    .setDescription('Botun tepki süresini gösterir.')
 ].map(command => command.toJSON());
 
-// REST nesnesi
 const rest = new REST({ version: '10' }).setToken(TOKEN);
 
 (async () => {
   try {
-    console.log('🧹 Tüm eski komutlar siliniyor...');
+    console.log('🧹 Önceki komutlar siliniyor...');
     await rest.put(
       Routes.applicationGuildCommands(CLIENT_ID, GUILD_ID),
-      { body: [] } // tüm komutları kaldır
+      { body: [] }
     );
 
     console.log('⬆️ Yeni komutlar yükleniyor...');
@@ -38,7 +36,7 @@ const rest = new REST({ version: '10' }).setToken(TOKEN);
       { body: commands }
     );
 
-    console.log('✅ Komutlar temizlendi ve yeniden yüklendi.');
+    console.log('✅ Komutlar yüklendi! Sıralama: /ban, /kick, /ping');
   } catch (error) {
     console.error('❌ Komut yükleme hatası:', error);
   }
