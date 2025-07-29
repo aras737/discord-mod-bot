@@ -1,18 +1,15 @@
 const { Client, GatewayIntentBits } = require('discord.js');
+require('dotenv').config();
 
 const client = new Client({
-  intents: [
-    GatewayIntentBits.Guilds,
-    GatewayIntentBits.GuildMessages,
-    GatewayIntentBits.MessageContent
-  ]
+  intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildMessages, GatewayIntentBits.MessageContent]
 });
 
-client.on('ready', () => {
-  console.log(`${client.user.tag} olarak giriş yaptı.`);
+client.once('ready', () => {
+  console.log(`✅ ${client.user.tag} olarak giriş yapıldı.`);
 });
 
-client.on('messageCreate', message => {
+client.on('messageCreate', (message) => {
   if (message.content === '!ping') {
     message.reply('🏓 Pong!');
   }
