@@ -1,20 +1,38 @@
 const { REST, Routes } = require('discord.js');
 const fs = require('fs');
+const path = require('path');
 require('dotenv').config();
 
 const commands = [];
-const commandFiles = fs.readdirSync('./commands').filter(file => file.endsWith('.js'));
+const commandsPath = path.join(__dirname, 'commands');
+const commandFiles = fs.readdirSync(commandsPath).filter(file => file.endsWith('.js'));
 
-// Komutları yükle
+// Komutları hazırla
 for (const file of commandFiles) {
-  const command = require(`./commands/${file}`);
-  commands.push(command.data.toJSON());
+  const command = require(path.join(commandsPath, file));
+  if ('data' in command && 'execute' in command) {
+    commands.push(command.data.toJSON());
+  } else {
+    console.warn(`[UYARI] ${file} komutu eksik!`);
+  }
 }
 
-// Token, clientId ve guildId .env'den
-const rest = new REST({ version: '10' }).setToken(process.env.TOKEN);
+// GUILD ID'ni buraya yaz!
+const GUILD_ID = '1394407092106039307';
+const CLIENT_ID = '1394428101366255656';
 
-// GUILD KOMUTU olarak yükle (sadece belirli sunucuda çalışır ve anında güncellenir)
-rest.put(Routes.applicationGuildCommands(process.env.CLIENT_ID, process.env.GUILD_ID), { body: commands })
-  .then(() => console.log('✅ Komutlar sunucuya (GUILD) yüklendi.'))
-  .catch(console.error);
+const rest = new REST().setToken(process.env.TOKEN);
+
+// Komutları yükle
+(async () => {
+  try {
+    console.log(`🔃 Komutlar yükleniyor...`);
+    await rest.put(
+      Routes.applicationGuildCommands(CLIENT_ID, GUILD_ID),
+      { body: commands }
+    );
+    console.log(`✅ Komutlar başarıyla yüklendi.`);
+  } catch (error) {
+    console.error(`❌ Komut yüklemede hata:`, error);
+  }
+})();
