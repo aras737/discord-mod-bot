@@ -1,55 +1,51 @@
+const { Client, GatewayIntentBits, REST, Routes } = require('discord.js');
 const fs = require('fs');
-const path = require('path');
-const { Client, GatewayIntentBits, Collection, Events } = require('discord.js');
-const http = require('http');
+require('dotenv').config();
+
+const TOKEN = process.env.TOKEN;
+const CLIENT_ID = process.env.CLIENT_ID;
+const GUILD_ID = process.env.GUILD_ID;
 
 const client = new Client({
-  intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildMessages, GatewayIntentBits.GuildMembers]
+  intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildMessages],
 });
 
-client.commands = new Collection();
+const commands = [];
 
-// Komutları yükle
-const commandsPath = path.join(__dirname, 'commands');
-const commandFiles = fs.readdirSync(commandsPath).filter(file => file.endsWith('.js'));
+// commands klasöründeki komutları yükle
+const commandFiles = fs.readdirSync('./commands').filter(file => file.endsWith('.js'));
 
 for (const file of commandFiles) {
-  const filePath = path.join(commandsPath, file);
-  const command = require(filePath);
-  if ('data' in command && 'execute' in command) {
-    client.commands.set(command.data.name, command);
-  } else {
-    console.log(`[UYARI] ${file} komut dosyası doğru değil.`);
-  }
+  const command = require(`./commands/${file}`);
+  commands.push(command.data.toJSON());
 }
 
-client.once('ready', () => {
-  console.log(`✅ Bot aktif: ${client.user.tag}`);
-});
+// Slash komutları sıfırla ve yeni komutları yükle
+const rest = new REST({ version: '10' }).setToken(TOKEN);
 
-// Slash komutları çalıştır
-client.on(Events.InteractionCreate, async interaction => {
-  if (!interaction.isChatInputCommand()) return;
-
-  const command = client.commands.get(interaction.commandName);
-  if (!command) return;
-
+(async () => {
   try {
-    await command.execute(interaction);
+    console.log('⏳ Eski komutlar siliniyor ve yeni komutlar yükleniyor...');
+
+    await rest.put(
+      Routes.applicationGuildCommands(CLIENT_ID, GUILD_ID),
+      { body: [] }
+    );
+
+    const data = await rest.put(
+      Routes.applicationGuildCommands(CLIENT_ID, GUILD_ID),
+      { body: commands }
+    );
+
+    console.log(`✅ ${data.length} komut başarıyla yüklendi:`);
+    data.forEach(cmd => console.log(`🔹 /${cmd.name}`));
   } catch (error) {
-    console.error(error);
-    await interaction.reply({ content: 'Komutu çalıştırırken hata oluştu!', ephemeral: true });
+    console.error('❌ Komut yükleme hatası:', error);
   }
+})();
+
+client.once('ready', () => {
+  console.log(`🤖 Bot aktif: ${client.user.tag}`);
 });
 
-// Sahte port aç (Render için)
-const PORT = process.env.PORT || 3000;
-http.createServer((req, res) => {
-  res.writeHead(200);
-  res.end('Bot aktif ve port açık.');
-}).listen(PORT, () => {
-  console.log(`🌐 Port aktif: ${PORT}`);
-});
-
-// Login
-client.login(process.env.TOKEN);
+client.login(TOKEN);
