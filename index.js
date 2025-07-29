@@ -1,7 +1,7 @@
 const { Client, GatewayIntentBits } = require('discord.js');
 
 // Discord bot tokenını buraya yaz (güvenli değil, sadece test için önerilir)
-const TOKEN = 'MTM5NDQyODEwMTM2NjI1NTY1Ng.G6HN3y.2QoUKNE4IEzoMQYWzkxvmtzLg1D0GsWf8OZisc';
+const TOKEN = 'MTM5NDQyODEwMTM2NjI1NTY1Ng.GzEEMI._hveV9ZzqvKshoQIzL4Qp91HjQ5CcWRhcCFTvc';
 
 const client = new Client({
   intents: [
