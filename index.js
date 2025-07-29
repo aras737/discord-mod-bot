@@ -1,23 +1,26 @@
 require('dotenv').config();
 const { Client, Intents } = require('discord.js');
 
-// Botu oluştur
 const client = new Client({
-  intents: [Intents.FLAGS.GUILDS, Intents.FLAGS.GUILD_MESSAGES]
+  intents: [
+    Intents.FLAGS.GUILDS,
+    Intents.FLAGS.GUILD_MESSAGES
+  ]
 });
 
-// Bot hazır olduğunda mesaj ver
 client.once('ready', () => {
-  console.log(`✅ Bot aktif: ${client.user.tag}`);
+  console.log(`Bot aktif! Kullanıcı: ${client.user.tag}`);
 });
 
-// Basit ping komutu
-client.on('messageCreate', async message => {
+client.on('messageCreate', message => {
   if (message.author.bot) return;
+
   if (message.content === '!ping') {
-    await message.reply('🏓 Pong!');
+    message.reply('Pong!');
   }
 });
 
-// Token ile giriş
-client.login(process.env.TOKEN);
+// Token'ı process.env'den alır, Render'da ENV variable olarak ekle!
+client.login(process.env.TOKEN).catch(err => {
+  console.error('Bot tokeni geçersiz veya bulunamadı.');
+});
