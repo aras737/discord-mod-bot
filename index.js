@@ -1,12 +1,13 @@
 require('dotenv').config();
-const { Client, GatewayIntentBits } = require('discord.js');
+
+const { Client, Intents } = require('discord.js');
 
 const client = new Client({
-  intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildMessages]
+  intents: [Intents.FLAGS.GUILDS, Intents.FLAGS.GUILD_MESSAGES],
 });
 
 client.once('ready', () => {
-  console.log(`✅ Bot aktif! Giriş yaptı: ${client.user.tag}`);
+  console.log('Bot aktif!'); // Konsola yazacak
 });
 
-client.login(process.env.TOKEN);
+client.login(process.env.DISCORD_TOKEN);
