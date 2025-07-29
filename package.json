@@ -1,14 +1,16 @@
 {
-  "name": "phantom-bot",
+  "name": "phantom-mod-bot",
   "version": "1.0.0",
   "main": "index.js",
   "scripts": {
-    "start": "node index.js"
+    "start": "node index.js",
+    "register": "node commands/register.js"
   },
   "engines": {
     "node": ">=16.6.0"
   },
   "dependencies": {
-    "discord.js": "^14.11.0"
+    "discord.js": "^14.11.0",
+    "dotenv": "^16.3.1"
   }
 }
