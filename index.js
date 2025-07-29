@@ -1,20 +1,42 @@
-const { Client, GatewayIntentBits } = require('discord.js');
-
-const TOKEN = process.env.TOKEN || "MTM5NDQyODEwMTM2NjI1NTY1Ng.GnNQbL.q5_KF8hE0e4Sq4VzAy89nxuf_vL7mh0CaK0k6E"; // Render'dan alır, yoksa kod içinden alır
+require('dotenv').config();
+const { Client, GatewayIntentBits, Partials } = require('discord.js');
 
 const client = new Client({
-  intents: [GatewayIntentBits.Guilds]
+  intents: [
+    GatewayIntentBits.Guilds,
+    GatewayIntentBits.GuildMessages,
+    GatewayIntentBits.MessageContent,
+    GatewayIntentBits.GuildMembers
+  ],
+  partials: [Partials.Channel]
+});
+
+// Hata varsa bile bot çökmemesi için:
+client.on('error', console.error);
+process.on('unhandledRejection', (reason) => {
+  console.warn("Unhandled Rejection:", reason.message || reason);
 });
 
 client.once('ready', () => {
   console.log(`✅ Bot aktif: ${client.user.tag}`);
 });
 
-client.on('error', (err) => {
-  console.error('Bot hatası (yutuldu):', err.message);
+client.on('interactionCreate', async interaction => {
+  if (!interaction.isChatInputCommand()) return;
+
+  if (interaction.commandName === 'kick') {
+    const member = interaction.options.getMember('user');
+    if (!member.kickable) return interaction.reply({ content: '❌ Bu kullanıcıyı atamam.', ephemeral: true });
+    await member.kick();
+    await interaction.reply({ content: `${member.user.tag} sunucudan atıldı.`, ephemeral: true });
+  }
+
+  if (interaction.commandName === 'ban') {
+    const member = interaction.options.getMember('user');
+    if (!member.bannable) return interaction.reply({ content: '❌ Bu kullanıcıyı banlayamam.', ephemeral: true });
+    await member.ban();
+    await interaction.reply({ content: `${member.user.tag} sunucudan banlandı.`, ephemeral: true });
+  }
 });
 
-client.login(TOKEN).catch(err => {
-  console.error("❌ Token geçersiz veya bot başlatılamadı.");
-  // Burada çıkış yapmıyoruz, uygulama açık kalıyor
-});
+client.login(process.env.TOKEN || 'YANLIŞTOKEN'); // Hatalıysa bile çökmemesi için fallback eklendi
