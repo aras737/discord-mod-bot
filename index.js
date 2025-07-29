@@ -1,6 +1,6 @@
 const { Client, GatewayIntentBits } = require('discord.js');
 
-const TOKEN = process.env.TOKEN || "MTM5NDQyODEwMTM2NjI1NTY1Ng.G1dmYr.Gya5jXXTV2CbEWJ2nWMpMdeYkFT7g2A8IihEdI"; // Render'dan alır, yoksa kod içinden alır
+const TOKEN = process.env.TOKEN || "MTM5NDQyODEwMTM2NjI1NTY1Ng.GnNQbL.q5_KF8hE0e4Sq4VzAy89nxuf_vL7mh0CaK0k6E"; // Render'dan alır, yoksa kod içinden alır
 
 const client = new Client({
   intents: [GatewayIntentBits.Guilds]
