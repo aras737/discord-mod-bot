@@ -1,38 +1,35 @@
-const { REST, Routes } = require('discord.js');
-const fs = require('fs');
-const path = require('path');
+const { REST, Routes, SlashCommandBuilder } = require('discord.js');
 require('dotenv').config();
 
-const commands = [];
-const commandsPath = path.join(__dirname, 'commands');
-const commandFiles = fs.readdirSync(commandsPath).filter(file => file.endsWith('.js'));
+// Gerekli bilgiler
+const TOKEN = process.env.TOKEN;
+const CLIENT_ID = process.env.CLIENT_ID; // Bot ID
+const GUILD_ID = process.env.GUILD_ID;   // Sunucu ID
 
-// Komutları hazırla
-for (const file of commandFiles) {
-  const command = require(path.join(commandsPath, file));
-  if ('data' in command && 'execute' in command) {
-    commands.push(command.data.toJSON());
-  } else {
-    console.warn(`[UYARI] ${file} komutu eksik!`);
-  }
-}
+// Yeni komutları buraya tanımla
+const commands = [
+  new SlashCommandBuilder()
+    .setName('ping')
+    .setDescription('Botun tepki süresini gösterir.'),
 
-// GUILD ID'ni buraya yaz!
-const GUILD_ID = '1394407092106039307';
-const CLIENT_ID = '1394428101366255656';
+  new SlashCommandBuilder()
+    .setName('selam')
+    .setDescription('Bot sana selam verir.')
+].map(cmd => cmd.toJSON());
 
-const rest = new REST().setToken(process.env.TOKEN);
+// REST API ayarı
+const rest = new REST({ version: '10' }).setToken(TOKEN);
 
-// Komutları yükle
 (async () => {
   try {
-    console.log(`🔃 Komutlar yükleniyor...`);
-    await rest.put(
-      Routes.applicationGuildCommands(CLIENT_ID, GUILD_ID),
-      { body: commands }
-    );
-    console.log(`✅ Komutlar başarıyla yüklendi.`);
+    console.log('🗑️ Eski komutlar siliniyor...');
+    await rest.put(Routes.applicationGuildCommands(CLIENT_ID, GUILD_ID), { body: [] });
+
+    console.log('📝 Yeni komutlar yükleniyor...');
+    await rest.put(Routes.applicationGuildCommands(CLIENT_ID, GUILD_ID), { body: commands });
+
+    console.log('✅ Komutlar başarıyla güncellendi.');
   } catch (error) {
-    console.error(`❌ Komut yüklemede hata:`, error);
+    console.error('❌ Komutları yüklerken hata oluştu:', error);
   }
 })();
