@@ -1,0 +1,10 @@
+const fs = require('fs');
+
+let config = {};
+try {
+  const data = fs.readFileSync('./config.json', 'utf8');
+  config = JSON.parse(data);
+} catch (error) {
+  console.warn('⚠️ config.json okunamadı veya geçersiz JSON, varsayılan değerler kullanılacak.');
+  // Burada config boş kalacak veya default ayarları koyabilirsin
+}
