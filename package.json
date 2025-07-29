@@ -1,16 +1,12 @@
 {
-  "name": "discord-bot-minimal",
+  "name": "my-discord-bot",
   "version": "1.0.0",
-  "description": "Minimal discord.js v13 bot",
   "main": "index.js",
+  "type": "commonjs",
   "scripts": {
     "start": "node index.js"
   },
   "dependencies": {
-    "discord.js": "^13.14.0",
-    "dotenv": "^16.3.1"
-  },
-  "engines": {
-    "node": ">=16.6.0"
+    "discord.js": "^13.14.0"
   }
 }
