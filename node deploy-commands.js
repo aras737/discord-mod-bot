@@ -2,34 +2,19 @@ const { REST, Routes } = require('discord.js');
 const fs = require('fs');
 require('dotenv').config();
 
-const clientId = process.env.CLIENT_ID;
-const token = process.env.TOKEN;
-
 const commands = [];
 const commandFiles = fs.readdirSync('./commands').filter(file => file.endsWith('.js'));
 
+// Komutları yükle
 for (const file of commandFiles) {
   const command = require(`./commands/${file}`);
-  if ('data' in command && 'execute' in command) {
-    commands.push(command.data.toJSON());
-  } else {
-    console.log(`[UYARI] Komut atlandı: ${file}`);
-  }
+  commands.push(command.data.toJSON());
 }
 
-const rest = new REST({ version: '10' }).setToken(token);
+// Token, clientId ve guildId .env'den
+const rest = new REST({ version: '10' }).setToken(process.env.TOKEN);
 
-(async () => {
-  try {
-    console.log(`📤 ${commands.length} komut global olarak yükleniyor...`);
-
-    await rest.put(
-      Routes.applicationCommands(clientId),
-      { body: commands }
-    );
-
-    console.log('✅ Komutlar global olarak başarıyla yüklendi!');
-  } catch (error) {
-    console.error('❌ HATA:', error);
-  }
-})();
+// GUILD KOMUTU olarak yükle (sadece belirli sunucuda çalışır ve anında güncellenir)
+rest.put(Routes.applicationGuildCommands(process.env.CLIENT_ID, process.env.GUILD_ID), { body: commands })
+  .then(() => console.log('✅ Komutlar sunucuya (GUILD) yüklendi.'))
+  .catch(console.error);
