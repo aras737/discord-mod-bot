@@ -1,24 +1,21 @@
 require('dotenv').config();
-const Discord = require('discord.js');
-const client = new Discord.Client();
+const { Client, Intents } = require('discord.js');
 
-client.once('ready', () => {
-  console.log(`✅ Bot aktif! Kullanıcı: ${client.user.tag}`);
+const client = new Client({
+  intents: [Intents.FLAGS.GUILDS, Intents.FLAGS.GUILD_MESSAGES]
 });
 
-client.on('message', message => {
-  try {
-    if (message.author.bot) return;
-    if (message.content === '!ping') {
-      message.channel.send('🏓 Pong!');
-    }
-  } catch (err) {
-    // Hataları sessizce geç
+client.once('ready', () => {
+  console.log(`✅ Phantom bot aktif: ${client.user.tag}`);
+});
+
+client.on('messageCreate', async message => {
+  if (message.author.bot) return;
+  if (message.content === '!ping') {
+    await message.reply('🏓 Pong!');
   }
 });
 
-try {
-  client.login(process.env.TOKEN);
-} catch (e) {
-  console.log('❌ Bot tokeni geçersiz veya .env dosyası eksik.');
-}
+client.login(process.env.TOKEN).catch(() => {
+  console.log('❌ Bot tokeni geçersiz veya eksik!');
+});
