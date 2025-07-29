@@ -1,22 +1,22 @@
-require("dotenv").config();
-const { Client, GatewayIntentBits } = require("discord.js");
+require('dotenv').config();
+const { Client, Intents } = require('discord.js');
 
+// Yeni bir Discord client oluştur
 const client = new Client({
-  intents: [
-    GatewayIntentBits.Guilds,
-    GatewayIntentBits.GuildMessages,
-    GatewayIntentBits.MessageContent
-  ]
+  intents: [Intents.FLAGS.GUILDS, Intents.FLAGS.GUILD_MESSAGES]
 });
 
-client.once("ready", () => {
-  console.log(`✅ Bot aktif: ${client.user.tag}`);
+// Bot hazır olduğunda çalışır
+client.once('ready', () => {
+  console.log(`${client.user.tag} olarak giriş yapıldı.`);
 });
 
-client.on("messageCreate", (message) => {
-  if (message.content === "!ping") {
-    message.reply("Pong!");
+// Mesaj geldiğinde cevap verir (örnek komut)
+client.on('messageCreate', message => {
+  if (message.content === '!ping') {
+    message.reply('Pong!');
   }
 });
 
+// .env dosyasındaki token ile giriş yap
 client.login(process.env.TOKEN);
