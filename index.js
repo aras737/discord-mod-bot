@@ -1,22 +1,29 @@
 require('dotenv').config();
+const { Client, GatewayIntentBits, Collection } = require('discord.js');
 const fs = require('node:fs');
 const path = require('node:path');
-const { Client, Collection, GatewayIntentBits, Partials, Events } = require('discord.js');
+const http = require('http');
 
+// SAHTE HTTP SUNUCU (Render için gerekli)
+http.createServer((req, res) => {
+  res.writeHead(200);
+  res.end('Bot çalışıyor!');
+}).listen(process.env.PORT || 3000);
+
+// DISCORD BOT
 const client = new Client({
   intents: [
     GatewayIntentBits.Guilds,
+    GatewayIntentBits.GuildMembers,
     GatewayIntentBits.GuildMessages,
     GatewayIntentBits.MessageContent,
-    GatewayIntentBits.GuildMembers
-  ],
-  partials: [Partials.Channel],
+    GatewayIntentBits.GuildMessageReactions
+  ]
 });
 
 client.commands = new Collection();
-
-// Komutları yükle
 const commandsPath = path.join(__dirname, 'commands');
+
 if (fs.existsSync(commandsPath)) {
   const commandFiles = fs.readdirSync(commandsPath).filter(file => file.endsWith('.js'));
 
@@ -26,32 +33,33 @@ if (fs.existsSync(commandsPath)) {
     if ('data' in command && 'execute' in command) {
       client.commands.set(command.data.name, command);
     } else {
-      console.log(`[UYARI] '${file}' adlı dosyada 'data' veya 'execute' eksik.`);
+      console.log(`[UYARI] ${file} geçerli bir komut değil.`);
     }
   }
 } else {
-  console.error("❌ 'commands/' klasörü bulunamadı!");
+  console.log('[UYARI] commands klasörü bulunamadı.');
 }
 
-client.once(Events.ClientReady, () => {
-  console.log(`✅ Bot aktif: ${client.user.tag}`);
-});
-
-client.on(Events.InteractionCreate, async interaction => {
-  if (!interaction.isChatInputCommand()) return;
+// Komut dinleyicisi
+client.on('interactionCreate', async interaction => {
+  if (!interaction.isCommand()) return;
 
   const command = client.commands.get(interaction.commandName);
-  if (!command) {
-    console.error(`❌ Komut bulunamadı: ${interaction.commandName}`);
-    return;
-  }
+
+  if (!command) return;
 
   try {
     await command.execute(interaction);
   } catch (error) {
-    console.error(`💥 Komut çalıştırılırken hata oluştu: ${error}`);
-    await interaction.reply({ content: '❌ Komut çalıştırılırken hata oluştu!', ephemeral: true });
+    console.error(error);
+    await interaction.reply({ content: 'Komut çalıştırılırken bir hata oluştu!', ephemeral: true });
   }
 });
 
+// Bot hazır olduğunda
+client.once('ready', () => {
+  console.log(`✅ Bot aktif: ${client.user.tag}`);
+});
+
+// BOT TOKEN İLE GİRİŞ
 client.login(process.env.TOKEN);
