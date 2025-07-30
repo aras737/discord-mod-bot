@@ -4,11 +4,9 @@ module.exports = {
   name: 'interactionCreate',
   async execute(interaction, client) {
 
-    // Slash komutları için
     if (interaction.isChatInputCommand()) {
       const { commandName } = interaction;
 
-      // --- BAN KOMUTU ---
       if (commandName === 'ban') {
         if (!interaction.member.permissions.has(PermissionsBitField.Flags.BanMembers)) {
           return interaction.reply({ content: '❌ Ban yetkiniz yok!', ephemeral: true });
@@ -28,8 +26,8 @@ module.exports = {
 
           try {
             await user.send(`❌ **${interaction.guild.name}** sunucusunda banlandınız. Sebep: ${reason}`);
-          } catch {
-            // DM atılamadı
+          } catch (err) {
+            console.warn(`DM gönderilemedi: ${err.message}`);
           }
 
           return interaction.reply({ content: `✅ ${user.tag} başarıyla banlandı! Sebep: ${reason}` });
@@ -39,7 +37,6 @@ module.exports = {
         }
       }
 
-      // --- KICK KOMUTU ---
       else if (commandName === 'kick') {
         if (!interaction.member.permissions.has(PermissionsBitField.Flags.KickMembers)) {
           return interaction.reply({ content: '❌ Kick yetkiniz yok!', ephemeral: true });
@@ -59,7 +56,9 @@ module.exports = {
 
           try {
             await user.send(`⚠️ **${interaction.guild.name}** sunucusundan atıldınız. Sebep: ${reason}`);
-          } catch {}
+          } catch (err) {
+            console.warn(`DM gönderilemedi: ${err.message}`);
+          }
 
           return interaction.reply({ content: `✅ ${user.tag} başarıyla atıldı! Sebep: ${reason}` });
         } catch (error) {
@@ -68,7 +67,6 @@ module.exports = {
         }
       }
 
-      // --- DUYURU KOMUTU ---
       else if (commandName === 'duyuru') {
         if (!interaction.member.permissions.has(PermissionsBitField.Flags.ManageMessages)) {
           return interaction.reply({ content: '❌ Bu komutu kullanmak için yetkiniz yok!', ephemeral: true });
@@ -98,14 +96,12 @@ module.exports = {
       }
     }
 
-    // --- SELECT MENU İŞLEMLERİ (BİLET) ---
     else if (interaction.isStringSelectMenu()) {
       if (interaction.customId === 'ticket_menu') {
         const category = interaction.values[0];
 
-        // Aynı kullanıcıya ait açık bilet kanalı var mı?
         const existingChannel = interaction.guild.channels.cache.find(ch =>
-          ch.name === `ticket-${interaction.user.username.toLowerCase()}`
+          ch.name === `ticket-${interaction.user.id}`
         );
 
         if (existingChannel) {
@@ -120,10 +116,12 @@ module.exports = {
             c.name.toLowerCase() === 'biletler' && c.type === ChannelType.GuildCategory
           );
 
+          const supportRoleId = 'destek-ekibi-rol-id'; // Gerekirse değiştir
+
           const channel = await interaction.guild.channels.create({
-            name: `ticket-${interaction.user.username}`,
+            name: `ticket-${interaction.user.id}`,
             type: ChannelType.GuildText,
-            parent: ticketCategory ? ticketCategory.id : null,
+            parent: ticketCategory?.id,
             permissionOverwrites: [
               {
                 id: interaction.guild.roles.everyone.id,
@@ -137,8 +135,7 @@ module.exports = {
                   PermissionsBitField.Flags.ReadMessageHistory,
                 ],
               },
-              // Destek ekibi rolü varsa id ekle:
-              // { id: 'destek-ekibi-rol-id', allow: [PermissionsBitField.Flags.ViewChannel, PermissionsBitField.Flags.SendMessages] },
+              ...(supportRoleId ? [{ id: supportRoleId, allow: [PermissionsBitField.Flags.ViewChannel, PermissionsBitField.Flags.SendMessages] }] : []),
             ],
           });
 
@@ -176,8 +173,5 @@ module.exports = {
         }
       }
     }
-
-    // Diğer interaction türleri buraya eklenebilir...
-
   },
 };
