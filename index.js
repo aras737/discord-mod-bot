@@ -57,20 +57,23 @@ client.once('ready', () => {
   console.log(`🤖 Bot aktif: ${client.user.tag}`);
 });
 
-// Basit interactionCreate handler (sonradan dosya olarak ayırabilirsin)
 client.on('interactionCreate', async interaction => {
-  if (!interaction.isChatInputCommand()) return;
-
-  const command = client.commands.get(interaction.commandName);
-  if (!command) return;
-
   try {
-    await command.execute(interaction);
+    // Diğer interaction türlerini dışarıdaki dosyada yönet (menü, button, select menu, banlist vb.)
+    await require('./events/interactionCreate').execute(interaction, client);
+
+    // Slash komutlar için orijinal handler
+    if (interaction.isChatInputCommand()) {
+      const command = client.commands.get(interaction.commandName);
+      if (!command) return;
+
+      await command.execute(interaction, client);
+    }
   } catch (error) {
     console.error(error);
     if (interaction.replied || interaction.deferred) {
       await interaction.followUp({ content: '❌ Komut çalıştırılamadı.', ephemeral: true });
-    } else {
+    } else if (interaction.isRepliable()) {
       await interaction.reply({ content: '❌ Komut çalıştırılamadı.', ephemeral: true });
     }
   }
