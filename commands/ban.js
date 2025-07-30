@@ -1,24 +1,53 @@
-const { SlashCommandBuilder, PermissionFlagsBits, EmbedBuilder } = require('discord.js');
+const {
+  SlashCommandBuilder,
+  PermissionFlagsBits,
+  ActionRowBuilder,
+  StringSelectMenuBuilder,
+} = require('discord.js');
+
+// Banlanan kullanıcıları tutan basit liste (sadece örnek, bot yeniden başlatılırsa kaybolur)
+const bannedUsers = [];
 
 module.exports = {
   data: new SlashCommandBuilder()
     .setName('ban')
-    .setDescription('Bir kullanıcıyı sunucudan banlar ve DM ile bilgi verir.')
-    .addUserOption(option => option.setName('kullanici').setDescription('Banlanacak kişi').setRequired(true))
-    .addStringOption(option => option.setName('sebep').setDescription('Ban sebebi').setRequired(true))
+    .setDescription('Bir kullanıcıyı sunucudan banlar.')
+    .addUserOption((option) =>
+      option.setName('kullanici').setDescription('Banlanacak kullanıcı').setRequired(true)
+    )
+    .addStringOption((option) =>
+      option.setName('sebep').setDescription('Ban sebebi').setRequired(false)
+    )
     .setDefaultMemberPermissions(PermissionFlagsBits.BanMembers),
 
   async execute(interaction) {
     const user = interaction.options.getUser('kullanici');
-    const reason = interaction.options.getString('sebep');
+    const reason = interaction.options.getString('sebep') || 'Belirtilmedi';
 
-    try {
-      await user.send(`🚫 Sunucudan banlandınız.\n**Sebep:** ${reason}`);
-    } catch {}
+    if (!user) return interaction.reply({ content: 'Lütfen geçerli bir kullanıcı seçin.', ephemeral: true });
 
-    const member = await interaction.guild.members.fetch(user.id).catch(() => null);
-    if (member) await member.ban({ reason });
+    // Ban işlemi onayı için select menu oluştur (sebep seçmek gibi)
+    const reasons = [
+      { label: 'Kural ihlali', value: 'Kural ihlali' },
+      { label: 'Spam', value: 'Spam' },
+      { label: 'Trolling', value: 'Trolling' },
+      { label: 'Diğer', value: 'Diğer' },
+    ];
 
-    await interaction.reply({ content: `✅ ${user.tag} başarıyla banlandı.`, ephemeral: true });
-  }
+    const selectMenu = new StringSelectMenuBuilder()
+      .setCustomId(`ban_confirm_${user.id}`)
+      .setPlaceholder('Ban sebebini seçiniz')
+      .addOptions(reasons);
+
+    const row = new ActionRowBuilder().addComponents(selectMenu);
+
+    await interaction.reply({
+      content: `Banlamak istediğiniz kullanıcı: ${user.tag}\nSebebi seçiniz:`,
+      components: [row],
+      ephemeral: true,
+    });
+  },
+
+  // Banned users listesine erişim için export edilebilir
+  bannedUsers,
 };
