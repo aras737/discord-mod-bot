@@ -2,13 +2,11 @@ const { Client, GatewayIntentBits, REST, Routes, Collection } = require('discord
 const fs = require('fs');
 const http = require('http');
 
-// Render environment değişkenlerini doğrudan alıyoruz
 const TOKEN = process.env.TOKEN;
 const CLIENT_ID = process.env.CLIENT_ID;
 const GUILD_ID = process.env.GUILD_ID;
 const PORT = process.env.PORT || 3000;
 
-// Render için sahte port açma
 http.createServer((req, res) => res.end('Bot aktif!')).listen(PORT, () => {
   console.log(`Sahte port ${PORT} üzerinde dinleniyor.`);
 });
@@ -17,7 +15,7 @@ const client = new Client({
   intents: [
     GatewayIntentBits.Guilds,
     GatewayIntentBits.GuildMessages,
-    GatewayIntentBits.MessageContent, // Mesaj içeriğini okuyabilmek için gerekli
+    GatewayIntentBits.MessageContent,
   ],
 });
 
@@ -40,10 +38,8 @@ const rest = new REST({ version: '10' }).setToken(TOKEN);
 
 (async () => {
   try {
-    console.log('Komutlar sıfırlanıyor...');
-    await rest.put(Routes.applicationGuildCommands(CLIENT_ID, GUILD_ID), { body: [] });
-
-    console.log('Yeni komutlar yükleniyor...');
+    console.log('Komutlar yükleniyor...');
+    // Önce sıfırlama yapma, doğrudan yeni komutları yüklüyoruz
     const data = await rest.put(Routes.applicationGuildCommands(CLIENT_ID, GUILD_ID), { body: commands });
 
     console.log(`✅ ${data.length} komut yüklendi:`);
@@ -59,10 +55,8 @@ client.once('ready', () => {
 
 client.on('interactionCreate', async interaction => {
   try {
-    // Diğer interaction türlerini dışarıdaki dosyada yönet (menü, button, select menu, banlist vb.)
     await require('./events/interactionCreate').execute(interaction, client);
 
-    // Slash komutlar için orijinal handler
     if (interaction.isChatInputCommand()) {
       const command = client.commands.get(interaction.commandName);
       if (!command) return;
