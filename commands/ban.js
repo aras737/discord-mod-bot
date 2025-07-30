@@ -1,22 +1,24 @@
-const { SlashCommandBuilder } = require('discord.js');
+const { SlashCommandBuilder, PermissionFlagsBits, EmbedBuilder } = require('discord.js');
 
 module.exports = {
   data: new SlashCommandBuilder()
-    .setName('rank')
-    .setDescription('Sunucudaki rollerine göre rütbeni gösterir.')
-    .addUserOption(option => option.setName('kullanici').setDescription('Rütbesi görülecek kullanıcı').setRequired(false)),
+    .setName('ban')
+    .setDescription('Bir kullanıcıyı sunucudan banlar ve DM ile bilgi verir.')
+    .addUserOption(option => option.setName('kullanici').setDescription('Banlanacak kişi').setRequired(true))
+    .addStringOption(option => option.setName('sebep').setDescription('Ban sebebi').setRequired(true))
+    .setDefaultMemberPermissions(PermissionFlagsBits.BanMembers),
 
   async execute(interaction) {
-    const member = interaction.options.getMember('kullanici') || interaction.member;
+    const user = interaction.options.getUser('kullanici');
+    const reason = interaction.options.getString('sebep');
 
-    // Kullanıcının rolleri ve yetkilerini alıyoruz
-    const roles = member.roles.cache.filter(r => r.name !== '@everyone').map(r => r.name).join(', ') || 'Rolü yok';
+    try {
+      await user.send(`🚫 Sunucudan banlandınız.\n**Sebep:** ${reason}`);
+    } catch {}
 
-    // Örnek rütbe sistemi basit: Yetkili mi? Yönetici mi? Normal mi?
-    let rank = 'Üye';
-    if (member.permissions.has('Administrator')) rank = 'Yönetici';
-    else if (member.permissions.has('BanMembers') || member.permissions.has('KickMembers')) rank = 'Yetkili';
+    const member = await interaction.guild.members.fetch(user.id).catch(() => null);
+    if (member) await member.ban({ reason });
 
-    await interaction.reply({ content: `${member} kullanıcısının rolleri: **${roles}**\nRütbesi: **${rank}**` });
-  },
+    await interaction.reply({ content: `✅ ${user.tag} başarıyla banlandı.`, ephemeral: true });
+  }
 };
