@@ -9,11 +9,11 @@ module.exports = {
   name: 'interactionCreate',
   async execute(interaction, client) {
     try {
-      // ✅ SLASH KOMUTLARI
-      if (interaction.type === InteractionType.ApplicationCommand) {
+      // Slash komutlar (ban, kick, duyuru)
+      if (interaction.isChatInputCommand()) {
         const { commandName } = interaction;
 
-        // /ban
+        // ✅ BAN
         if (commandName === 'ban') {
           if (!interaction.member.permissions.has(PermissionsBitField.Flags.BanMembers)) {
             return interaction.reply({ content: '❌ Ban yetkiniz yok!', ephemeral: true });
@@ -22,24 +22,26 @@ module.exports = {
           const user = interaction.options.getUser('kullanici');
           const reason = interaction.options.getString('sebep') || 'Sebep belirtilmedi';
 
-          if (!user) return interaction.reply({ content: '❌ Kullanıcı bulunamadı!', ephemeral: true });
-
-          const member = await interaction.guild.members.fetch(user.id).catch(() => null);
-          if (!member) return interaction.reply({ content: '❌ Kullanıcı sunucuda yok!', ephemeral: true });
-          if (!member.bannable) return interaction.reply({ content: '❌ Bu kullanıcıyı banlayamam!', ephemeral: true });
-
-          await member.ban({ reason });
+          if (!user) return interaction.reply({ content: '❌ Kullanıcı seçmelisiniz!', ephemeral: true });
 
           try {
-            await user.send(`🚫 **${interaction.guild.name}** sunucusundan **banlandınız**.\n📝 Sebep: ${reason}`);
-          } catch (e) {
-            console.warn('❗ DM gönderilemedi.');
-          }
+            const member = await interaction.guild.members.fetch(user.id);
+            if (!member.bannable) return interaction.reply({ content: '❌ Bu kullanıcıyı banlayamam!', ephemeral: true });
 
-          return interaction.reply({ content: `✅ ${user.tag} başarıyla banlandı!` });
+            await member.ban({ reason });
+
+            try {
+              await user.send(`❌ **${interaction.guild.name}** sunucusundan banlandınız. Sebep: ${reason}`);
+            } catch {}
+
+            return interaction.reply({ content: `✅ ${user.tag} banlandı. Sebep: ${reason}` });
+          } catch (err) {
+            console.error('Ban hatası:', err);
+            return interaction.reply({ content: '❌ Ban işlemi başarısız oldu!', ephemeral: true });
+          }
         }
 
-        // /kick
+        // ✅ KICK
         else if (commandName === 'kick') {
           if (!interaction.member.permissions.has(PermissionsBitField.Flags.KickMembers)) {
             return interaction.reply({ content: '❌ Kick yetkiniz yok!', ephemeral: true });
@@ -48,120 +50,137 @@ module.exports = {
           const user = interaction.options.getUser('kullanici');
           const reason = interaction.options.getString('sebep') || 'Sebep belirtilmedi';
 
-          if (!user) return interaction.reply({ content: '❌ Kullanıcı bulunamadı!', ephemeral: true });
-
-          const member = await interaction.guild.members.fetch(user.id).catch(() => null);
-          if (!member) return interaction.reply({ content: '❌ Kullanıcı sunucuda yok!', ephemeral: true });
-          if (!member.kickable) return interaction.reply({ content: '❌ Bu kullanıcıyı kickleyemem!', ephemeral: true });
-
-          await member.kick(reason);
+          if (!user) return interaction.reply({ content: '❌ Kullanıcı seçmelisiniz!', ephemeral: true });
 
           try {
-            await user.send(`⚠️ **${interaction.guild.name}** sunucusundan **atıldınız**.\n📝 Sebep: ${reason}`);
-          } catch (e) {
-            console.warn('❗ DM gönderilemedi.');
-          }
+            const member = await interaction.guild.members.fetch(user.id);
+            if (!member.kickable) return interaction.reply({ content: '❌ Bu kullanıcıyı atamam!', ephemeral: true });
 
-          return interaction.reply({ content: `✅ ${user.tag} başarıyla atıldı!` });
+            await member.kick(reason);
+
+            try {
+              await user.send(`⚠️ **${interaction.guild.name}** sunucusundan atıldınız. Sebep: ${reason}`);
+            } catch {}
+
+            return interaction.reply({ content: `✅ ${user.tag} başarıyla atıldı! Sebep: ${reason}` });
+          } catch (err) {
+            console.error('Kick hatası:', err);
+            return interaction.reply({ content: '❌ Kick işlemi başarısız oldu!', ephemeral: true });
+          }
         }
 
-        // /duyuru
+        // ✅ DUYURU
         else if (commandName === 'duyuru') {
           if (!interaction.member.permissions.has(PermissionsBitField.Flags.ManageMessages)) {
-            return interaction.reply({ content: '❌ Duyuru yetkiniz yok!', ephemeral: true });
+            return interaction.reply({ content: '❌ Duyuru için yetkiniz yok!', ephemeral: true });
           }
 
           const kanal = interaction.options.getChannel('kanal');
           const mesaj = interaction.options.getString('mesaj');
 
           if (!kanal || kanal.type !== ChannelType.GuildText) {
-            return interaction.reply({ content: '❌ Geçerli bir metin kanalı seçin!', ephemeral: true });
+            return interaction.reply({ content: '❌ Geçerli bir metin kanalı seçmelisiniz!', ephemeral: true });
           }
 
           const embed = new EmbedBuilder()
-            .setTitle('📢 Duyuru')
+            .setTitle('📢 Yeni Duyuru')
             .setDescription(mesaj)
-            .setColor('Yellow')
-            .setFooter({ text: `Gönderen: ${interaction.user.tag}` })
+            .setColor('Gold')
+            .setFooter({ text: `Duyuru yapan: ${interaction.user.tag}` })
             .setTimestamp();
 
-          await kanal.send({ content: '@everyone', embeds: [embed] });
-          return interaction.reply({ content: `✅ Duyuru gönderildi: ${kanal}`, ephemeral: true });
+          try {
+            await kanal.send({ content: '@everyone', embeds: [embed] });
+            return interaction.reply({ content: `✅ Duyuru gönderildi: ${kanal}`, ephemeral: true });
+          } catch (err) {
+            console.error('Duyuru hatası:', err);
+            return interaction.reply({ content: '❌ Duyuru gönderilemedi.', ephemeral: true });
+          }
         }
       }
 
-      // ✅ SELECT MENU: Ticket sistemi
-      else if (interaction.type === InteractionType.MessageComponent && interaction.isStringSelectMenu()) {
+      // ✅ Bilet sistemi (select menu)
+      else if (interaction.isStringSelectMenu()) {
         if (interaction.customId === 'ticket_menu') {
-          const selectedCategory = interaction.values[0];
+          const kategori = interaction.values[0] || 'genel';
 
-          const existingChannel = interaction.guild.channels.cache.find(ch =>
-            ch.name === `ticket-${interaction.user.id}`
+          const existing = interaction.guild.channels.cache.find(c =>
+            c.name === `ticket-${interaction.user.id}`
           );
 
-          if (existingChannel) {
-            return interaction.reply({
-              content: `❌ Zaten açık bir biletiniz var: ${existingChannel}`,
-              ephemeral: true,
-            });
+          if (existing) {
+            return interaction.reply({ content: `❌ Zaten bir biletin var: ${existing}`, ephemeral: true });
           }
 
-          const ticketCategory = interaction.guild.channels.cache.find(
-            c => c.name.toLowerCase() === 'biletler' && c.type === ChannelType.GuildCategory
-          );
+          try {
+            const ticketCategory = interaction.guild.channels.cache.find(c =>
+              c.name.toLowerCase().includes('bilet') &&
+              c.type === ChannelType.GuildCategory
+            );
 
-          const destekRolID = '1394428979129221296'; // Destek rol ID (isteğe bağlı)
+            const supportRoleId = '1394428979129221296'; // Rol ID'yi buraya ekle
 
-          const channel = await interaction.guild.channels.create({
-            name: `ticket-${interaction.user.id}`,
-            type: ChannelType.GuildText,
-            parent: ticketCategory?.id,
-            permissionOverwrites: [
-              {
-                id: interaction.guild.roles.everyone.id,
-                deny: [PermissionsBitField.Flags.ViewChannel],
-              },
-              {
-                id: interaction.user.id,
-                allow: [
-                  PermissionsBitField.Flags.ViewChannel,
-                  PermissionsBitField.Flags.SendMessages,
-                  PermissionsBitField.Flags.ReadMessageHistory,
-                ],
-              },
-              ...(destekRolID ? [{
-                id: destekRolID,
-                allow: [PermissionsBitField.Flags.ViewChannel, PermissionsBitField.Flags.SendMessages],
-              }] : [])
-            ],
-          });
+            const channel = await interaction.guild.channels.create({
+              name: `ticket-${interaction.user.id}`,
+              type: ChannelType.GuildText,
+              parent: ticketCategory?.id || null,
+              permissionOverwrites: [
+                {
+                  id: interaction.guild.roles.everyone.id,
+                  deny: [PermissionsBitField.Flags.ViewChannel]
+                },
+                {
+                  id: interaction.user.id,
+                  allow: [
+                    PermissionsBitField.Flags.ViewChannel,
+                    PermissionsBitField.Flags.SendMessages,
+                    PermissionsBitField.Flags.ReadMessageHistory
+                  ]
+                },
+                ...(supportRoleId
+                  ? [{
+                    id: supportRoleId,
+                    allow: [PermissionsBitField.Flags.ViewChannel, PermissionsBitField.Flags.SendMessages]
+                  }]
+                  : [])
+              ]
+            });
 
-          const bilgi = new EmbedBuilder()
-            .setTitle('🎫 Biletiniz açıldı')
-            .setDescription(`Kategori: **${selectedCategory.toUpperCase()}**\nLütfen detaylı yazın.`)
-            .setColor('Blue');
+            const embed = new EmbedBuilder()
+              .setTitle('🎫 Biletiniz Açıldı')
+              .setDescription(`Kategori: **${kategori.toUpperCase()}**\n\nLütfen sorununuzu detaylıca belirtin.`)
+              .setColor('#00AAFF')
+              .setTimestamp();
 
-          const kurallar = new EmbedBuilder()
-            .setTitle('📜 Bilet Kuralları')
-            .setDescription(
-              `- Küfür ve hakaret yasaktır\n` +
-              `- Spam yapmayın\n` +
-              `- Gereksiz açılan biletler kapatılır\n` +
-              `- Yetkililer size kısa sürede dönecektir`
-            )
-            .setColor('Orange');
+            const kurallar = new EmbedBuilder()
+              .setTitle('📜 Bilet Kuralları')
+              .setDescription(
+                `• Saygılı olun.\n• Spam yapmayın.\n• Konuyla alakasız mesaj atmayın.\n• Destek ekibinin cevabını bekleyin.`
+              )
+              .setColor('#FFAA00');
 
-          await channel.send({ content: `${interaction.user}`, embeds: [bilgi, kurallar] });
+            await channel.send({ content: `${interaction.user}`, embeds: [embed, kurallar] });
 
-          return interaction.reply({ content: `✅ Bilet açıldı: ${channel}`, ephemeral: true });
+            return interaction.reply({
+              content: `✅ Bilet kanalınız oluşturuldu: ${channel}`,
+              ephemeral: true
+            });
+
+          } catch (err) {
+            console.error('Bilet açma hatası:', err);
+            return interaction.reply({
+              content: '❌ Bilet oluşturulamadı. Lütfen sonra tekrar deneyin.',
+              ephemeral: true
+            });
+          }
         }
       }
 
-    } catch (error) {
-      console.error('❌ interactionCreate hatası:', error);
-      if (interaction && !interaction.replied) {
-        await interaction.reply({ content: '❌ Bir hata oluştu. Lütfen tekrar deneyin.', ephemeral: true }).catch(() => { });
+    } catch (err) {
+      console.error('Genel interactionCreate hatası:', err);
+      if (interaction.type === InteractionType.ApplicationCommand && !interaction.replied) {
+        await interaction.reply({ content: '❌ Bir hata oluştu.', ephemeral: true });
       }
     }
-  },
+  }
 };
