@@ -1,68 +1,64 @@
-const { Client, GatewayIntentBits, Partials, Collection, REST, Routes } = require('discord.js');
+const { Client, Collection, GatewayIntentBits, Partials } = require('discord.js');
 const fs = require('fs');
-const path = require('path');
+const express = require('express');
+const app = express();
 
-// Ortam değişkenleri (Render üzerinden alınır)
-const TOKEN = process.env.TOKEN;
-const CLIENT_ID = process.env.CLIENT_ID;
-const GUILD_ID = process.env.GUILD_ID;
+// === Config değişkenleri ===
+const token = process.env.TOKEN;
+const clientId = process.env.CLIENT_ID;
+const guildId = process.env.GUILD_ID;
 
-// Client başlat
+if (!token || !clientId || !guildId) {
+  console.error("❌ Render ortam değişkenleri eksik: TOKEN / CLIENT_ID / GUILD_ID");
+  process.exit(1);
+}
+
+// === Discord Client ===
 const client = new Client({
   intents: [
     GatewayIntentBits.Guilds,
     GatewayIntentBits.GuildMessages,
     GatewayIntentBits.GuildMembers,
-    GatewayIntentBits.MessageContent,
-    GatewayIntentBits.GuildMessageReactions
+    GatewayIntentBits.MessageContent
   ],
-  partials: [Partials.Channel, Partials.Message, Partials.Reaction]
+  partials: [Partials.Channel]
 });
 
+// Komut ve event koleksiyonları
 client.commands = new Collection();
-const commands = [];
+client.events = new Collection();
 
-// Komutları yükle
-const commandPath = path.join(__dirname, 'commands');
-const commandFiles = fs.readdirSync(commandPath).filter(f => f.endsWith('.js'));
+// === Komutları yükle ===
+const commandFiles = fs.readdirSync('./src/commands').filter(file => file.endsWith('.js'));
 for (const file of commandFiles) {
-  const command = require(`./commands/${file}`);
-  if (command.data && command.execute) {
-    client.commands.set(command.data.name, command);
-    commands.push(command.data.toJSON());
-  }
+  const command = require(`./src/commands/${file}`);
+  client.commands.set(command.name, command);
 }
-console.log(`✅ ${commands.length} komut yüklendi: ${commandFiles.join(', ')}`);
+console.log(`✅ ${commandFiles.length} komut yüklendi.`);
 
-// Eventleri yükle
-const eventPath = path.join(__dirname, 'events');
-const eventFiles = fs.readdirSync(eventPath).filter(f => f.endsWith('.js'));
+// === Eventleri yükle ===
+const eventFiles = fs.readdirSync('./src/events').filter(file => file.endsWith('.js'));
 for (const file of eventFiles) {
-  const event = require(`./events/${file}`);
-  if (event.once) client.once(event.name, (...args) => event.execute(...args, client));
-  else client.on(event.name, (...args) => event.execute(...args, client));
-}
-console.log(`📂 ${eventFiles.length} event yüklendi: ${eventFiles.join(', ')}`);
-
-// Slash komutları yükle
-client.once('ready', async () => {
-  console.log(`🟢 Bot aktif: ${client.user.tag}`);
-
-  try {
-    const rest = new REST({ version: '10' }).setToken(TOKEN);
-    await rest.put(Routes.applicationGuildCommands(CLIENT_ID, GUILD_ID), { body: commands });
-
-    console.log(`✅ Slash komutları sunucuya yüklendi (${GUILD_ID})`);
-    console.log(`🌐 Sahte port: 3000 (Render için gösterim)`);
-
-    // Sahte portu dinleyen küçük bir express sunucusu gibi davran
-    setInterval(() => {
-      console.log(`📡 [PORT 3000] Durum: OK - ${new Date().toLocaleTimeString()}`);
-    }, 60 * 1000); // her dakika logla (isteğe bağlı)
-  } catch (err) {
-    console.error('❌ Slash komutları yüklenemedi:', err);
+  const event = require(`./src/events/${file}`);
+  if (event.once) {
+    client.once(event.name, (...args) => event.execute(...args, client));
+  } else {
+    client.on(event.name, (...args) => event.execute(...args, client));
   }
-});
+}
+console.log(`📡 ${eventFiles.length} event yüklendi.`);
 
-// Botu başlat
-client.login(TOKEN);
+// === Giriş yap ===
+client.login(token)
+  .then(() => console.log(`🤖 Bot aktif: ${client.user.tag}`))
+  .catch(err => {
+    console.error('❌ Bot giriş hatası:', err);
+    process.exit(1);
+  });
+
+// === Express sunucusu (Render için ping koruması) ===
+const PORT = process.env.PORT || 3000;
+app.get('/', (_, res) => res.send('✅ Bot çalışıyor.'));
+app.listen(PORT, () => {
+  console.log(`🌐 Gerçek port dinleniyor: http://localhost:${PORT}`);
+});
