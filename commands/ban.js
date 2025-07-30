@@ -1,25 +1,22 @@
-const { SlashCommandBuilder, PermissionFlagsBits } = require('discord.js');
+const { SlashCommandBuilder } = require('discord.js');
 
 module.exports = {
   data: new SlashCommandBuilder()
-    .setName('ban')
-    .setDescription('Bir kullanıcıyı banlar.')
-    .addUserOption(option => 
-      option.setName('kullanıcı').setDescription('Banlanacak kullanıcı').setRequired(true))
-    .addStringOption(option =>
-      option.setName('sebep').setDescription('Ban sebebi').setRequired(false))
-    .setDefaultMemberPermissions(PermissionFlagsBits.BanMembers),
+    .setName('rank')
+    .setDescription('Sunucudaki rollerine göre rütbeni gösterir.')
+    .addUserOption(option => option.setName('kullanici').setDescription('Rütbesi görülecek kullanıcı').setRequired(false)),
+
   async execute(interaction) {
-    const user = interaction.options.getUser('kullanıcı');
-    const reason = interaction.options.getString('sebep') || 'Sebep belirtilmedi';
-    const member = interaction.guild.members.cache.get(user.id);
-    
-    if (!member) return await interaction.reply({ content: 'Kullanıcı bulunamadı.', ephemeral: true });
+    const member = interaction.options.getMember('kullanici') || interaction.member;
 
-    await member.ban({ reason }).catch(err => {
-      return interaction.reply({ content: '❌ Ban işlemi başarısız.', ephemeral: true });
-    });
+    // Kullanıcının rolleri ve yetkilerini alıyoruz
+    const roles = member.roles.cache.filter(r => r.name !== '@everyone').map(r => r.name).join(', ') || 'Rolü yok';
 
-    await interaction.reply(`✅ ${user.tag} banlandı. Sebep: ${reason}`);
-  }
+    // Örnek rütbe sistemi basit: Yetkili mi? Yönetici mi? Normal mi?
+    let rank = 'Üye';
+    if (member.permissions.has('Administrator')) rank = 'Yönetici';
+    else if (member.permissions.has('BanMembers') || member.permissions.has('KickMembers')) rank = 'Yetkili';
+
+    await interaction.reply({ content: `${member} kullanıcısının rolleri: **${roles}**\nRütbesi: **${rank}**` });
+  },
 };
