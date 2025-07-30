@@ -1,64 +1,79 @@
-const { Client, Collection, GatewayIntentBits, Partials } = require('discord.js');
-const fs = require('fs');
-const express = require('express');
-const app = express();
+const fs = require("fs");
+const path = require("path");
+const { Client, Collection, GatewayIntentBits, Partials } = require("discord.js");
 
-// === Config değişkenleri ===
-const token = process.env.TOKEN;
-const clientId = process.env.CLIENT_ID;
-const guildId = process.env.GUILD_ID;
-
-if (!token || !clientId || !guildId) {
-  console.error("❌ Render ortam değişkenleri eksik: TOKEN / CLIENT_ID / GUILD_ID");
-  process.exit(1);
-}
-
-// === Discord Client ===
 const client = new Client({
   intents: [
     GatewayIntentBits.Guilds,
     GatewayIntentBits.GuildMessages,
+    GatewayIntentBits.MessageContent,
     GatewayIntentBits.GuildMembers,
-    GatewayIntentBits.MessageContent
+    GatewayIntentBits.GuildMessageReactions,
   ],
-  partials: [Partials.Channel]
+  partials: [Partials.Message, Partials.Channel, Partials.Reaction],
 });
 
-// Komut ve event koleksiyonları
 client.commands = new Collection();
-client.events = new Collection();
+client.buttons = new Collection();
+client.selectMenus = new Collection();
+client.modals = new Collection();
 
-// === Komutları yükle ===
-const commandFiles = fs.readdirSync('./src/commands').filter(file => file.endsWith('.js'));
-for (const file of commandFiles) {
-  const command = require(`./src/commands/${file}`);
-  client.commands.set(command.name, command);
-}
-console.log(`✅ ${commandFiles.length} komut yüklendi.`);
+// Token, Guild ID, Client ID: Render ortam değişkenlerinden alınır
+const TOKEN = process.env.TOKEN;
+const GUILD_ID = process.env.GUILD_ID;
+const CLIENT_ID = process.env.CLIENT_ID;
 
-// === Eventleri yükle ===
-const eventFiles = fs.readdirSync('./src/events').filter(file => file.endsWith('.js'));
-for (const file of eventFiles) {
-  const event = require(`./src/events/${file}`);
-  if (event.once) {
-    client.once(event.name, (...args) => event.execute(...args, client));
-  } else {
-    client.on(event.name, (...args) => event.execute(...args, client));
+console.log("🚀 Bot başlatılıyor...");
+
+// Komutları yükle
+const commandFolders = fs.readdirSync("./commands");
+let totalCommands = 0;
+for (const folder of commandFolders) {
+  const commandFiles = fs
+    .readdirSync(`./commands/${folder}`)
+    .filter((file) => file.endsWith(".js"));
+
+  for (const file of commandFiles) {
+    const command = require(`./commands/${folder}/${file}`);
+    if (command.data && command.execute) {
+      client.commands.set(command.data.name, command);
+      totalCommands++;
+    }
   }
 }
-console.log(`📡 ${eventFiles.length} event yüklendi.`);
 
-// === Giriş yap ===
-client.login(token)
-  .then(() => console.log(`🤖 Bot aktif: ${client.user.tag}`))
-  .catch(err => {
-    console.error('❌ Bot giriş hatası:', err);
-    process.exit(1);
-  });
+// Eventleri yükle
+const eventFiles = fs.readdirSync("./events").filter(file => file.endsWith(".js"));
+let totalEvents = 0;
+for (const file of eventFiles) {
+  const event = require(`./events/${file}`);
+  if (event.name && typeof event.execute === "function") {
+    if (event.once) {
+      client.once(event.name, (...args) => event.execute(...args, client));
+    } else {
+      client.on(event.name, (...args) => event.execute(...args, client));
+    }
+    totalEvents++;
+  }
+}
 
-// === Express sunucusu (Render için ping koruması) ===
-const PORT = process.env.PORT || 3000;
-app.get('/', (_, res) => res.send('✅ Bot çalışıyor.'));
-app.listen(PORT, () => {
-  console.log(`🌐 Gerçek port dinleniyor: http://localhost:${PORT}`);
+// Komut kayıt/log
+client.once("ready", () => {
+  console.log(`✅ ${client.user.tag} olarak giriş yapıldı.`);
+  console.log(`📦 ${totalCommands} komut yüklendi.`);
+  console.log(`🎯 ${totalEvents} event yüklendi.`);
+  console.log(`📡 Render sahte port: http://localhost:3000`);
+});
+
+// Sahte port: Render'ın crash olmaması için basit express sunucusu (zorunlu değil ama iyi olur)
+require("http")
+  .createServer((req, res) => {
+    res.writeHead(200, { "Content-Type": "text/plain" });
+    res.end("Phantom bot çalışıyor.\n");
+  })
+  .listen(3000);
+
+// Botu başlat
+client.login(TOKEN).catch(err => {
+  console.error("❌ Giriş başarısız. TOKEN doğru mu?", err.message);
 });
