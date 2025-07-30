@@ -2,37 +2,47 @@ const { SlashCommandBuilder, ActionRowBuilder, StringSelectMenuBuilder, EmbedBui
 
 module.exports = {
   data: new SlashCommandBuilder()
-    .setName('ticket')
-    .setDescription('Bilet menüsünü gönderir (Destek, Şikayet, Başvuru).'),
+    .setName('bilet')
+    .setDescription('Destek bilet menüsünü açar, lütfen aşağıdan kategori seçin.'),
+
   async execute(interaction) {
     const embed = new EmbedBuilder()
-      .setTitle('🎫 Bilet Sistemi')
-      .setDescription('Aşağıdan bir kategori seçerek bilet oluşturabilirsiniz:')
-      .setColor('Blue');
+      .setTitle('🎟️ Bilet Sistemi')
+      .setDescription(
+        '**Lütfen aşağıdaki menüden destek kategorinizi seçin.**\n\n' +
+        '📩 **Destek:** Genel sorunlar ve sorular için.\n' +
+        '🚫 **Şikayet:** Sunucu ile ilgili problemleri bildirmek için.\n' +
+        '📄 **Başvuru:** Sunucu veya ekip başvuruları için.\n\n' +
+        '⚠️ _Bilet açarken lütfen kurallara uyacağınızı unutmayın!_'
+      )
+      .setColor('#00AAFF');
 
-    const menu = new StringSelectMenuBuilder()
-      .setCustomId('ticket_menu')
-      .setPlaceholder('Bilet kategorisi seçin')
-      .addOptions(
-        {
-          label: '📩 Destek',
-          description: 'Genel destek talebi',
-          value: 'destek',
-        },
-        {
-          label: '🚫 Şikayet',
-          description: 'Kullanıcı veya sistem şikayeti',
-          value: 'sikayet',
-        },
-        {
-          label: '📄 Başvuru',
-          description: 'Yetkili/diğer başvurular',
-          value: 'basvuru',
-        }
-      );
+    const row = new ActionRowBuilder().addComponents(
+      new StringSelectMenuBuilder()
+        .setCustomId('ticket_menu')
+        .setPlaceholder('Bilet kategorisi seçin')
+        .addOptions([
+          {
+            label: 'Destek',
+            description: 'Genel destek için bilet açın',
+            value: 'destek',
+            emoji: '📩',
+          },
+          {
+            label: 'Şikayet',
+            description: 'Sunucu ile ilgili şikayetlerinizi bildirin',
+            value: 'sikayet',
+            emoji: '🚫',
+          },
+          {
+            label: 'Başvuru',
+            description: 'Sunucuya veya ekibe başvuru yapın',
+            value: 'basvuru',
+            emoji: '📄',
+          },
+        ])
+    );
 
-    const row = new ActionRowBuilder().addComponents(menu);
-
-    await interaction.reply({ embeds: [embed], components: [row] });
+    await interaction.reply({ embeds: [embed], components: [row], ephemeral: true });
   },
 };
