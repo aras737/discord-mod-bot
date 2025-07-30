@@ -110,7 +110,7 @@ module.exports = {
             c => c.name.toLowerCase() === 'biletler' && c.type === ChannelType.GuildCategory
           );
 
-          const destekRolID = '123456789012345678'; // Destek rol ID (isteğe bağlı)
+          const destekRolID = '1394428979129221296'; // Destek rol ID (isteğe bağlı)
 
           const channel = await interaction.guild.channels.create({
             name: `ticket-${interaction.user.id}`,
