@@ -1,12 +1,12 @@
-const { SlashCommandBuilder, EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle } = require('discord.js');
+const { SlashCommandBuilder, EmbedBuilder, ButtonBuilder, ActionRowBuilder, ButtonStyle } = require('discord.js');
 
 module.exports = {
   data: new SlashCommandBuilder()
     .setName('duyuru')
-    .setDescription('Everyone etiketli duyuru gönderir.')
+    .setDescription('Gömülü everyone duyurusu gönderir.')
     .addStringOption(option =>
       option.setName('mesaj')
-        .setDescription('Duyuru mesajını yaz.')
+        .setDescription('Duyuru mesajını girin')
         .setRequired(true)
     ),
 
@@ -14,19 +14,18 @@ module.exports = {
     const mesaj = interaction.options.getString('mesaj');
 
     const embed = new EmbedBuilder()
-      .setTitle('📢 Yeni Duyuru!')
-      .setDescription(`@everyone\n\n${mesaj}`)
+      .setTitle('📢 Yeni Duyuru')
+      .setDescription(mesaj)
       .setColor('Yellow')
-      .setTimestamp()
-      .setFooter({ text: `Gönderen: ${interaction.user.tag}` });
+      .setTimestamp();
 
-    const buton = new ActionRowBuilder().addComponents(
-      new ButtonBuilder()
-        .setCustomId('onayla')
-        .setLabel('✅ Gördüm')
-        .setStyle(ButtonStyle.Success)
-    );
+    const buton = new ButtonBuilder()
+      .setCustomId('onayla')
+      .setLabel('✅ Okudum')
+      .setStyle(ButtonStyle.Success);
 
-    await interaction.reply({ content: '@everyone', embeds: [embed], components: [buton] });
-  },
+    const row = new ActionRowBuilder().addComponents(buton);
+
+    await interaction.reply({ content: '@everyone', embeds: [embed], components: [row] });
+  }
 };
