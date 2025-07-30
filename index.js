@@ -1,79 +1,82 @@
-const fs = require("fs");
-const path = require("path");
-const { Client, Collection, GatewayIntentBits, Partials } = require("discord.js");
+const { Client, GatewayIntentBits, REST, Routes, Collection } = require('discord.js');
+const fs = require('fs');
+const http = require('http');
+
+// Render environment değişkenlerini doğrudan alıyoruz
+const TOKEN = process.env.TOKEN;
+const CLIENT_ID = process.env.CLIENT_ID;
+const GUILD_ID = process.env.GUILD_ID;
+const PORT = process.env.PORT || 3000;
+
+// Render için sahte port açma
+http.createServer((req, res) => res.end('Bot aktif!')).listen(PORT, () => {
+  console.log(`Sahte port ${PORT} üzerinde dinleniyor.`);
+});
 
 const client = new Client({
   intents: [
     GatewayIntentBits.Guilds,
     GatewayIntentBits.GuildMessages,
-    GatewayIntentBits.MessageContent,
-    GatewayIntentBits.GuildMembers,
-    GatewayIntentBits.GuildMessageReactions,
+    GatewayIntentBits.MessageContent, // Mesaj içeriğini okuyabilmek için gerekli
   ],
-  partials: [Partials.Message, Partials.Channel, Partials.Reaction],
 });
 
 client.commands = new Collection();
-client.buttons = new Collection();
-client.selectMenus = new Collection();
-client.modals = new Collection();
 
-// Token, Guild ID, Client ID: Render ortam değişkenlerinden alınır
-const TOKEN = process.env.TOKEN;
-const GUILD_ID = process.env.GUILD_ID;
-const CLIENT_ID = process.env.CLIENT_ID;
+const commands = [];
+const commandFiles = fs.readdirSync('./commands').filter(file => file.endsWith('.js'));
 
-console.log("🚀 Bot başlatılıyor...");
-
-// Komutları yükle
-const commandFolders = fs.readdirSync("./commands");
-let totalCommands = 0;
-for (const folder of commandFolders) {
-  const commandFiles = fs
-    .readdirSync(`./commands/${folder}`)
-    .filter((file) => file.endsWith(".js"));
-
-  for (const file of commandFiles) {
-    const command = require(`./commands/${folder}/${file}`);
-    if (command.data && command.execute) {
-      client.commands.set(command.data.name, command);
-      totalCommands++;
-    }
+for (const file of commandFiles) {
+  const command = require(`./commands/${file}`);
+  if ('data' in command && 'execute' in command) {
+    client.commands.set(command.data.name, command);
+    commands.push(command.data.toJSON());
+  } else {
+    console.warn(`[UYARI] ${file} komutu 'data' veya 'execute' içermiyor.`);
   }
 }
 
-// Eventleri yükle
-const eventFiles = fs.readdirSync("./events").filter(file => file.endsWith(".js"));
-let totalEvents = 0;
-for (const file of eventFiles) {
-  const event = require(`./events/${file}`);
-  if (event.name && typeof event.execute === "function") {
-    if (event.once) {
-      client.once(event.name, (...args) => event.execute(...args, client));
-    } else {
-      client.on(event.name, (...args) => event.execute(...args, client));
-    }
-    totalEvents++;
+const rest = new REST({ version: '10' }).setToken(TOKEN);
+
+(async () => {
+  try {
+    console.log('Komutlar sıfırlanıyor...');
+    await rest.put(Routes.applicationGuildCommands(CLIENT_ID, GUILD_ID), { body: [] });
+
+    console.log('Yeni komutlar yükleniyor...');
+    const data = await rest.put(Routes.applicationGuildCommands(CLIENT_ID, GUILD_ID), { body: commands });
+
+    console.log(`✅ ${data.length} komut yüklendi:`);
+    data.forEach(cmd => console.log(`🔹 /${cmd.name}`));
+  } catch (error) {
+    console.error('Komut yükleme hatası:', error);
   }
-}
+})();
 
-// Komut kayıt/log
-client.once("ready", () => {
-  console.log(`✅ ${client.user.tag} olarak giriş yapıldı.`);
-  console.log(`📦 ${totalCommands} komut yüklendi.`);
-  console.log(`🎯 ${totalEvents} event yüklendi.`);
-  console.log(`📡 Render sahte port: http://localhost:3000`);
+client.once('ready', () => {
+  console.log(`🤖 Bot aktif: ${client.user.tag}`);
 });
 
-// Sahte port: Render'ın crash olmaması için basit express sunucusu (zorunlu değil ama iyi olur)
-require("http")
-  .createServer((req, res) => {
-    res.writeHead(200, { "Content-Type": "text/plain" });
-    res.end("Phantom bot çalışıyor.\n");
-  })
-  .listen(3000);
+client.on('interactionCreate', async interaction => {
+  try {
+    // Diğer interaction türlerini dışarıdaki dosyada yönet (menü, button, select menu, banlist vb.)
+    await require('./events/interactionCreate').execute(interaction, client);
 
-// Botu başlat
-client.login(TOKEN).catch(err => {
-  console.error("❌ Giriş başarısız. TOKEN doğru mu?", err.message);
+    // Slash komutlar için orijinal handler
+    if (interaction.isChatInputCommand()) {
+      const command = client.commands.get(interaction.commandName);
+      if (!command) return;
+
+      await command.execute(interaction, client);
+    }
+  } catch (error) {
+    console.error(error);
+    if (interaction.replied || interaction.deferred) {
+      await interaction.followUp({ content: '❌ Komut çalıştırılamadı.', ephemeral: true });
+    } else if (interaction.isRepliable()) {
+      await interaction.reply({ content: '❌ Komut çalıştırılamadı.', ephemeral: true });
+    }
+  }
 });
+
+client.login(TOKEN);
