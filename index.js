@@ -1,82 +1,57 @@
-const { Client, GatewayIntentBits, REST, Routes, Collection } = require('discord.js');
+const { Client, GatewayIntentBits, Partials, Collection, REST, Routes } = require('discord.js');
 const fs = require('fs');
-const http = require('http');
+const path = require('path');
 
-// Render environment değişkenlerini doğrudan alıyoruz
+// Render ortam değişkenleri
 const TOKEN = process.env.TOKEN;
 const CLIENT_ID = process.env.CLIENT_ID;
 const GUILD_ID = process.env.GUILD_ID;
-const PORT = process.env.PORT || 3000;
 
-// Render için sahte port açma
-http.createServer((req, res) => res.end('Bot aktif!')).listen(PORT, () => {
-  console.log(`Sahte port ${PORT} üzerinde dinleniyor.`);
-});
-
+// Client başlat
 const client = new Client({
   intents: [
     GatewayIntentBits.Guilds,
     GatewayIntentBits.GuildMessages,
-    GatewayIntentBits.MessageContent, // Mesaj içeriğini okuyabilmek için gerekli
+    GatewayIntentBits.GuildMembers,
+    GatewayIntentBits.MessageContent,
+    GatewayIntentBits.GuildMessageReactions
   ],
+  partials: [Partials.Channel, Partials.Message, Partials.Reaction]
 });
 
 client.commands = new Collection();
-
 const commands = [];
-const commandFiles = fs.readdirSync('./commands').filter(file => file.endsWith('.js'));
 
-for (const file of commandFiles) {
-  const command = require(`./commands/${file}`);
-  if ('data' in command && 'execute' in command) {
-    client.commands.set(command.data.name, command);
-    commands.push(command.data.toJSON());
-  } else {
-    console.warn(`[UYARI] ${file} komutu 'data' veya 'execute' içermiyor.`);
+// Komutları yükle
+const commandPath = path.join(__dirname, 'commands');
+for (const file of fs.readdirSync(commandPath).filter(f => f.endsWith('.js'))) {
+  const cmd = require(`./commands/${file}`);
+  if (cmd.data && cmd.execute) {
+    client.commands.set(cmd.data.name, cmd);
+    commands.push(cmd.data.toJSON());
   }
 }
 
-const rest = new REST({ version: '10' }).setToken(TOKEN);
+// Eventleri yükle
+const eventPath = path.join(__dirname, 'events');
+for (const file of fs.readdirSync(eventPath).filter(f => f.endsWith('.js'))) {
+  const evt = require(`./events/${file}`);
+  if (evt.once) client.once(evt.name, (...args) => evt.execute(...args, client));
+  else client.on(evt.name, (...args) => evt.execute(...args, client));
+}
 
-(async () => {
+// Slash komutları yükle
+client.once('ready', async () => {
+  console.log(`✅ Bot hazır: ${client.user.tag}`);
+
   try {
-    console.log('Komutlar sıfırlanıyor...');
-    await rest.put(Routes.applicationGuildCommands(CLIENT_ID, GUILD_ID), { body: [] });
-
-    console.log('Yeni komutlar yükleniyor...');
-    const data = await rest.put(Routes.applicationGuildCommands(CLIENT_ID, GUILD_ID), { body: commands });
-
-    console.log(`✅ ${data.length} komut yüklendi:`);
-    data.forEach(cmd => console.log(`🔹 /${cmd.name}`));
-  } catch (error) {
-    console.error('Komut yükleme hatası:', error);
-  }
-})();
-
-client.once('ready', () => {
-  console.log(`🤖 Bot aktif: ${client.user.tag}`);
-});
-
-client.on('interactionCreate', async interaction => {
-  try {
-    // Diğer interaction türlerini dışarıdaki dosyada yönet (menü, button, select menu, banlist vb.)
-    await require('./events/interactionCreate').execute(interaction, client);
-
-    // Slash komutlar için orijinal handler
-    if (interaction.isChatInputCommand()) {
-      const command = client.commands.get(interaction.commandName);
-      if (!command) return;
-
-      await command.execute(interaction, client);
-    }
-  } catch (error) {
-    console.error(error);
-    if (interaction.replied || interaction.deferred) {
-      await interaction.followUp({ content: '❌ Komut çalıştırılamadı.', ephemeral: true });
-    } else if (interaction.isRepliable()) {
-      await interaction.reply({ content: '❌ Komut çalıştırılamadı.', ephemeral: true });
-    }
+    const rest = new REST({ version: '10' }).setToken(TOKEN);
+    await rest.put(Routes.applicationGuildCommands(CLIENT_ID, GUILD_ID), { body: commands });
+    console.log('✅ Slash komutları yüklendi');
+  } catch (err) {
+    console.error('❌ Slash yükleme hatası:', err);
   }
 });
 
+// Botu başlat
 client.login(TOKEN);
