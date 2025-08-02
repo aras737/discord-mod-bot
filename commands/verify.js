@@ -1,46 +1,52 @@
-const { SlashCommandBuilder } = require('discord.js');
+// commands/dogrula.js
 const axios = require('axios');
 
 module.exports = {
-  data: new SlashCommandBuilder()
-    .setName('verify')
-    .setDescription('Roblox grup üyeliğini doğrular.')
-    .addStringOption(option => 
-      option.setName('username')
-        .setDescription('Roblox kullanıcı adınız')
-        .setRequired(true)),
-  
+  data: {
+    name: 'doğrula',
+    description: 'Roblox hesabınızı doğrulayın.',
+    options: [
+      {
+        name: 'kullanıcıadı',
+        type: 3,
+        description: 'Roblox kullanıcı adınız',
+        required: true
+      }
+    ]
+  },
+
   async execute(interaction) {
-    const username = interaction.options.getString('username');
-    const groupId = parseInt(process.env.ROBLOX_GROUP_ID, 10);
-    const roleId = process.env.VERIFY_ROLE_ID;
+    const username = interaction.options.getString('kullanıcıadı');
 
     try {
-      // Kullanıcı ID al
-      const userRes = await axios.get(`https://api.roblox.com/users/get-by-username?username=${username}`);
-      if (!userRes.data || userRes.data.Id === 0) {
-        return interaction.reply({ content: 'Geçersiz Roblox kullanıcı adı.', ephemeral: true });
-      }
-      const userId = userRes.data.Id;
+      // 1. Kullanıcı adını ID'ye çevir
+      const res = await axios.get(`https://users.roblox.com/v1/usernames/users`, {
+        data: {
+          usernames: [username],
+          excludeBannedUsers: true
+        }
+      });
 
-      // Grup üyeliği kontrol
-      const groupRes = await axios.get(`https://groups.roblox.com/v1/users/${userId}/groups/roles`);
-      const groups = groupRes.data.data;
-      const isMember = groups.some(g => g.group.id === groupId);
+      const userData = res.data.data[0];
+      if (!userData) return interaction.reply({ content: '❌ Kullanıcı bulunamadı.', ephemeral: true });
 
-      if (!isMember) {
-        return interaction.reply({ content: 'Bu kullanıcı belirtilen Roblox grubuna üye değil.', ephemeral: true });
-      }
+      const robloxId = userData.id;
+      const verifyCode = `DC-${interaction.user.id}`; // Discord ID tabanlı doğrulama kodu
 
-      // Rol verme
-      const member = await interaction.guild.members.fetch(interaction.user.id);
-      await member.roles.add(roleId);
+      const desc = `
+✅ Roblox hesabınızı doğrulamak için:
+1. [Profil ayarlarınıza](https://www.roblox.com/users/${robloxId}/profile) gidin.
+2. **Hakkımda (About Me)** kısmına bu kodu ekleyin:
+\`\`\`${verifyCode}\`\`\`
+3. Sonra tekrar bu komutu yazın: \`/doğrula ${username}\`
+`;
 
-      return interaction.reply({ content: 'Başarıyla doğrulandınız ve rolünüz verildi.', ephemeral: true });
+      // Kullanıcıya açıklamayı gönder
+      await interaction.reply({ content: desc, ephemeral: true });
 
-    } catch (error) {
-      console.error(error);
-      return interaction.reply({ content: 'Bir hata oluştu. Lütfen tekrar deneyin.', ephemeral: true });
+    } catch (err) {
+      console.error(err);
+      await interaction.reply({ content: '❌ Bir hata oluştu.', ephemeral: true });
     }
   }
 };
