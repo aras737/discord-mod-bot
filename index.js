@@ -2,7 +2,7 @@ const { Client, GatewayIntentBits, REST, Routes, Collection } = require('discord
 const fs = require('fs');
 const http = require('http');
 
-// Render ortam değişkenlerinden al
+// Render ortam değişkenlerini al
 const TOKEN = process.env.TOKEN;
 const CLIENT_ID = process.env.CLIENT_ID;
 const GUILD_ID = process.env.GUILD_ID;
@@ -10,14 +10,16 @@ const PORT = process.env.PORT || 3000;
 
 // Render için sahte port
 http.createServer((req, res) => res.end('Bot aktif')).listen(PORT, () =>
-  console.log(`🌐 Port ${PORT} dinleniyor (Render uyumlu).`)
+  console.log(`🌐 Port ${PORT} aktif (Render bekleme için).`)
 );
 
+// Zorunlu kontrol
 if (!TOKEN || !CLIENT_ID || !GUILD_ID) {
-  console.error("❌ TOKEN, CLIENT_ID veya GUILD_ID eksik. Render Environment ayarlarını kontrol et.");
+  console.error("❌ Gerekli ortam değişkenleri eksik (TOKEN, CLIENT_ID, GUILD_ID). Render Environment ayarlarını kontrol et.");
   process.exit(1);
 }
 
+// Discord Client oluştur
 const client = new Client({
   intents: [
     GatewayIntentBits.Guilds,
@@ -29,7 +31,7 @@ const client = new Client({
 
 client.commands = new Collection();
 
-// Komutları oku
+// Komutları oku ve dizine ekle
 const commands = [];
 const commandFiles = fs.readdirSync('./commands').filter(file => file.endsWith('.js'));
 
@@ -39,83 +41,29 @@ for (const file of commandFiles) {
     client.commands.set(command.data.name, command);
     commands.push(command.data.toJSON());
   } else {
-    console.warn(`⚠️ ${file} komutu 'data' veya 'execute' içermiyor.`);
+    console.warn(`⚠️ Uyarı: ${file} komutu 'data' veya 'execute' içermiyor.`);
   }
 }
 
-// Komutları yükle
-const rest = new REST({ version: '10' }).setToken(TOKEN);
+// Slash komutları ZORLA yüklemeden bota giriş yaptırma
 (async () => {
+  const rest = new REST({ version: '10' }).setToken(TOKEN);
   try {
     console.log('🔄 Mevcut komutlar temizleniyor...');
     await rest.put(Routes.applicationGuildCommands(CLIENT_ID, GUILD_ID), { body: [] });
 
-    console.log('🚀 Komutlar yükleniyor...');
+    console.log('🚀 Slash komutlar yükleniyor...');
     const data = await rest.put(Routes.applicationGuildCommands(CLIENT_ID, GUILD_ID), { body: commands });
+
     console.log(`✅ ${data.length} komut yüklendi:`);
     data.forEach(cmd => console.log(`🔹 /${cmd.name}`));
+
+    // Eğer komut yükleme başarılıysa giriş yap
+    client.login(TOKEN);
+
   } catch (error) {
-    console.error('❌ Komut yüklenirken hata oluştu:', error);
-    process.exit(1);
+    console.error('❌ Slash komut yükleme sırasında hata oluştu:');
+    console.error(error);
+    process.exit(1); // ZORLA çık, bot başlamasın
   }
 })();
-
-// Bot hazır
-client.once('ready', () => {
-  console.log(`🤖 Bot aktif: ${client.user.tag}`);
-});
-
-// interactionCreate: slash + select menu
-client.on('interactionCreate', async interaction => {
-  // Slash komut
-  if (interaction.isChatInputCommand()) {
-    const command = client.commands.get(interaction.commandName);
-    if (!command) return;
-
-    try {
-      await command.execute(interaction, client);
-    } catch (error) {
-      console.error(error);
-      if (interaction.replied || interaction.deferred) {
-        await interaction.followUp({ content: '⚠️ Komut çalıştırılamadı.', ephemeral: true });
-      } else {
-        await interaction.reply({ content: '⚠️ Komut çalıştırılamadı.', ephemeral: true });
-      }
-    }
-  }
-
-  // Select menu (örnek: ban onayı)
-  if (interaction.isStringSelectMenu()) {
-    if (interaction.customId.startsWith('ban_confirm_')) {
-      const userId = interaction.customId.split('_')[2];
-      const reason = interaction.values[0];
-      const member = await interaction.guild.members.fetch(userId).catch(() => null);
-
-      if (!member) {
-        return interaction.reply({ content: '❌ Kullanıcı bulunamadı.', ephemeral: true });
-      }
-
-      try {
-        await member.ban({ reason: `Sebep: ${reason} - Banlayan: ${interaction.user.tag}` });
-
-        await interaction.update({
-          content: `✅ ${member.user.tag} başarıyla banlandı.\n📌 Sebep: ${reason}`,
-          components: [],
-        });
-
-        // Banlanan kullanıcıyı hafıza listesine ekle (geçici)
-        const { bannedUsers } = require('./commands/ban.js');
-        bannedUsers.push(member.user.id);
-
-      } catch (error) {
-        console.error('❌ Ban hatası:', error);
-        await interaction.update({
-          content: '❌ Ban işlemi başarısız oldu.',
-          components: [],
-        });
-      }
-    }
-  }
-});
-
-client.login(TOKEN);
