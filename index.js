@@ -1,97 +1,119 @@
 const { Client, GatewayIntentBits, REST, Routes, Collection } = require('discord.js');
 const fs = require('fs');
 const http = require('http');
-const path = require('path');
 
-// Ortam değişkenlerinden al (Render kullanımı için)
+// Render ortam değişkenlerinden al
 const TOKEN = process.env.TOKEN;
 const CLIENT_ID = process.env.CLIENT_ID;
 const GUILD_ID = process.env.GUILD_ID;
 const PORT = process.env.PORT || 3000;
 
-// Sahte port aç (Render için)
-http.createServer((req, res) => res.end('Bot aktif')).listen(PORT, () => {
-  console.log(`🌐 Sahte port ${PORT} dinleniyor.`);
-});
+// Render için sahte port
+http.createServer((req, res) => res.end('Bot aktif')).listen(PORT, () =>
+  console.log(`🌐 Port ${PORT} dinleniyor (Render uyumlu).`)
+);
 
-// Eksik değişken kontrolü
 if (!TOKEN || !CLIENT_ID || !GUILD_ID) {
-  console.error("❌ TOKEN, CLIENT_ID veya GUILD_ID eksik! Render ortam değişkenlerini kontrol et.");
+  console.error("❌ TOKEN, CLIENT_ID veya GUILD_ID eksik. Render Environment ayarlarını kontrol et.");
   process.exit(1);
 }
 
-// Bot istemcisi
 const client = new Client({
   intents: [
     GatewayIntentBits.Guilds,
     GatewayIntentBits.GuildMessages,
-    GatewayIntentBits.MessageContent
+    GatewayIntentBits.MessageContent,
+    GatewayIntentBits.GuildMembers,
   ],
 });
 
 client.commands = new Collection();
+
+// Komutları oku
 const commands = [];
 const commandFiles = fs.readdirSync('./commands').filter(file => file.endsWith('.js'));
 
-// Komutları yükle ve göster
 for (const file of commandFiles) {
-  const filePath = path.join('./commands', file);
-  const command = require(filePath);
-
+  const command = require(`./commands/${file}`);
   if ('data' in command && 'execute' in command) {
     client.commands.set(command.data.name, command);
     commands.push(command.data.toJSON());
-
-    console.log(`✅ Komut yüklendi: /${command.data.name}`);
-    
-    // Komut içeriğini göster (ilk 1000 karakter)
-    const kod = fs.readFileSync(filePath, 'utf8');
-    console.log(`📂 ${file} içeriği:\n` + kod.slice(0, 1000));
   } else {
-    console.warn(`⚠️ ${file} geçerli bir komut değil (data/execute eksik).`);
+    console.warn(`⚠️ ${file} komutu 'data' veya 'execute' içermiyor.`);
   }
 }
 
-// Slash komutları sunucuya gönder
+// Komutları yükle
 const rest = new REST({ version: '10' }).setToken(TOKEN);
-
 (async () => {
   try {
-    console.log('🔄 Mevcut komutlar sıfırlanıyor...');
+    console.log('🔄 Mevcut komutlar temizleniyor...');
     await rest.put(Routes.applicationGuildCommands(CLIENT_ID, GUILD_ID), { body: [] });
 
-    console.log('🚀 Yeni komutlar yükleniyor...');
+    console.log('🚀 Komutlar yükleniyor...');
     const data = await rest.put(Routes.applicationGuildCommands(CLIENT_ID, GUILD_ID), { body: commands });
-    console.log(`📦 ${data.length} komut başarıyla yüklendi.`);
+    console.log(`✅ ${data.length} komut yüklendi:`);
+    data.forEach(cmd => console.log(`🔹 /${cmd.name}`));
   } catch (error) {
-    console.error('❌ Slash komut yükleme hatası:', error);
+    console.error('❌ Komut yüklenirken hata oluştu:', error);
     process.exit(1);
   }
 })();
 
-// Bot hazır olduğunda
+// Bot hazır
 client.once('ready', () => {
-  console.log(`🤖 Bot giriş yaptı: ${client.user.tag}`);
+  console.log(`🤖 Bot aktif: ${client.user.tag}`);
 });
 
-// Komutlar çalıştırıldığında
+// interactionCreate: slash + select menu
 client.on('interactionCreate', async interaction => {
-  if (!interaction.isChatInputCommand()) return;
+  // Slash komut
+  if (interaction.isChatInputCommand()) {
+    const command = client.commands.get(interaction.commandName);
+    if (!command) return;
 
-  const command = client.commands.get(interaction.commandName);
-  if (!command) {
-    console.warn(`❌ Komut bulunamadı: ${interaction.commandName}`);
-    return;
+    try {
+      await command.execute(interaction, client);
+    } catch (error) {
+      console.error(error);
+      if (interaction.replied || interaction.deferred) {
+        await interaction.followUp({ content: '⚠️ Komut çalıştırılamadı.', ephemeral: true });
+      } else {
+        await interaction.reply({ content: '⚠️ Komut çalıştırılamadı.', ephemeral: true });
+      }
+    }
   }
 
-  try {
-    await command.execute(interaction, client);
-  } catch (error) {
-    console.error(`❌ Komut çalıştırma hatası (${interaction.commandName}):`, error);
-    if (interaction.replied || interaction.deferred) {
-      await interaction.followUp({ content: '⚠️ Komut çalıştırılamadı.', ephemeral: true });
-    } else {
-      await interaction.reply({ content: '⚠️ Komut çalıştırılamadı.', ephemeral: true });
+  // Select menu (örnek: ban onayı)
+  if (interaction.isStringSelectMenu()) {
+    if (interaction.customId.startsWith('ban_confirm_')) {
+      const userId = interaction.customId.split('_')[2];
+      const reason = interaction.values[0];
+      const member = await interaction.guild.members.fetch(userId).catch(() => null);
+
+      if (!member) {
+        return interaction.reply({ content: '❌ Kullanıcı bulunamadı.', ephemeral: true });
+      }
+
+      try {
+        await member.ban({ reason: `Sebep: ${reason} - Banlayan: ${interaction.user.tag}` });
+
+        await interaction.update({
+          content: `✅ ${member.user.tag} başarıyla banlandı.\n📌 Sebep: ${reason}`,
+          components: [],
+        });
+
+        // Banlanan kullanıcıyı hafıza listesine ekle (geçici)
+        const { bannedUsers } = require('./commands/ban.js');
+        bannedUsers.push(member.user.id);
+
+      } catch (error) {
+        console.error('❌ Ban hatası:', error);
+        await interaction.update({
+          content: '❌ Ban işlemi başarısız oldu.',
+          components: [],
+        });
+      }
     }
   }
 });
