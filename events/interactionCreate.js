@@ -2,7 +2,10 @@ const {
   PermissionsBitField,
   EmbedBuilder,
   ChannelType,
-  InteractionType
+  InteractionType,
+  ActionRowBuilder,
+  ButtonBuilder,
+  ButtonStyle,
 } = require('discord.js');
 
 module.exports = {
@@ -114,7 +117,7 @@ module.exports = {
               c.name.toLowerCase().includes('bilet')
             );
 
-            const supportRoleId = '1394428979129221296'; // Destek rolünün ID'si
+            const supportRoleId = '1394428979129221296'; // 👈 Destek rol ID'sini doğru gir!
 
             const channel = await interaction.guild.channels.create({
               name: `ticket-${interaction.user.id}`,
@@ -155,7 +158,14 @@ module.exports = {
               .setDescription(`• Saygılı olun.\n• Spam yapmayın.\n• Gereksiz etiket yapmayın.\n• Destek ekibini bekleyin.`)
               .setColor('#FF9900');
 
-            await channel.send({ content: `${interaction.user}`, embeds: [embed, kurallar] });
+            const row = new ActionRowBuilder().addComponents(
+              new ButtonBuilder()
+                .setCustomId('kapat')
+                .setLabel('🔒 Bileti Kapat')
+                .setStyle(ButtonStyle.Danger)
+            );
+
+            await channel.send({ content: `${interaction.user}`, embeds: [embed, kurallar], components: [row] });
 
             return interaction.reply({
               content: `✅ Bilet kanalınız oluşturuldu: ${channel}`,
@@ -170,6 +180,14 @@ module.exports = {
             });
           }
         }
+      }
+
+      // ✅ Bilet kapatma butonu
+      else if (interaction.isButton() && interaction.customId === 'kapat') {
+        await interaction.reply({ content: '📪 Bilet 5 saniye içinde kapatılıyor...', ephemeral: true });
+        setTimeout(() => {
+          interaction.channel.delete().catch(() => null);
+        }, 5000);
       }
     } catch (err) {
       console.error('interactionCreate genel hata:', err);
