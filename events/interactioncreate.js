@@ -98,7 +98,7 @@ module.exports = {
         }
       }
 
-      // ✅ Menü Seçimleri (Özellikle Bilet Sistemi)
+      // ✅ Select Menü ile bilet
       else if (interaction.isStringSelectMenu()) {
         if (interaction.customId === 'ticket_menu') {
           const kategori = interaction.values[0] || 'genel';
@@ -117,7 +117,7 @@ module.exports = {
               c.name.toLowerCase().includes('bilet')
             );
 
-            const supportRoleId = '1394428979129221296'; // 👈 Destek rol ID'sini doğru gir!
+            const supportRoleId = '1399255199209488384'; // 👈 Değiştirilebilir.
 
             const channel = await interaction.guild.channels.create({
               name: `ticket-${interaction.user.id}`,
@@ -126,25 +126,25 @@ module.exports = {
               permissionOverwrites: [
                 {
                   id: interaction.guild.roles.everyone.id,
-                  deny: [PermissionsBitField.Flags.ViewChannel]
+                  deny: [PermissionsBitField.Flags.ViewChannel],
                 },
                 {
                   id: interaction.user.id,
                   allow: [
                     PermissionsBitField.Flags.ViewChannel,
                     PermissionsBitField.Flags.SendMessages,
-                    PermissionsBitField.Flags.ReadMessageHistory
-                  ]
+                    PermissionsBitField.Flags.ReadMessageHistory,
+                  ],
                 },
                 {
                   id: supportRoleId,
                   allow: [
                     PermissionsBitField.Flags.ViewChannel,
                     PermissionsBitField.Flags.SendMessages,
-                    PermissionsBitField.Flags.ReadMessageHistory
-                  ]
-                }
-              ]
+                    PermissionsBitField.Flags.ReadMessageHistory,
+                  ],
+                },
+              ],
             });
 
             const embed = new EmbedBuilder()
@@ -169,32 +169,30 @@ module.exports = {
 
             return interaction.reply({
               content: `✅ Bilet kanalınız oluşturuldu: ${channel}`,
-              ephemeral: true
+              ephemeral: true,
             });
 
           } catch (err) {
             console.error('Bilet açma hatası:', err);
             return interaction.reply({
               content: '❌ Bilet oluşturulamadı. Lütfen sonra tekrar deneyin.',
-              ephemeral: true
+              ephemeral: true,
             });
           }
         }
       }
 
-      // ✅ Bilet kapatma butonu
+      // ✅ Bilet kapatma
       else if (interaction.isButton() && interaction.customId === 'kapat') {
         await interaction.reply({ content: '📪 Bilet 5 saniye içinde kapatılıyor...', ephemeral: true });
         setTimeout(() => {
           interaction.channel.delete().catch(() => null);
         }, 5000);
       }
+
     } catch (err) {
       console.error('interactionCreate genel hata:', err);
-      if (
-        interaction.type === InteractionType.ApplicationCommand &&
-        !interaction.replied
-      ) {
+      if (interaction.type === InteractionType.ApplicationCommand && !interaction.replied) {
         await interaction.reply({ content: '❌ Bir hata oluştu.', ephemeral: true });
       }
     }
