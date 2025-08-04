@@ -20,7 +20,7 @@ module.exports = {
     }
 
     // İstersen grup üyeliği kontrolü yapabilirsin
-    const inGroup = await checkUserInGroup(userId, 1234567); // Grup ID'sini değiştir
+    const inGroup = await checkUserInGroup(userId, 33389098); // Grup ID'sini değiştir
 
     if (inGroup) {
       await interaction.reply({ content: `${username} Roblox grubunda doğrulandı!`, ephemeral: false });
