@@ -1,54 +1,53 @@
-const { SlashCommandBuilder } = require('discord.js');
-const axios = require('axios');
-
-const ROBLOX_GROUP_ID = process.env.ROBLOX_GROUP_ID;
-const DISCORD_ROLE_ID = process.env.DISCORD_ROLE_ID;
+const { SlashCommandBuilder } = require('@discordjs/builders');
+const fetch = require('node-fetch');
 
 module.exports = {
   data: new SlashCommandBuilder()
-    .setName('doğrula')
-    .setDescription('Roblox gruba göre doğrulama yapar.')
-    .addStringOption(opt =>
-      opt.setName('kullanici')
-        .setDescription('Roblox kullanıcı adınızı girin.')
-        .setRequired(true)
-    ),
-
+    .setName('verify')
+    .setDescription('Roblox hesabınızı doğrular')
+    .addStringOption(option =>
+      option.setName('username')
+        .setDescription('Roblox kullanıcı adınız')
+        .setRequired(true)),
+  
   async execute(interaction) {
-    const username = interaction.options.getString('kullanici');
-    await interaction.deferReply({ ephemeral: true });
+    const username = interaction.options.getString('username');
 
-    try {
-      // Roblox kullanıcı ID'si al
-      const userRes = await axios.post('https://users.roblox.com/v1/usernames/users', {
-        usernames: [username],
-        excludeBannedUsers: true
-      });
-
-      if (!userRes.data?.data?.[0]?.id) {
-        return interaction.editReply('❌ Roblox kullanıcısı bulunamadı!');
-      }
-
-      const robloxId = userRes.data.data[0].id;
-
-      // Grup kontrol
-      const groupRes = await axios.get(`https://groups.roblox.com/v2/users/${robloxId}/groups/roles`);
-      const groups = groupRes.data.data;
-
-      const isInGroup = groups.some(g => g.group.id.toString() === ROBLOX_GROUP_ID);
-
-      if (!isInGroup) {
-        return interaction.editReply('🚫 Bu kullanıcı grupta değil. Sahte olabilir!');
-      }
-
-      // Rol ver
-      const member = await interaction.guild.members.fetch(interaction.user.id);
-      await member.roles.add(DISCORD_ROLE_ID);
-
-      return interaction.editReply(`✅ ${username} doğrulandı. Rol verildi.`);
-    } catch (err) {
-      console.error('Doğrulama hatası:', err);
-      return interaction.editReply('❌ Bir hata oluştu. Lütfen tekrar deneyin.');
+    // Roblox kullanıcı adını ID'ye çevir
+    const userId = await getRobloxId(username);
+    if (!userId) {
+      return interaction.reply({ content: 'Böyle bir Roblox kullanıcısı bulunamadı.', ephemeral: true });
     }
-  }
+
+    // İstersen grup üyeliği kontrolü yapabilirsin
+    const inGroup = await checkUserInGroup(userId, 1234567); // Grup ID'sini değiştir
+
+    if (inGroup) {
+      await interaction.reply({ content: `${username} Roblox grubunda doğrulandı!`, ephemeral: false });
+    } else {
+      await interaction.reply({ content: `${username} Roblox grubunda değil.`, ephemeral: true });
+    }
+  },
 };
+
+async function getRobloxId(username) {
+  try {
+    const res = await fetch(`https://api.roblox.com/users/get-by-username?username=${encodeURIComponent(username)}`);
+    if (!res.ok) return null;
+    const data = await res.json();
+    return data.Id || null;
+  } catch {
+    return null;
+  }
+}
+
+async function checkUserInGroup(userId, groupId) {
+  try {
+    const res = await fetch(`https://groups.roblox.com/v1/users/${userId}/groups/roles`);
+    if (!res.ok) return false;
+    const data = await res.json();
+    return data.data.some(g => g.group.id === groupId);
+  } catch {
+    return false;
+  }
+}
