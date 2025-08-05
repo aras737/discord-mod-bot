@@ -1,6 +1,7 @@
 // Gerekli modüller
 const { Client, GatewayIntentBits, Collection, REST, Routes } = require('discord.js');
 const fs = require('fs');
+const path = require('path');
 const dotenv = require('dotenv');
 dotenv.config();
 
@@ -18,17 +19,22 @@ const client = new Client({
 client.commands = new Collection();
 
 // Komutları oku ve yükle
-const komutKlasoru = './komutlar';
+const komutKlasoru = path.join(__dirname, 'commands');
 const komutlar = [];
-fs.readdirSync(komutKlasoru).filter(file => file.endsWith('.js')).forEach(file => {
-  const command = require(`${komutKlasoru}/${file}`);
-  if (command.data && command.execute) {
-    client.commands.set(command.data.name, command);
-    komutlar.push(command.data.toJSON());
-  } else {
-    console.warn(`[UYARI] ${file} komut dosyasında "data" veya "execute" eksik.`);
-  }
-});
+
+if (fs.existsSync(komutKlasoru)) {
+  fs.readdirSync(komutKlasoru).filter(file => file.endsWith('.js')).forEach(file => {
+    const command = require(`${komutKlasoru}/${file}`);
+    if (command.data && command.execute) {
+      client.commands.set(command.data.name, command);
+      komutlar.push(command.data.toJSON());
+    } else {
+      console.warn(`[UYARI] ${file} komut dosyasında "data" veya "execute" eksik.`);
+    }
+  });
+} else {
+  console.warn('⚠️ "commands" klasörü bulunamadı. Komutlar yüklenemedi.');
+}
 
 // Komutları Discord API'ye gönder (guild bazlı)
 client.once('ready', async () => {
