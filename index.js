@@ -76,3 +76,16 @@ process.on('unhandledRejection', reason => {
 
 // Botu başlat
 client.login(process.env.TOKEN);
+
+// 🔌 Sahte port (Render gibi platformlar için)
+const express = require('express');
+const app = express();
+const PORT = process.env.PORT || 3000;
+
+app.get('/', (req, res) => {
+  res.send('Bot çalışıyor!');
+});
+
+app.listen(PORT, () => {
+  console.log(`🌐 Sahte web sunucusu ${PORT} portunda çalışıyor.`);
+});
