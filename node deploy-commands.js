@@ -1,43 +1,35 @@
-const { REST, Routes, SlashCommandBuilder } = require('discord.js');
+const { REST, Routes } = require('discord.js');
+const fs = require('fs');
+const path = require('path');
 require('dotenv').config();
 
-const TOKEN = process.env.TOKEN;
-const CLIENT_ID = process.env.CLIENT_ID;
-const GUILD_ID = process.env.GUILD_ID;
+const commands = [];
+const commandsPath = path.join(__dirname, 'commands');
 
-// KOMUTLAR: sırayla yaz, sırayla yüklenir
-const commands = [
-  new SlashCommandBuilder()
-    .setName('ban')
-    .setDescription('Kullanıcıyı sunucudan banlar.'),
+if (fs.existsSync(commandsPath)) {
+  const commandFiles = fs.readdirSync(commandsPath).filter(file => file.endsWith('.js'));
 
-  new SlashCommandBuilder()
-    .setName('kick')
-    .setDescription('Kullanıcıyı sunucudan atar.'),
+  for (const file of commandFiles) {
+    const command = require(path.join(commandsPath, file));
+    if ('data' in command) {
+      commands.push(command.data.toJSON());
+    }
+  }
+} else {
+  console.warn('⚠️ Komutlar klasörü bulunamadı.');
+}
 
-  new SlashCommandBuilder()
-    .setName('ping')
-    .setDescription('Botun tepki süresini gösterir.')
-].map(command => command.toJSON());
-
-const rest = new REST({ version: '10' }).setToken(TOKEN);
+const rest = new REST({ version: '10' }).setToken(process.env.TOKEN);
 
 (async () => {
   try {
-    console.log('🧹 Önceki komutlar siliniyor...');
+    console.log('⚙️ Komutlar Discord API\'ye yükleniyor...');
     await rest.put(
-      Routes.applicationGuildCommands(CLIENT_ID, GUILD_ID),
-      { body: [] }
-    );
-
-    console.log('⬆️ Yeni komutlar yükleniyor...');
-    await rest.put(
-      Routes.applicationGuildCommands(CLIENT_ID, GUILD_ID),
+      Routes.applicationCommands(process.env.CLIENT_ID),
       { body: commands }
     );
-
-    console.log('✅ Komutlar yüklendi! Sıralama: /ban, /kick, /ping');
+    console.log('✅ Komutlar başarıyla yüklendi.');
   } catch (error) {
-    console.error('❌ Komut yükleme hatası:', error);
+    console.error(error);
   }
 })();
