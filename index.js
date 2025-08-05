@@ -17,13 +17,12 @@ const client = new Client({
   ]
 });
 
-// Slash komutları için koleksiyon
+// Slash komutları için koleksiyon ve dizi
 client.commands = new Collection();
 const komutlar = [];
 
-// commands klasöründen komutları yükle
+// Komutları commands klasöründen yükleme
 const komutKlasoru = path.join(__dirname, 'commands');
-
 if (fs.existsSync(komutKlasoru)) {
   fs.readdirSync(komutKlasoru).filter(file => file.endsWith('.js')).forEach(file => {
     const command = require(`${komutKlasoru}/${file}`);
@@ -38,17 +37,15 @@ if (fs.existsSync(komutKlasoru)) {
   console.warn('⚠️ "commands" klasörü bulunamadı. Komutlar yüklenemedi.');
 }
 
-// Bot hazır olduğunda
+// Bot hazır olduğunda slash komutları API'ye gönder
 client.once('ready', async () => {
   console.log(`🤖 Bot aktif: ${client.user.tag}`);
 
   const rest = new REST({ version: '10' }).setToken(process.env.TOKEN);
 
   try {
-    console.log('🚮 Eski komutlar siliniyor...');
-    await rest.put(Routes.applicationCommands(client.user.id), { body: [] }); // Komutları sıfırla
-
-    console.log('📝 Yeni komutlar yükleniyor...');
+    // Eski komutları sıfırlama kısmı kaldırıldı
+    console.log('📝 Komutlar yükleniyor/güncelleniyor...');
     await rest.put(Routes.applicationCommands(client.user.id), { body: komutlar });
 
     console.log('✅ Slash komutlar başarıyla yüklendi.');
@@ -57,7 +54,7 @@ client.once('ready', async () => {
   }
 });
 
-// Slash komutları çalıştır
+// Komutlar tetiklendiğinde çalıştır
 client.on('interactionCreate', async interaction => {
   if (!interaction.isCommand()) return;
 
@@ -71,12 +68,12 @@ client.on('interactionCreate', async interaction => {
     try {
       await interaction.reply({ content: '⚠️ Komut çalıştırılırken bir hata oluştu.', ephemeral: true });
     } catch {
-      // Eğer interaction zaten cevaplandıysa (acknowledged) bu hatayı yutarız
+      // Eğer interaction zaten cevaplandıysa buraya girer
     }
   }
 });
 
-// Hata engelleyici
+// Hata engelleme
 process.on('uncaughtException', err => {
   console.error('🚨 Uncaught Exception:', err);
 });
@@ -84,17 +81,11 @@ process.on('unhandledRejection', reason => {
   console.error('🚨 Unhandled Rejection:', reason);
 });
 
-// Botu başlat
+// Bot login
 client.login(process.env.TOKEN);
 
-// 🌐 Sahte port (Render için keep-alive)
+// Render gibi servislerde botun uyanık kalması için sahte express sunucusu
 const app = express();
 const PORT = process.env.PORT || 3000;
-
-app.get('/', (req, res) => {
-  res.send('Bot çalışıyor.');
-});
-
-app.listen(PORT, () => {
-  console.log(`🌐 Sahte web sunucusu ${PORT} portunda çalışıyor.`);
-});
+app.get('/', (req, res) => res.send('Bot çalışıyor.'));
+app.listen(PORT, () => console.log(`🌐 Sahte web sunucusu ${PORT} portunda çalışıyor.`));
