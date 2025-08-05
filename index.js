@@ -1,7 +1,15 @@
 require('dotenv').config();
 const fs = require('fs');
 const http = require('http');
-const { Client, GatewayIntentBits, REST, Routes, Collection } = require('discord.js');
+const { Client, GatewayIntentBits } = require('discord.js');
+const client = new Client({
+  intents: [
+    GatewayIntentBits.Guilds,
+    GatewayIntentBits.GuildMessages,
+    GatewayIntentBits.MessageContent,
+    GatewayIntentBits.GuildMembers
+  ]
+});
 
 // 🌐 Render ortam değişkenleri
 const TOKEN = process.env.TOKEN;
