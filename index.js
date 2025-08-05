@@ -3,6 +3,8 @@ const { Client, GatewayIntentBits, Collection, REST, Routes } = require('discord
 const fs = require('fs');
 const path = require('path');
 const dotenv = require('dotenv');
+const express = require('express');
+
 dotenv.config();
 
 // Yeni Discord Client
@@ -15,12 +17,12 @@ const client = new Client({
   ]
 });
 
-// Slash komutları kaydetme için koleksiyon
+// Slash komutları için koleksiyon
 client.commands = new Collection();
-
-// Komutları oku ve yükle
-const komutKlasoru = path.join(__dirname, 'commands');
 const komutlar = [];
+
+// commands klasöründen komutları yükle
+const komutKlasoru = path.join(__dirname, 'commands');
 
 if (fs.existsSync(komutKlasoru)) {
   fs.readdirSync(komutKlasoru).filter(file => file.endsWith('.js')).forEach(file => {
@@ -36,16 +38,20 @@ if (fs.existsSync(komutKlasoru)) {
   console.warn('⚠️ "commands" klasörü bulunamadı. Komutlar yüklenemedi.');
 }
 
-// Komutları Discord API'ye gönder (guild bazlı)
+// Bot hazır olduğunda
 client.once('ready', async () => {
   console.log(`🤖 Bot aktif: ${client.user.tag}`);
 
   const rest = new REST({ version: '10' }).setToken(process.env.TOKEN);
 
   try {
-    console.log('♻️ Eski komutlar temizleniyor...');
+    console.log('🚮 Eski komutlar siliniyor...');
+    await rest.put(Routes.applicationCommands(client.user.id), { body: [] }); // Komutları sıfırla
+
+    console.log('📝 Yeni komutlar yükleniyor...');
     await rest.put(Routes.applicationCommands(client.user.id), { body: komutlar });
-    console.log('✅ Slash komutlar yüklendi.');
+
+    console.log('✅ Slash komutlar başarıyla yüklendi.');
   } catch (error) {
     console.error('❌ Komut yüklenirken hata oluştu:', error);
   }
@@ -62,7 +68,11 @@ client.on('interactionCreate', async interaction => {
     await command.execute(interaction);
   } catch (error) {
     console.error(`❌ Komut çalıştırma hatası: ${error}`);
-    await interaction.reply({ content: 'Komut çalıştırılırken bir hata oluştu.', ephemeral: true });
+    try {
+      await interaction.reply({ content: '⚠️ Komut çalıştırılırken bir hata oluştu.', ephemeral: true });
+    } catch {
+      // Eğer interaction zaten cevaplandıysa (acknowledged) bu hatayı yutarız
+    }
   }
 });
 
@@ -77,13 +87,12 @@ process.on('unhandledRejection', reason => {
 // Botu başlat
 client.login(process.env.TOKEN);
 
-// 🔌 Sahte port (Render gibi platformlar için)
-const express = require('express');
+// 🌐 Sahte port (Render için keep-alive)
 const app = express();
 const PORT = process.env.PORT || 3000;
 
 app.get('/', (req, res) => {
-  res.send('Bot çalışıyor!');
+  res.send('Bot çalışıyor.');
 });
 
 app.listen(PORT, () => {
