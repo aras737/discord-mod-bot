@@ -5,47 +5,64 @@ const path = require('path');
 const dotenv = require('dotenv');
 const express = require('express');
 
-dotenv.config();
+dotenv.config(); // .env dosyasını yükle
 
-// Yeni Discord Client
+// Discord Client oluşturma, gerekli intentlerle
 const client = new Client({
   intents: [
-    GatewayIntentBits.Guilds,
-    GatewayIntentBits.GuildMessages,
-    GatewayIntentBits.MessageContent,
-    GatewayIntentBits.GuildMembers
+    GatewayIntentBits.Guilds,           // Sunucu bilgileri için
+    GatewayIntentBits.GuildMessages,    // Mesajlar için
+    GatewayIntentBits.MessageContent,   // Mesaj içeriği için
+    GatewayIntentBits.GuildMembers      // Üye bilgileri için (rol kontrol vs)
   ]
 });
 
-// Slash komutları için koleksiyon ve dizi
+// Komutlar için koleksiyon ve JSON formatında komutları tutacak dizi
 client.commands = new Collection();
 const komutlar = [];
 
-// Komutları commands klasöründen yükleme
+// Komutların bulunduğu klasör yolu
 const komutKlasoru = path.join(__dirname, 'commands');
-if (fs.existsSync(komutKlasoru)) {
-  fs.readdirSync(komutKlasoru).filter(file => file.endsWith('.js')).forEach(file => {
-    const command = require(`${komutKlasoru}/${file}`);
-    if (command.data && command.execute) {
-      client.commands.set(command.data.name, command);
-      komutlar.push(command.data.toJSON());
-    } else {
-      console.warn(`[UYARI] ${file} komut dosyasında "data" veya "execute" eksik.`);
+
+// Komutları yükleme fonksiyonu
+function komutlariYukle() {
+  if (!fs.existsSync(komutKlasoru)) {
+    console.warn('⚠️ "commands" klasörü bulunamadı. Komutlar yüklenemedi.');
+    return;
+  }
+
+  // commands klasöründeki .js dosyalarını oku
+  const files = fs.readdirSync(komutKlasoru).filter(file => file.endsWith('.js'));
+
+  for (const file of files) {
+    const filePath = path.join(komutKlasoru, file);
+    try {
+      const command = require(filePath);
+      // Komut nesnesinde data ve execute olmalı
+      if (command.data && command.execute) {
+        client.commands.set(command.data.name, command);
+        komutlar.push(command.data.toJSON());
+      } else {
+        console.warn(`[UYARI] ${file} komut dosyasında "data" veya "execute" metodu eksik.`);
+      }
+    } catch (err) {
+      console.error(`[HATA] ${file} komut dosyası yüklenirken hata oluştu:`, err);
     }
-  });
-} else {
-  console.warn('⚠️ "commands" klasörü bulunamadı. Komutlar yüklenemedi.');
+  }
 }
 
-// Bot hazır olduğunda slash komutları API'ye gönder
+// Komutları yükle
+komutlariYukle();
+
+// Bot hazır olduğunda çalışacak kısım
 client.once('ready', async () => {
   console.log(`🤖 Bot aktif: ${client.user.tag}`);
 
   const rest = new REST({ version: '10' }).setToken(process.env.TOKEN);
 
   try {
-    // Eski komutları sıfırlama kısmı kaldırıldı
-    console.log('📝 Komutlar yükleniyor/güncelleniyor...');
+    // Eski komutları silmeden, komutları API'ye yükle/güncelle
+    console.log('📝 Komutlar API\'ye yükleniyor veya güncelleniyor...');
     await rest.put(Routes.applicationCommands(client.user.id), { body: komutlar });
 
     console.log('✅ Slash komutlar başarıyla yüklendi.');
@@ -54,26 +71,35 @@ client.once('ready', async () => {
   }
 });
 
-// Komutlar tetiklendiğinde çalıştır
+// Slash komut tetiklendiğinde
 client.on('interactionCreate', async interaction => {
   if (!interaction.isCommand()) return;
 
   const command = client.commands.get(interaction.commandName);
-  if (!command) return;
+  if (!command) {
+    console.warn(`[UYARI] ${interaction.commandName} adında bir komut bulunamadı.`);
+    return;
+  }
 
   try {
     await command.execute(interaction);
   } catch (error) {
-    console.error(`❌ Komut çalıştırma hatası: ${error}`);
+    console.error(`❌ Komut çalıştırılırken hata oluştu: ${error}`);
+
+    if (interaction.replied || interaction.deferred) {
+      // Eğer cevap verilmişse tekrar cevap veremez, hata yutulur
+      return;
+    }
+
     try {
       await interaction.reply({ content: '⚠️ Komut çalıştırılırken bir hata oluştu.', ephemeral: true });
     } catch {
-      // Eğer interaction zaten cevaplandıysa buraya girer
+      // Eğer yine cevap verilemezse sessizce geç
     }
   }
 });
 
-// Hata engelleme
+// Global hata yakalayıcılar (programın çökmesini önler)
 process.on('uncaughtException', err => {
   console.error('🚨 Uncaught Exception:', err);
 });
@@ -81,11 +107,19 @@ process.on('unhandledRejection', reason => {
   console.error('🚨 Unhandled Rejection:', reason);
 });
 
-// Bot login
-client.login(process.env.TOKEN);
+// Botu başlat (token .env içinde olmalı)
+client.login(process.env.TOKEN).catch(err => {
+  console.error('❌ Bot giriş yaparken hata oluştu:', err);
+});
 
-// Render gibi servislerde botun uyanık kalması için sahte express sunucusu
+// Render veya benzeri servislerde botun uyanık kalması için basit web sunucusu
 const app = express();
 const PORT = process.env.PORT || 3000;
-app.get('/', (req, res) => res.send('Bot çalışıyor.'));
-app.listen(PORT, () => console.log(`🌐 Sahte web sunucusu ${PORT} portunda çalışıyor.`));
+
+app.get('/', (req, res) => {
+  res.send('Bot çalışıyor.');
+});
+
+app.listen(PORT, () => {
+  console.log(`🌐 Sahte web sunucusu ${PORT} portunda çalışıyor.`);
+});
