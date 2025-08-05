@@ -1,61 +1,66 @@
-const { Client, GatewayIntentBits, Collection } = require('discord.js');
+// Gerekli modüller
+const { Client, GatewayIntentBits, Collection, REST, Routes } = require('discord.js');
 const fs = require('fs');
 const path = require('path');
-require('dotenv').config();
+const dotenv = require('dotenv');
 const express = require('express');
 
+// Ortam değişkenlerini yükle
+dotenv.config();
+
+// Discord Client oluştur
 const client = new Client({
   intents: [
     GatewayIntentBits.Guilds,
     GatewayIntentBits.GuildMessages,
-    GatewayIntentBits.MessageContent,
-    GatewayIntentBits.GuildMembers,
+    GatewayIntentBits.MessageContent
   ]
 });
 
+// Komut koleksiyonu
 client.commands = new Collection();
+const commands = [];
 
-// Komutları yükle
-const komutKlasoru = path.join(__dirname, 'commands');
-if (fs.existsSync(komutKlasoru)) {
-  const komutDosyalari = fs.readdirSync(komutKlasoru).filter(f => f.endsWith('.js'));
-  for (const file of komutDosyalari) {
-    const command = require(path.join(komutKlasoru, file));
-    if (command.data && command.execute) {
-      client.commands.set(command.data.name, command);
-    }
-  }
-} else {
-  console.warn('⚠️ Komut klasörü yok.');
-}
-
-// Bot hazır olduğunda
-client.once('ready', () => {
-  console.log(`🤖 Bot aktif: ${client.user.tag}`);
+// commands klasöründen komutları yükle
+const commandsPath = path.join(__dirname, 'commands');
+fs.readdirSync(commandsPath).filter(file => file.endsWith('.js')).forEach(file => {
+  const command = require(`./commands/${file}`);
+  client.commands.set(command.data.name, command);
+  commands.push(command.data.toJSON());
 });
 
-// Slash komut dinleyici
+// Bot hazır olduğunda
+client.once('ready', async () => {
+  console.log(`🤖 Bot aktif: ${client.user.tag}`);
+
+  const rest = new REST({ version: '10' }).setToken(process.env.TOKEN);
+  try {
+    await rest.put(Routes.applicationCommands(client.user.id), { body: commands });
+    console.log('✅ Komutlar yüklendi.');
+  } catch (err) {
+    console.error('❌ Slash komut yüklenirken hata:', err);
+  }
+});
+
+// Slash komutlar çalıştırıldığında
 client.on('interactionCreate', async interaction => {
   if (!interaction.isCommand()) return;
-
   const command = client.commands.get(interaction.commandName);
   if (!command) return;
 
   try {
     await command.execute(interaction);
-  } catch (error) {
-    console.error(`❌ Komut hatası: ${error}`);
-    if (!interaction.replied && !interaction.deferred) {
-      await interaction.reply({ content: '⚠️ Bir hata oluştu.', ephemeral: true });
-    }
+  } catch (err) {
+    console.error(err);
+    await interaction.reply({ content: '❌ Komut çalıştırılırken hata oluştu.', ephemeral: true });
   }
-}); // 🔴 Buradan sonra fazladan } olmasın!
+});
 
-// Express ile keep-alive
+// Bot giriş
+client.login(process.env.TOKEN);
+
+// Render'da botu 7/24 açık tutmak için sahte Express sunucusu
 const app = express();
 const PORT = process.env.PORT || 3000;
-app.get('/', (req, res) => res.send('Bot çalışıyor.'));
-app.listen(PORT, () => console.log(`🌐 Web sunucusu ${PORT} portunda aktif.`));
-
-// Giriş
-client.login(process.env.TOKEN);
+app.get('/', (req, res) => res.send('Bot çalışıyor!'));
+app.listen(PORT, () => console.log(`🌐 Web sunucusu port ${PORT} üzerinde çalışıyor.`));
