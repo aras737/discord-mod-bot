@@ -89,9 +89,83 @@ module.exports = {
             return interaction.reply({ content: '❌ Duyuru gönderilemedi.', ephemeral: true });
           }
         }
+
+        // 📨 BİLET AÇ (Slash komut olarak da eklemek istersen bu kısmı kullanabilirsin)
+        else if (commandName === 'ticket') {
+          const member = interaction.member;
+          const guild = interaction.guild;
+
+          // Aynı kullanıcı için açık bilet kontrolü
+          const existingChannel = guild.channels.cache.find(c => c.name === `ticket-${member.user.id}`);
+          if (existingChannel) {
+            return interaction.reply({ content: `❌ Zaten açık bir biletin var: ${existingChannel}`, ephemeral: true });
+          }
+
+          // Destek rolü ID’sini env dosyasından al, yoksa buraya yaz
+          const supportRoleId = process.env.TICKET_SUPPORT_ROLE_ID || 'DESTEK_ROLE_ID';
+
+          // Bilet kategorisi (varsa)
+          const ticketCategory = guild.channels.cache.find(c =>
+            c.type === ChannelType.GuildCategory && c.name.toLowerCase().includes('bilet')
+          );
+
+          const channel = await guild.channels.create({
+            name: `ticket-${member.user.id}`,
+            type: ChannelType.GuildText,
+            parent: ticketCategory?.id || null,
+            permissionOverwrites: [
+              {
+                id: guild.roles.everyone.id,
+                deny: [PermissionsBitField.Flags.ViewChannel],
+              },
+              {
+                id: member.id,
+                allow: [
+                  PermissionsBitField.Flags.ViewChannel,
+                  PermissionsBitField.Flags.SendMessages,
+                  PermissionsBitField.Flags.ReadMessageHistory,
+                ],
+              },
+              {
+                id: supportRoleId,
+                allow: [
+                  PermissionsBitField.Flags.ViewChannel,
+                  PermissionsBitField.Flags.SendMessages,
+                  PermissionsBitField.Flags.ReadMessageHistory,
+                ],
+              },
+            ],
+          });
+
+          const embed = new EmbedBuilder()
+            .setTitle('🎫 Bilet Açıldı')
+            .setDescription(`Lütfen talebinizi açık bir şekilde belirtin. Yetkililer en kısa sürede yardımcı olacaktır.`)
+            .setColor('Blue')
+            .setTimestamp();
+
+          const rules = new EmbedBuilder()
+            .setTitle('📜 Kurallar')
+            .setDescription('• Saygılı olun\n• Spam yapmayın\n• Gereksiz etiket yapmayın\n• Sabırlı olun.')
+            .setColor('Orange');
+
+          const row = new ActionRowBuilder().addComponents(
+            new ButtonBuilder()
+              .setCustomId('close_ticket')
+              .setLabel('🔒 Bileti Kapat')
+              .setStyle(ButtonStyle.Danger)
+          );
+
+          await channel.send({
+            content: `${member}`,
+            embeds: [embed, rules],
+            components: [row],
+          });
+
+          return interaction.reply({ content: `✅ Bilet oluşturuldu: ${channel}`, ephemeral: true });
+        }
       }
 
-      // ✅ BİLET SİSTEMİ - Menüden seçim yapılınca
+      // ✅ BİLET SİSTEMİ - Menüden seçim yapılınca (select menu)
       else if (interaction.isStringSelectMenu() && interaction.customId === 'ticket_menu') {
         const kategori = interaction.values[0] || 'genel';
 
@@ -107,7 +181,7 @@ module.exports = {
             c.type === ChannelType.GuildCategory && c.name.toLowerCase().includes('bilet')
           );
 
-          const supportRoleId = 'DESTEK_ROLE_ID'; // 🛠️ DEĞİŞTİR (destek rolünün ID'si)
+          const supportRoleId = process.env.TICKET_SUPPORT_ROLE_ID || 'DESTEK_ROLE_ID';
 
           const channel = await interaction.guild.channels.create({
             name: `ticket-${interaction.user.id}`,
@@ -150,7 +224,7 @@ module.exports = {
 
           const row = new ActionRowBuilder().addComponents(
             new ButtonBuilder()
-              .setCustomId('kapat')
+              .setCustomId('close_ticket')
               .setLabel('🔒 Bileti Kapat')
               .setStyle(ButtonStyle.Danger)
           );
@@ -176,7 +250,7 @@ module.exports = {
       }
 
       // ✅ BİLET KAPATMA (Buton)
-      else if (interaction.isButton() && interaction.customId === 'kapat') {
+      else if (interaction.isButton() && interaction.customId === 'close_ticket') {
         await interaction.reply({ content: '📪 5 saniye içinde bilet kapatılıyor...', ephemeral: true });
         setTimeout(() => {
           interaction.channel.delete().catch(() => {});
