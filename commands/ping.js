@@ -5,6 +5,6 @@ module.exports = {
     .setName('ping')
     .setDescription('Botun gecikmesini gösterir.'),
   async execute(interaction) {
-    await interaction.reply(`🏓 Gecikme: ${Date.now() - interaction.createdTimestamp}ms`);
+    await interaction.reply(`🏓 Pong! Gecikme: ${Date.now() - interaction.createdTimestamp}ms`);
   }
 };
