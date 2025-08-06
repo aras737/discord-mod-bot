@@ -111,12 +111,16 @@ module.exports = {
       // =================== BUTONLAR ===================
 
       // 🎫 Bilet Panelindeki Butona Tıklanınca
-      if (interaction.isButton() && interaction.customId === 'open_ticket_menu') {
-        const selectMenu = new StringSelectMenuBuilder()
-          .setCustomId('ticket_menu')
-          .setPlaceholder('Bir destek kategorisi seçin')
-          .addOptions(
-            {
+if (interaction.isButton() && interaction.customId === 'open_ticket_menu') {
+  await interaction.deferUpdate();   // 3 saniye içindeki yanıt için
+  const select = new StringSelectMenuBuilder() /* ... */
+  const row = new ActionRowBuilder().addComponents(select);
+  return interaction.followUp({
+    content: 'Kategori seçiniz:',
+    components: [row],
+    ephemeral: true,
+  });
+}
               label: 'Genel Destek',
               value: 'genel',
               emoji: '💬',
