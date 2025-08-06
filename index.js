@@ -5,7 +5,7 @@ const fs = require('fs');
 const dotenv = require('dotenv');
 dotenv.config();
 
-// Express (uptime için sessiz sunucu)
+// Express sunucusu (uptime için)
 const app = express();
 const PORT = process.env.PORT || 3000;
 app.get('/', (req, res) => res.send('Bot Aktif!'));
@@ -13,7 +13,7 @@ app.listen(PORT, () => {
   console.log(`🌐 Express portu dinleniyor: ${PORT}`);
 });
 
-// Discord client ayarları
+// Discord client oluştur
 const client = new Client({
   intents: [
     GatewayIntentBits.Guilds,
@@ -23,35 +23,29 @@ const client = new Client({
   ],
 });
 
-// Slash komut sistemi
+// Komut koleksiyonu
 client.commands = new Collection();
-const komutYolu = './commands';
-const commands = [];
+const komutlar = [];
+const komutKlasoru = './komutlar';
 
-try {
-  const dosyalar = fs.readdirSync(komutYolu).filter(file => file.endsWith('.js'));
-
-  if (dosyalar.length === 0) {
-    console.warn('⚠️ Yüklenecek komut bulunamadı.');
-  } else {
-    console.log(`📦 ${dosyalar.length} komut bulunuyor. Yükleniyor...`);
-  }
-
+// Komutları oku
+if (fs.existsSync(komutKlasoru)) {
+  const dosyalar = fs.readdirSync(komutKlasoru).filter(file => file.endsWith('.js'));
   for (const file of dosyalar) {
-    const command = require(`${komutYolu}/${file}`);
+    const command = require(`${komutKlasoru}/${file}`);
     if (command.data && command.execute) {
       client.commands.set(command.data.name, command);
-      commands.push(command.data.toJSON());
+      komutlar.push(command.data.toJSON());
       console.log(`✅ Komut yüklendi: ${command.data.name}`);
     } else {
-      console.warn(`⚠️ Komut eksik: ${file}`);
+      console.warn(`⚠️ Eksik komut: ${file}`);
     }
   }
-} catch (err) {
-  console.error('❌ Komutlar okunamadı:', err);
+} else {
+  console.warn('⚠️ Komut klasörü bulunamadı!');
 }
 
-// Bot hazır olunca
+// Bot hazır olduğunda
 client.once('ready', async () => {
   console.log(`✅ Bot aktif: ${client.user.tag}`);
 
@@ -59,18 +53,17 @@ client.once('ready', async () => {
   try {
     await rest.put(
       Routes.applicationCommands(client.user.id),
-      { body: commands }
+      { body: komutlar }
     );
-    console.log('✅ Slash komutlar başarıyla yüklendi.');
+    console.log('✅ Slash komutlar yüklendi.');
   } catch (error) {
-    console.error('❌ Komutlar yüklenirken hata:', error);
+    console.error('❌ Slash komut yükleme hatası:', error);
   }
 });
 
 // Slash komutları çalıştır
 client.on('interactionCreate', async interaction => {
   if (!interaction.isCommand()) return;
-
   const command = client.commands.get(interaction.commandName);
   if (!command) return;
 
@@ -82,7 +75,7 @@ client.on('interactionCreate', async interaction => {
   }
 });
 
-// Hata engelleyici
+// Hataları yakala
 process.on('uncaughtException', err => {
   console.error('🚨 Uncaught Exception:', err);
 });
@@ -90,5 +83,9 @@ process.on('unhandledRejection', reason => {
   console.error('🚨 Unhandled Rejection:', reason);
 });
 
-// Giriş yap
-client.login(process.env.TOKEN);
+// BOTU HEMEN GİRİŞ YAPTIR
+client.login(process.env.TOKEN).then(() => {
+  console.log("🚀 Bot başlatıldı ve giriş yapıldı.");
+}).catch(err => {
+  console.error("❌ Giriş hatası:", err);
+});
