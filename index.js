@@ -91,3 +91,6 @@ client.login(process.env.TOKEN).then(() => {
 
 console.log("⚙️ Bot başlatılıyor, lütfen bekleyin...");
 console.log(`Token durumu: ${process.env.TOKEN ? "Yüklendi" : "YOK veya boş"}`);
+client.once('ready', () => {
+  console.log(`✅ Bot aktif: ${client.user.tag}`);
+});
