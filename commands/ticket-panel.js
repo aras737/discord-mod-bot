@@ -1,36 +1,35 @@
-const {
-  SlashCommandBuilder,
-  ActionRowBuilder,
-  ButtonBuilder,
-  ButtonStyle,
-  ChannelType,
-  PermissionsBitField,
-  EmbedBuilder
-} = require('discord.js');
+const { SlashCommandBuilder, ActionRowBuilder, StringSelectMenuBuilder, ChannelType } = require('discord.js');
 
 module.exports = {
   data: new SlashCommandBuilder()
     .setName('ticket-panel')
-    .setDescription('🎫 Bilet paneli oluşturur (Yönetici komutu)'),
-
+    .setDescription('🎫 Ticket panelini gönderir'),
   async execute(interaction) {
-    if (!interaction.member.permissions.has(PermissionsBitField.Flags.Administrator)) {
-      return interaction.reply({ content: '❌ Bu komutu kullanmak için yetkin yok!', ephemeral: true });
-    }
+    const menu = new StringSelectMenuBuilder()
+      .setCustomId('ticket_menu')
+      .setPlaceholder('🎫 Destek Kategorisi Seçin')
+      .addOptions([
+        {
+          label: 'Genel Destek',
+          value: 'genel',
+          description: 'Genel konularda yardım alın',
+        },
+        {
+          label: 'Yetkili Başvuru',
+          value: 'basvuru',
+          description: 'Yetkili olmak için başvuru aç',
+        },
+        {
+          label: 'Ortaklık',
+          value: 'ortaklik',
+          description: 'Ortaklık için ticket aç',
+        },
+      ]);
 
-    const embed = new EmbedBuilder()
-      .setTitle('🎟️ Destek Sistemi')
-      .setDescription('Destek almak için aşağıdaki **Butona** tıklayın.')
-      .setColor('Blue');
-
-    const row = new ActionRowBuilder().addComponents(
-      new ButtonBuilder()
-        .setCustomId('open_ticket_menu')
-        .setLabel('📩 Bilet Oluştur')
-        .setStyle(ButtonStyle.Primary)
-    );
-
-    await interaction.reply({ content: '✅ Panel gönderildi!', ephemeral: true });
-    await interaction.channel.send({ embeds: [embed], components: [row] });
-  }
+    const row = new ActionRowBuilder().addComponents(menu);
+    await interaction.reply({
+      content: '🎫 Aşağıdan bir kategori seçerek destek talebi oluşturabilirsiniz:',
+      components: [row],
+    });
+  },
 };
