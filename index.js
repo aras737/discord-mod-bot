@@ -83,9 +83,10 @@ process.on('unhandledRejection', reason => {
   console.error('🚨 Unhandled Rejection:', reason);
 });
 
-// BOTU HEMEN GİRİŞ YAPTIR
 client.login(process.env.TOKEN).then(() => {
   console.log("🚀 Bot başlatıldı ve giriş yapıldı.");
 }).catch(err => {
   console.error("❌ Giriş hatası:", err);
 });
+
+console.log("⚙️ Bot başlatılıyor, lütfen bekleyin...");
