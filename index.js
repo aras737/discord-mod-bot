@@ -25,7 +25,7 @@ const client = new Client({
 
 // Slash komut sistemi
 client.commands = new Collection();
-const komutYolu = './komutlar';
+const komutYolu = './commands';
 const commands = [];
 
 try {
