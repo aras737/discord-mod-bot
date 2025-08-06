@@ -2,7 +2,7 @@ const { SlashCommandBuilder, PermissionFlagsBits, ActionRowBuilder, ButtonBuilde
 
 module.exports = {
   data: new SlashCommandBuilder()
-    .setName('panel')
+    .setName('bilet menüsü')
     .setDescription('Bilet sistemi panelini kurar.')
     .setDefaultMemberPermissions(PermissionFlagsBits.Administrator),
 
