@@ -26,7 +26,7 @@ const client = new Client({
 // Slash komut sistemi
 client.commands = new Collection();
 const komutYolu = './komutlar';
-const komutlar = [];
+const commands = [];
 
 try {
   const dosyalar = fs.readdirSync(komutYolu).filter(file => file.endsWith('.js'));
@@ -41,7 +41,7 @@ try {
     const command = require(`${komutYolu}/${file}`);
     if (command.data && command.execute) {
       client.commands.set(command.data.name, command);
-      komutlar.push(command.data.toJSON());
+      commands.push(command.data.toJSON());
       console.log(`✅ Komut yüklendi: ${command.data.name}`);
     } else {
       console.warn(`⚠️ Komut eksik: ${file}`);
@@ -59,7 +59,7 @@ client.once('ready', async () => {
   try {
     await rest.put(
       Routes.applicationCommands(client.user.id),
-      { body: komutlar }
+      { body: commands }
     );
     console.log('✅ Slash komutlar başarıyla yüklendi.');
   } catch (error) {
