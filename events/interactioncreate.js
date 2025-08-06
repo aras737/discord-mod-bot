@@ -1,3 +1,4 @@
+await interaction.deferUpdate();
 const {
   PermissionsBitField,
   EmbedBuilder,
