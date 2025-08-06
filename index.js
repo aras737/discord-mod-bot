@@ -5,21 +5,31 @@ const express = require('express');
 require('dotenv').config();
 
 const client = new Client({ intents: [GatewayIntentBits.Guilds] });
-client.commands = new Collection();
+// Komutları oku ve yükle
+const komutKlasoru = './komutlar';
+const komutlar = [];
+const yuklenenKomutlar = [];
+const yuklenemeyenKomutlar = [];
 
-const commandsPath = path.join(__dirname, 'commands');
-if (fs.existsSync(commandsPath)) {
-  const commandFiles = fs.readdirSync(commandsPath).filter(file => file.endsWith('.js'));
-  for (const file of commandFiles) {
-    const command = require(path.join(commandsPath, file));
+fs.readdirSync(komutKlasoru).filter(file => file.endsWith('.js')).forEach(file => {
+  try {
+    const command = require(`${komutKlasoru}/${file}`);
     if (command.data && command.execute) {
       client.commands.set(command.data.name, command);
+      komutlar.push(command.data.toJSON());
+      yuklenenKomutlar.push(file);
+    } else {
+      yuklenemeyenKomutlar.push(`${file} (eksik "data" veya "execute")`);
     }
+  } catch (error) {
+    yuklenemeyenKomutlar.push(`${file} (yükleme hatası: ${error.message})`);
   }
-  console.log(`Komutlar yüklendi! (${client.commands.size} komut)`);
-} else {
-  console.log('Komut klasörü bulunamadı veya boş.');
-}
+});
+
+// Yükleme sonuçlarını göster
+console.log('📦 Komut yükleme tamamlandı.');
+console.log(`✅ Yüklenen komutlar: ${yuklenenKomutlar.length > 0 ? yuklenenKomutlar.join(', ') : 'Yok'}`);
+console.log(`❌ Yüklenemeyen komutlar: ${yuklenemeyenKomutlar.length > 0 ? yuklenemeyenKomutlar.join(', ') : 'Yok'}`);
 
 client.once('ready', () => {
   console.log(`Bot aktif! (${client.user.tag})`);
