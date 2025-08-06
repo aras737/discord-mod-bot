@@ -1,76 +1,83 @@
-require("dotenv").config();
-const { Client, GatewayIntentBits, Collection } = require("discord.js");
-const fs = require("fs");
-const express = require("express");
+const { Client, GatewayIntentBits, Collection, REST, Routes } = require('discord.js');
+const express = require('express');
+const fs = require('fs');
+const dotenv = require('dotenv');
+dotenv.config();
 
+// Express (uptime için)
+const app = express();
+const PORT = process.env.PORT || 3000;
+app.get('/', (req, res) => res.send('Bot Aktif!'));
+app.listen(PORT, () => {
+  console.log(`🌐 Express portu dinleniyor: ${PORT}`);
+});
+
+// Discord client
 const client = new Client({
   intents: [
     GatewayIntentBits.Guilds,
     GatewayIntentBits.GuildMessages,
     GatewayIntentBits.MessageContent,
-    GatewayIntentBits.GuildMembers
-  ]
+    GatewayIntentBits.GuildMembers,
+  ],
 });
 
 client.commands = new Collection();
+const komutlar = [];
+const komutKlasoru = './commands';
 
-// Komutları yükle
-const commandFiles = fs.readdirSync("./commands").filter(file => file.endsWith(".js"));
-for (const file of commandFiles) {
-  const command = require(`./commands/${file}`);
-  client.commands.set(command.data.name, command);
-  console.log(`✅ Komut yüklendi: ${command.data.name}`);
-}
+console.log('⚙️ Komutlar yükleniyor...');
 
-// Slash komutları çalıştır
-const { REST, Routes } = require("discord.js");
-const commands = [];
+try {
+  const komutDosyalari = fs.readdirSync(komutKlasoru).filter(f => f.endsWith('.js'));
 
-for (const file of commandFiles) {
-  const command = require(`./commands/${file}`);
-  commands.push(command.data.toJSON());
-}
-
-const rest = new REST({ version: "10" }).setToken(process.env.TOKEN);
-
-// Slash komutları yükle
-(async () => {
-  try {
-    console.log("⚙️ Slash komutlar yükleniyor...");
-    await rest.put(
-      Routes.applicationCommands("BOT_ID"), // <<< BOT_ID yerine kendi bot ID'ni yaz
-      { body: commands }
-    );
-    console.log("✅ Slash komutlar yüklendi.");
-  } catch (error) {
-    console.error("❌ Slash komut yükleme hatası:", error);
+  for (const file of komutDosyalari) {
+    const command = require(`${komutKlasoru}/${file}`);
+    if (command.data && command.execute) {
+      client.commands.set(command.data.name, command);
+      komutlar.push(command.data.toJSON());
+      console.log(`✅ Komut yüklendi: ${command.data.name}`);
+    } else {
+      console.warn(`⚠️ Hatalı komut: ${file}`);
+    }
   }
-})();
+} catch (err) {
+  console.error('❌ Komutlar yüklenemedi:', err);
+}
 
-// Slash komutları çalıştır
-client.on("interactionCreate", async interaction => {
+// Bot hazır olunca
+client.once('ready', async () => {
+  console.log(`✅ Bot Aktif: ${client.user.tag}`);
+
+  const rest = new REST({ version: '10' }).setToken(process.env.TOKEN);
+  try {
+    await rest.put(
+      Routes.applicationCommands(client.user.id),
+      { body: komutlar }
+    );
+    console.log('✅ Slash komutlar yüklendi.');
+  } catch (err) {
+    console.error('❌ Slash komut yükleme hatası:', err);
+  }
+});
+
+// Slash komut tetikleyici
+client.on('interactionCreate', async interaction => {
   if (!interaction.isCommand()) return;
-
   const command = client.commands.get(interaction.commandName);
   if (!command) return;
 
   try {
     await command.execute(interaction);
-  } catch (error) {
-    console.error("❌ Komut çalıştırma hatası:", error);
-    await interaction.reply({ content: "❌ Komut çalıştırılamadı!", ephemeral: true });
+  } catch (err) {
+    console.error(`❌ Komut hatası: ${err}`);
+    await interaction.reply({ content: '❌ Komut çalıştırılamadı.', ephemeral: true });
   }
 });
 
-// Bot hazır olduğunda logla
-client.once("ready", () => {
-  console.log(`✅ Bot aktif: ${client.user.tag}`);
-});
-
-// Express ile botu Render’da canlı tut
-const app = express();
-app.get("/", (req, res) => res.send("Bot Aktif!"));
-app.listen(3000, () => console.log("🌐 Express portu dinleniyor: 3000"));
+// Hata yakalayıcılar
+process.on('uncaughtException', err => console.error('🚨 Uncaught Exception:', err));
+process.on('unhandledRejection', err => console.error('🚨 Unhandled Rejection:', err));
 
 // Giriş
 client.login(process.env.TOKEN);
