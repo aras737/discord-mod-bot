@@ -25,8 +25,8 @@ const client = new Client({
 
 // Komut koleksiyonu
 client.commands = new Collection();
-const komutlar = [];
-const komutKlasoru = './komutlar';
+const commands = [];
+const komutKlasoru = './commands';
 
 // Komutları oku
 if (fs.existsSync(komutKlasoru)) {
@@ -35,7 +35,7 @@ if (fs.existsSync(komutKlasoru)) {
     const command = require(`${komutKlasoru}/${file}`);
     if (command.data && command.execute) {
       client.commands.set(command.data.name, command);
-      komutlar.push(command.data.toJSON());
+      commands.push(command.data.toJSON());
       console.log(`✅ Komut yüklendi: ${command.data.name}`);
     } else {
       console.warn(`⚠️ Eksik komut: ${file}`);
@@ -53,7 +53,7 @@ client.once('ready', async () => {
   try {
     await rest.put(
       Routes.applicationCommands(client.user.id),
-      { body: komutlar }
+      { body: commands }
     );
     console.log('✅ Slash komutlar yüklendi.');
   } catch (error) {
