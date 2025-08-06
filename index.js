@@ -70,5 +70,18 @@ client.on('interactionCreate', async interaction => {
 process.on('unhandledRejection', err => console.error('🚨 Unhandled Rejection:', err));
 process.on('uncaughtException', err => console.error('🚨 Uncaught Exception:', err));
 
+const express = require('express');
+const app = express();
+
+const PORT = process.env.PORT || 3000;
+
+app.get('/', (req, res) => {
+  res.send('Bot Aktif!');
+});
+
+app.listen(PORT, () => {
+  console.log(`🌐 Web sunucu port ${PORT} üzerinden çalışıyor.`);
+});
+
 // Botu başlat
 client.login(process.env.TOKEN);
