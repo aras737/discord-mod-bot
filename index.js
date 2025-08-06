@@ -4,9 +4,8 @@ const path = require('path');
 const express = require('express');
 require('dotenv').config();
 
-const client = new Client({ intents: [GatewayIntentBits.Guilds] });
 // Komutları oku ve yükle
-const komutKlasoru = './komutlar';
+const komutKlasoru = './commands';
 const komutlar = [];
 const yuklenenKomutlar = [];
 const yuklenemeyenKomutlar = [];
@@ -30,7 +29,6 @@ fs.readdirSync(komutKlasoru).filter(file => file.endsWith('.js')).forEach(file =
 console.log('📦 Komut yükleme tamamlandı.');
 console.log(`✅ Yüklenen komutlar: ${yuklenenKomutlar.length > 0 ? yuklenenKomutlar.join(', ') : 'Yok'}`);
 console.log(`❌ Yüklenemeyen komutlar: ${yuklenemeyenKomutlar.length > 0 ? yuklenemeyenKomutlar.join(', ') : 'Yok'}`);
-
 client.once('ready', () => {
   console.log(`Bot aktif! (${client.user.tag})`);
 });
