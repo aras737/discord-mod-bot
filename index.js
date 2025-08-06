@@ -15,9 +15,9 @@ const client = new Client({
 client.commands = new Collection();
 
 // Komutları yükle
-const commandFiles = fs.readdirSync("./komutlar").filter(file => file.endsWith(".js"));
+const commandFiles = fs.readdirSync("./commands").filter(file => file.endsWith(".js"));
 for (const file of commandFiles) {
-  const command = require(`./komutlar/${file}`);
+  const command = require(`./commands/${file}`);
   client.commands.set(command.data.name, command);
   console.log(`✅ Komut yüklendi: ${command.data.name}`);
 }
@@ -27,7 +27,7 @@ const { REST, Routes } = require("discord.js");
 const commands = [];
 
 for (const file of commandFiles) {
-  const command = require(`./komutlar/${file}`);
+  const command = require(`./commands/${file}`);
   commands.push(command.data.toJSON());
 }
 
