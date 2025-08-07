@@ -13,13 +13,14 @@ module.exports = {
 
   async execute(interaction) {
     const username = interaction.options.getString('kullanici');
-    const groupId = '33389098';
-    const verifiedRoleId = '1399254986348560526';
+    const groupId = '33389098'; // KENDİ GRUP ID'İN
+    const verifiedRoleId = '1399254986348560526'; // KENDİ ROL ID'İN
 
-    await interaction.deferReply({ ephemeral: true });
+    // ✅ Discord API güncellemesi için flags kullanıyoruz
+    await interaction.deferReply({ flags: 64 });
 
     try {
-      // ✅ Yeni API ile kullanıcı ID al
+      // 🔍 Roblox ID al
       const userRes = await axios.post('https://users.roblox.com/v1/usernames/users', {
         usernames: [username],
         excludeBannedUsers: true
@@ -32,23 +33,26 @@ module.exports = {
 
       const userId = userData.id;
 
-      // ✅ Grup üyeliği kontrolü
+      // 🔍 Grup kontrolü
       const groupRes = await axios.get(`https://groups.roblox.com/v1/users/${userId}/groups/roles`);
       const isMember = groupRes.data.data.some(g => g.group.id == groupId);
 
       if (!isMember) {
-        return interaction.editReply({ content: '❌ Bu kullanıcı grupta değil.' });
+        return interaction.editReply({ content: '❌ Bu kullanıcı belirtilen grupta değil.' });
       }
 
-      // ✅ Discord rol ver
+      // 🟢 Rol ver
       const member = await interaction.guild.members.fetch(interaction.user.id);
       await member.roles.add(verifiedRoleId);
 
-      return interaction.editReply({ content: `✅ ${username} başarıyla doğrulandı.` });
+      // ✅ Başarılı mesaj
+      return interaction.editReply({
+        content: `✅ ${username} başarıyla doğrulandı ve rol verildi.`
+      });
 
     } catch (error) {
       console.error('🔴 Doğrulama hatası:', error.response?.data || error.message || error);
-      return interaction.editReply({ content: '❌ Doğrulama sırasında bir hata oluştu. Loglara bak.' });
+      return interaction.editReply({ content: '❌ Doğrulama sırasında bir hata oluştu.' });
     }
   }
 };
