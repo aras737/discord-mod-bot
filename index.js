@@ -3,6 +3,7 @@ const express = require('express');
 const fs = require('fs');
 const dotenv = require('dotenv');
 dotenv.config();
+client.on('messageCreate', message => require('./events/messageCreate').execute(message));
 
 // Express (uptime için)
 const app = express();
