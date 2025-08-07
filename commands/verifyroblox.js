@@ -3,53 +3,47 @@ const axios = require('axios');
 
 module.exports = {
   data: new SlashCommandBuilder()
-    .setName('verifyroblox')
-    .setDescription('Roblox grubunda üye olup olmadığını doğrular.')
+    .setName('verify')
+    .setDescription('Roblox hesabınızı doğrulayın.')
     .addStringOption(option =>
-      option.setName('username')
+      option.setName('kullanici')
         .setDescription('Roblox kullanıcı adınız')
         .setRequired(true)
     ),
 
   async execute(interaction) {
-    const username = interaction.options.getString('username');
-    const groupId = process.env.ROBLOX_GROUP_ID; // Render ortam değişkeni
+    const username = interaction.options.getString('kullanici');
+    const groupId = '33389098'; // 🛠️ DEĞİŞTİR: Roblox grup ID
+    const verifiedRoleId = '1394407533799805028'; // 🛠️ DEĞİŞTİR: Verilecek Discord rolü ID
 
     await interaction.deferReply({ ephemeral: true });
 
     try {
-      // 1. Roblox kullanıcı ID'sini al
-      const userRes = await axios.get(`https://api.roblox.com/users/get-by-username?username=${encodeURIComponent(username)}`);
-      if (!userRes.data || userRes.data.Id === 0) {
-        return interaction.editReply({ content: 'Geçersiz Roblox kullanıcı adı girdiniz.' });
-      }
+      // Roblox kullanıcı ID'sini al
+      const userRes = await axios.get(`https://api.roblox.com/users/get-by-username?username=${username}`);
       const userId = userRes.data.Id;
+      if (!userId) return interaction.editReply({ content: '❌ Kullanıcı bulunamadı.' });
 
-      // 2. Kullanıcının gruptaki durumu
+      // Grup üyeliğini kontrol et
       const groupRes = await axios.get(`https://groups.roblox.com/v1/users/${userId}/groups/roles`);
-      if (!groupRes.data || !groupRes.data.data) {
-        return interaction.editReply({ content: 'Kullanıcı grubun bir üyesi değil.' });
+      const isMember = groupRes.data.data.some(group => group.group.id == groupId);
+
+      if (!isMember) {
+        return interaction.editReply({ content: '❌ Belirtilen grupta değilsiniz.' });
       }
 
-      const isMember = groupRes.data.data.some(g => g.group.id == groupId && g.role.rank > 0);
+      // Rolü ver
+      const role = interaction.guild.roles.cache.get(verifiedRoleId);
+      if (!role) return interaction.editReply({ content: '❌ Rol bulunamadı. Lütfen yöneticinize bildirin.' });
 
-      if (isMember) {
-        // Üye ise rol verebilir veya onay mesajı atabiliriz.
-        // Örneğin, rol verme:
-        const roleId = process.env.VERIFIED_ROLE_ID; // Doğrulama rolü ID'si (Render env)
-        if (roleId) {
-          const member = await interaction.guild.members.fetch(interaction.user.id);
-          await member.roles.add(roleId);
-        }
+      const member = await interaction.guild.members.fetch(interaction.user.id);
+      await member.roles.add(role);
 
-        return interaction.editReply({ content: `Tebrikler, ${username} kullanıcısı Roblox grubunda bulundu! Doğrulamanız başarılı.` });
-      } else {
-        return interaction.editReply({ content: 'Üzgünüz, belirtilen kullanıcı Roblox grubunun bir üyesi değil.' });
-      }
+      return interaction.editReply({ content: `✅ Doğrulama başarılı! ${role} rolü verildi.` });
 
     } catch (error) {
-      console.error('Roblox doğrulama hatası:', error);
-      return interaction.editReply({ content: 'Bir hata oluştu, lütfen daha sonra tekrar deneyiniz.' });
+      console.error('Doğrulama hatası:', error);
+      return interaction.editReply({ content: '❌ Doğrulama sırasında bir hata oluştu.' });
     }
   }
 };
