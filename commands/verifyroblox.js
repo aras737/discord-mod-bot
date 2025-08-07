@@ -13,39 +13,42 @@ module.exports = {
 
   async execute(interaction) {
     const username = interaction.options.getString('kullanici');
-    const groupId = '33389098'; // ✅ BURAYA GRUP ID'n GELSİN
-    const verifiedRoleId = '1399254986348560526'; // ✅ BURAYA ROL ID GELSİN
+    const groupId = '33389098';
+    const verifiedRoleId = '1399254986348560526';
 
     await interaction.deferReply({ ephemeral: true });
 
     try {
-      // 1️⃣ Kullanıcı ID al
-      const userRes = await axios.get(`https://api.roblox.com/users/get-by-username?username=${username}`);
-      const userId = userRes.data.Id;
-      if (!userId) {
-        return interaction.editReply({ content: '❌ Roblox kullanıcı adı geçersiz.' });
+      // ✅ Yeni API ile kullanıcı ID al
+      const userRes = await axios.post('https://users.roblox.com/v1/usernames/users', {
+        usernames: [username],
+        excludeBannedUsers: true
+      });
+
+      const userData = userRes.data.data[0];
+      if (!userData || !userData.id) {
+        return interaction.editReply({ content: '❌ Kullanıcı bulunamadı.' });
       }
 
-      // 2️⃣ Gruba üye mi?
+      const userId = userData.id;
+
+      // ✅ Grup üyeliği kontrolü
       const groupRes = await axios.get(`https://groups.roblox.com/v1/users/${userId}/groups/roles`);
       const isMember = groupRes.data.data.some(g => g.group.id == groupId);
 
       if (!isMember) {
-        return interaction.editReply({ content: '❌ Bu kullanıcı belirtilen grupta değil.' });
+        return interaction.editReply({ content: '❌ Bu kullanıcı grupta değil.' });
       }
 
-      // 3️⃣ Rolü ver
-      const role = interaction.guild.roles.cache.get(verifiedRoleId);
-      if (!role) return interaction.editReply({ content: '❌ Doğrulama rolü bulunamadı.' });
-
+      // ✅ Discord rol ver
       const member = await interaction.guild.members.fetch(interaction.user.id);
-      await member.roles.add(role);
+      await member.roles.add(verifiedRoleId);
 
-      return interaction.editReply({ content: `✅ ${username} doğrulandı! Rol verildi.` });
+      return interaction.editReply({ content: `✅ ${username} başarıyla doğrulandı.` });
 
     } catch (error) {
       console.error('🔴 Doğrulama hatası:', error.response?.data || error.message || error);
-      return interaction.editReply({ content: '❌ Doğrulama sırasında beklenmedik bir hata oluştu. Loglara bak.' });
+      return interaction.editReply({ content: '❌ Doğrulama sırasında bir hata oluştu. Loglara bak.' });
     }
   }
 };
