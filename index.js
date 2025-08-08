@@ -17,17 +17,16 @@ const client = new Client({
 // Express (uptime için)
 const app = express();
 const PORT = process.env.PORT || 3000;
-app.get('/', (req, res) => res.send('Bot Aktif!'));
+app.get('/', (req, res) => res.send('✅ Bot çalışıyor.'));
 app.listen(PORT, () => {
   console.log(`🌐 Express portu dinleniyor: ${PORT}`);
 });
 
-// Komut sistemi
+// Komutlar
 client.commands = new Collection();
 const komutlar = [];
 const komutKlasoru = './commands';
 
-console.log('⚙️ Komutlar yükleniyor...');
 try {
   const komutDosyalari = fs.readdirSync(komutKlasoru).filter(f => f.endsWith('.js'));
 
@@ -47,7 +46,7 @@ try {
 
 // Bot hazır olunca
 client.once('ready', async () => {
-  console.log(`✅ Bot Aktif: ${client.user.tag}`);
+  console.log(`🤖 Bot aktif: ${client.user.tag}`);
 
   const rest = new REST({ version: '10' }).setToken(process.env.TOKEN);
   try {
@@ -61,7 +60,7 @@ client.once('ready', async () => {
   }
 });
 
-// Slash komut tetikleyici
+// Slash komut tetikleme
 client.on('interactionCreate', async interaction => {
   if (!interaction.isCommand()) return;
   const command = client.commands.get(interaction.commandName);
@@ -70,17 +69,23 @@ client.on('interactionCreate', async interaction => {
   try {
     await command.execute(interaction);
   } catch (err) {
-    console.error(`❌ Komut hatası: ${err}`);
+    console.error(`❌ Komut hatası:`, err);
     await interaction.reply({ content: '❌ Komut çalıştırılamadı.', ephemeral: true });
   }
 });
 
-// Mesaj komutları
+// Mesaj komutları (örnek: küfür engel)
 client.on('messageCreate', message => {
-  require('./events/messageCreate').execute(message);
+  if (message.author.bot) return;
+
+  const kufurler = ['salak', 'aptal', 'mal']; // genişletilebilir
+  if (kufurler.some(k => message.content.toLowerCase().includes(k))) {
+    message.delete().catch(() => {});
+    message.channel.send('🚫 Bu sunucuda küfür yasaktır!');
+  }
 });
 
-// Hata yakalayıcılar
+// Hata yakalama
 process.on('uncaughtException', err => console.error('🚨 Uncaught Exception:', err));
 process.on('unhandledRejection', err => console.error('🚨 Unhandled Rejection:', err));
 
