@@ -1,12 +1,10 @@
-// config.json içeriğini güncelleyen Node.js kodu
-const fs = require('fs');
-
-const configPath = './config.json';
-const config = JSON.parse(fs.readFileSync(configPath, 'utf-8'));
-
-delete config.roleMap["2"];
-delete config.roleMap["3"];
-
-fs.writeFileSync(configPath, JSON.stringify(config, null, 2), 'utf-8');
-
-console.log('✅ roleMap içinden 2 ve 3 silindi.');
+{
+  "groupId": 33389098,
+  "verifyRoleId": "1399254986348560526", // Herkesin aldığı rol
+  "channelId": "1394408440478044302", // Sadece burada çalışır
+  "logChannelId": "1403286303335776347", // Loglar buraya
+  "roleBindings": {
+    "2": "1394407488241012867",
+    "3": "1394407488241012867"
+  }
+}
