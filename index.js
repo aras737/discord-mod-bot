@@ -2,8 +2,6 @@ const { Client, GatewayIntentBits, Collection, REST, Routes } = require('discord
 const express = require('express');
 const fs = require('fs');
 const dotenv = require('dotenv');
-client.on('guildMemberAdd', member => require('./events/guildMemberAdd').execute(member));
-client.on('guildMemberRemove', member => require('./events/guildMemberRemove').execute(member));
 dotenv.config();
 
 // Discord client
@@ -76,24 +74,21 @@ client.on('interactionCreate', async interaction => {
   }
 });
 
-// Küfür engel sistemi
+// Mesaj komutları (örnek: küfür engel)
 client.on('messageCreate', message => {
-  if (message.author.bot || !message.guild) return;
+  if (message.author.bot) return;
 
-  const kufurler = [
-    'salak', 'aptal', 'malamk', 'aq', 'orospu', 'sik', 'piç', 'anan', 'yarrak', 'mk',
-    'amk', 'amcık', 'yavşak', 'oç', 'sg', 'siktir', 'ananı', 'bacını', 'göt'
-  ];
-
-  const msg = message.content.toLowerCase();
-
-  if (kufurler.some(k => msg.includes(k))) {
+  const kufurler = ['salak', 'aptal', 'malamk', 'aq', 'orospu', 'sik', 'piç', 'anan', 'yarrak', 'mk']; // genişletilebilir
+  if (kufurler.some(k => message.content.toLowerCase().includes(k))) {
     message.delete().catch(() => {});
-    message.channel.send({
-      content: `🚫 ${message.author}, bu sunucuda küfür yasaktır!`,
-    });
+    message.channel.send('🚫 Bu sunucuda küfür yasaktır!');
   }
 });
+
+// **Buraya istediğin event dinleyicileri eklendi**
+
+client.on('guildMemberAdd', member => require('./events/guildMemberAdd').execute(member));
+client.on('guildMemberRemove', member => require('./events/guildMemberRemove').execute(member));
 
 // Hata yakalama
 process.on('uncaughtException', err => console.error('🚨 Uncaught Exception:', err));
