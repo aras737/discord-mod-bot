@@ -74,14 +74,22 @@ client.on('interactionCreate', async interaction => {
   }
 });
 
-// Mesaj komutları (örnek: küfür engel)
+// Küfür engel sistemi
 client.on('messageCreate', message => {
-  if (message.author.bot) return;
+  if (message.author.bot || !message.guild) return;
 
-  const kufurler = const kufurler = ['salak', 'aptal', 'malamk', 'aq', 'orospu', 'sik', 'piç', 'anan', 'yarrak', 'mk']; // genişletilebilir
-  if (kufurler.some(k => message.content.toLowerCase().includes(k))) {
+  const kufurler = [
+    'salak', 'aptal', 'malamk', 'aq', 'orospu', 'sik', 'piç', 'anan', 'yarrak', 'mk',
+    'amk', 'amcık', 'yavşak', 'oç', 'sg', 'siktir', 'ananı', 'bacını', 'göt'
+  ];
+
+  const msg = message.content.toLowerCase();
+
+  if (kufurler.some(k => msg.includes(k))) {
     message.delete().catch(() => {});
-    message.channel.send('🚫 Bu sunucuda küfür yasaktır!');
+    message.channel.send({
+      content: `🚫 ${message.author}, bu sunucuda küfür yasaktır!`,
+    });
   }
 });
 
