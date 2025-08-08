@@ -1,32 +1,61 @@
-const { SlashCommandBuilder } = require('discord.js');
+const { SlashCommandBuilder, PermissionFlagsBits } = require('discord.js');
+const fs = require('fs');
+const path = require('path');
+
+// Ban listesi yolu
+const banListPath = path.join(__dirname, '../data/banlist.json');
 
 module.exports = {
   data: new SlashCommandBuilder()
     .setName('ban')
-    .setDescription('Bir kullanıcıyı banlar.')
-    .addUserOption(option => 
+    .setDescription('Bir kullanıcıyı sunucudan banlar.')
+    .setDefaultMemberPermissions(PermissionFlagsBits.BanMembers)
+    .addUserOption(option =>
       option.setName('kullanici')
         .setDescription('Banlanacak kullanıcı')
         .setRequired(true)
+    )
+    .addStringOption(option =>
+      option.setName('sebep')
+        .setDescription('Ban sebebi')
+        .setRequired(false)
     ),
-  
+
   async execute(interaction) {
     const member = interaction.options.getMember('kullanici');
-
-    if (!interaction.member.permissions.has('BanMembers')) {
-      return interaction.reply({ content: '❌ Bu komutu kullanmak için yetkin yok.', ephemeral: true });
-    }
+    const reason = interaction.options.getString('sebep') || 'Sebep belirtilmedi';
 
     if (!member) {
       return interaction.reply({ content: '❌ Kullanıcı bulunamadı.', ephemeral: true });
     }
 
+    if (!member.bannable) {
+      return interaction.reply({ content: '❌ Bu kullanıcı banlanamıyor.', ephemeral: true });
+    }
+
     try {
-      await member.ban({ reason: `Banned by ${interaction.user.tag}` });
-      await interaction.reply(`✅ ${member.user.tag} başarıyla banlandı.`);
+      // Kullanıcıyı banla
+      await member.ban({ reason: `${reason} | Banlayan: ${interaction.user.tag}` });
+
+      // Ban listesine kaydet
+      let banList = {};
+      if (fs.existsSync(banListPath)) {
+        banList = JSON.parse(fs.readFileSync(banListPath, 'utf8'));
+      }
+
+      banList[member.user.id] = {
+        tag: member.user.tag,
+        reason: reason,
+        moderator: interaction.user.tag,
+        date: new Date().toISOString()
+      };
+
+      fs.writeFileSync(banListPath, JSON.stringify(banList, null, 2));
+
+      await interaction.reply(`✅ **${member.user.tag}** başarıyla banlandı.\n📝 Sebep: ${reason}`);
     } catch (err) {
       console.error(err);
-      await interaction.reply({ content: '❌ Ban işlemi başarısız.', ephemeral: true });
+      await interaction.reply({ content: '❌ Ban işlemi sırasında bir hata oluştu.', ephemeral: true });
     }
   }
 };
