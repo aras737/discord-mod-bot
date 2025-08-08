@@ -24,7 +24,24 @@ module.exports = {
         });
       } catch (err) {
         console.error('Küfür mesajı silinemedi:', err);
-      }
+     const afk = require('../commands/afk.js');
+
+module.exports = {
+  async execute(message) {
+    if (message.author.bot) return;
+
+    // Eğer mesaj atan AFK'ysa, kaldır
+    if (afk.afkMap.has(message.author.id)) {
+      afk.afkMap.delete(message.author.id);
+      message.reply('✅ AFK modundan çıktınız.');
     }
+
+    // Eğer etiketlenen biri AFK'ysa, sebebi göster
+    message.mentions.users.forEach(user => {
+      const reason = afk.afkMap.get(user.id);
+      if (reason) {
+        message.reply(`💤 ${user.username} şu anda AFK: ${reason}`);
+      }
+    });
   }
 };
