@@ -16,29 +16,25 @@ module.exports = {
     .addStringOption(option =>
       option.setName('sebep')
         .setDescription('Ban sebebi')
-        .setRequired(false)
+        .setRequired(true) // ✅ Sebep zorunlu hale getirildi
     )
     .setDefaultMemberPermissions(PermissionFlagsBits.BanMembers),
 
   async execute(interaction) {
     const member = interaction.options.getMember('kullanici');
-    const reason = interaction.options.getString('sebep') || 'Sebep belirtilmedi.';
+    const reason = interaction.options.getString('sebep');
 
-    // Kullanıcı yoksa
     if (!member) {
       return interaction.reply({ content: '❌ Kullanıcı bulunamadı.', ephemeral: true });
     }
 
-    // Kendini banlama koruması
     if (member.id === interaction.user.id) {
       return interaction.reply({ content: '❌ Kendini banlayamazsın.', ephemeral: true });
     }
 
     try {
-      // Ban işlemi
       await member.ban({ reason });
 
-      // Ban kaydını al
       const banData = fs.existsSync(banListPath)
         ? JSON.parse(fs.readFileSync(banListPath, 'utf8'))
         : {};
@@ -46,7 +42,7 @@ module.exports = {
       banData[member.id] = {
         tag: member.user.tag,
         moderator: interaction.user.tag,
-        reason: reason,
+        reason,
         date: new Date().toISOString()
       };
 
