@@ -1,68 +1,88 @@
 const { SlashCommandBuilder } = require('discord.js');
+const fs = require('fs');
 const axios = require('axios');
+const path = require('path');
+
+const verifiedFile = path.join(__dirname, '../verified.json');
+let verifiedUsers = {};
+
+if (fs.existsSync(verifiedFile)) {
+  verifiedUsers = JSON.parse(fs.readFileSync(verifiedFile, 'utf-8'));
+}
 
 module.exports = {
   data: new SlashCommandBuilder()
     .setName('verify')
-    .setDescription('Roblox hesabınızı doğrular.')
-    .addStringOption(option =>
-      option.setName('kullanici')
-        .setDescription('Roblox kullanıcı adınız')
-        .setRequired(true)
-    ),
+    .setDescription('Roblox hesabınızı doğrulamanızı sağlar'),
 
   async execute(interaction) {
-    const verifyChannelId = process.env.VERIFY_CHANNEL_ID;
-    const verifyLogChannelId = process.env.VERIFY_LOG_CHANNEL_ID;
-    const verifiedRoleId = process.env.VERIFIED_ROLE_ID;
-    const groupId = process.env.GROUP_ID;
+    const userId = interaction.user.id;
 
-    if (interaction.channel.id !== verifyChannelId) {
-      return interaction.reply({ content: '❌ Bu komut sadece doğrulama kanalında kullanılabilir.', ephemeral: true });
+    if (verifiedUsers[userId]) {
+      return interaction.reply({ content: '✅ Zaten doğrulanmışsın.', ephemeral: true });
     }
 
-    const username = interaction.options.getString('kullanici');
-    await interaction.deferReply({ ephemeral: true });
+    const verifyCode = `discord-verify-${userId}`;
 
+    await interaction.reply({
+      content: `🔐 Doğrulama için lütfen Roblox profilinin açıklama kısmına şu kodu ekleyin:\n\n\`${verifyCode}\`\n\nKod eklendikten sonra bu komutu tekrar yazın.`,
+      ephemeral: true
+    });
+
+    const filter = i => i.user.id === interaction.user.id;
     try {
-      // Kullanıcıyı çek
-      const userRes = await axios.post('https://users.roblox.com/v1/usernames/users', {
-        usernames: [username],
-        excludeBannedUsers: true
+      const confirmation = await interaction.channel.awaitMessages({ filter, max: 1, time: 300000, errors: ['time'] });
+      const retry = confirmation.first();
+
+      // ROBLOX kullanıcı adını al
+      const username = retry.content;
+
+      // ROBLOX ID al
+      const userInfo = await axios.get(`https://users.roblox.com/v1/usernames/users`, {
+        method: 'POST',
+        data: { usernames: [username] },
+        headers: { 'Content-Type': 'application/json' }
       });
 
-      const userData = userRes.data.data[0];
-      if (!userData) {
-        return interaction.editReply({ content: '❌ Kullanıcı bulunamadı.' });
+      const robloxId = userInfo.data.data[0]?.id;
+      if (!robloxId) return interaction.followUp({ content: '❌ Kullanıcı bulunamadı.', ephemeral: true });
+
+      // PROFİL verisini al
+      const profile = await axios.get(`https://users.roblox.com/v1/users/${robloxId}`);
+      const description = profile.data.description;
+
+      if (!description.includes(verifyCode)) {
+        return interaction.followUp({ content: '❌ Kod profil açıklamasında bulunamadı.', ephemeral: true });
       }
 
-      const userId = userData.id;
+      // Kaydet
+      verifiedUsers[userId] = {
+        discordId: userId,
+        robloxId,
+        username
+      };
 
-      // Gruba üyeliğini kontrol et
-      const groupRes = await axios.get(`https://groups.roblox.com/v1/users/${userId}/groups/roles`);
-      const groups = groupRes.data.data;
+      fs.writeFileSync(verifiedFile, JSON.stringify(verifiedUsers, null, 2));
 
-      const groupMember = groups.find(g => g.group.id == groupId);
+      // ROLLERİ VER
+      const member = await interaction.guild.members.fetch(userId);
+      const verifyRole = interaction.guild.roles.cache.get(process.env.VERIFY_ROLE_ID);
+      if (verifyRole) await member.roles.add(verifyRole);
 
-      if (!groupMember) {
-        return interaction.editReply({ content: '❌ Bu kullanıcı grupta değil.' });
+      // Roblox grubundaki rolü kontrol et (isteğe bağlı)
+      // Burada gruptan rol ID’si eşleştirmesi yapılabilir
+
+      // LOG
+      const logChannel = interaction.guild.channels.cache.get(process.env.VERIFY_LOG_CHANNEL);
+      if (logChannel) {
+        logChannel.send(`✅ ${interaction.user.tag} (${username}) başarıyla doğrulandı.`);
       }
 
-      // Rol ver
-      const member = await interaction.guild.members.fetch(interaction.user.id);
-      await member.roles.add(verifiedRoleId);
+      interaction.followUp({ content: '✅ Doğrulama tamamlandı!', ephemeral: true });
 
-      await interaction.editReply({ content: `✅ ${username} başarıyla doğrulandı!` });
-
-      // Log
-      const logChannel = await interaction.guild.channels.fetch(verifyLogChannelId).catch(() => null);
-      if (logChannel?.isTextBased()) {
-        logChannel.send(`✅ **${interaction.user.tag}** adlı kullanıcı \`${username}\` olarak doğrulandı. Grupta bulundu.`);
-      }
-
-    } catch (error) {
-      console.error('❌ Doğrulama hatası:', error.response?.data || error);
-      return interaction.editReply({ content: '❌ Doğrulama sırasında bir hata oluştu.' });
+    } catch (err) {
+      console.error(err);
+      return interaction.followUp({ content: '❌ Doğrulama sırasında bir hata oluştu.', ephemeral: true });
     }
   }
 };
