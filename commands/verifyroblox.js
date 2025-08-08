@@ -1,64 +1,68 @@
 const { SlashCommandBuilder } = require('discord.js');
-const fetch = require('node-fetch');
-require('dotenv').config();
+const axios = require('axios');
 
 module.exports = {
   data: new SlashCommandBuilder()
     .setName('verify')
-    .setDescription('Roblox grubundaki rolüne göre Discord rolü alırsın.')
+    .setDescription('Roblox hesabınızı doğrular.')
     .addStringOption(option =>
-      option.setName('kullaniciadi')
-        .setDescription('Roblox kullanıcı adını gir')
+      option.setName('kullanici')
+        .setDescription('Roblox kullanıcı adınız')
         .setRequired(true)
     ),
 
   async execute(interaction) {
-    const username = interaction.options.getString('kullaniciadi');
+    const verifyChannelId = process.env.VERIFY_CHANNEL_ID;
+    const verifyLogChannelId = process.env.VERIFY_LOG_CHANNEL_ID;
+    const verifiedRoleId = process.env.VERIFIED_ROLE_ID;
+    const groupId = process.env.GROUP_ID;
+
+    if (interaction.channel.id !== verifyChannelId) {
+      return interaction.reply({ content: '❌ Bu komut sadece doğrulama kanalında kullanılabilir.', ephemeral: true });
+    }
+
+    const username = interaction.options.getString('kullanici');
     await interaction.deferReply({ ephemeral: true });
 
     try {
-      // 1. Kullanıcıyı Roblox'ta bul
-      const userRes = await fetch(`https://users.roblox.com/v1/usernames/users`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ usernames: [username], excludeBannedUsers: true })
+      // Kullanıcıyı çek
+      const userRes = await axios.post('https://users.roblox.com/v1/usernames/users', {
+        usernames: [username],
+        excludeBannedUsers: true
       });
 
-      const userData = await userRes.json();
-      if (!userData.data || userData.data.length === 0) {
-        return interaction.editReply('❌ Roblox kullanıcısı bulunamadı.');
+      const userData = userRes.data.data[0];
+      if (!userData) {
+        return interaction.editReply({ content: '❌ Kullanıcı bulunamadı.' });
       }
 
-      const robloxId = userData.data[0].id;
+      const userId = userData.id;
 
-      // 2. Gruba ait rol bilgisi al
-      const groupRes = await fetch(`https://groups.roblox.com/v2/users/${robloxId}/groups/roles`);
-      const groupData = await groupRes.json();
+      // Gruba üyeliğini kontrol et
+      const groupRes = await axios.get(`https://groups.roblox.com/v1/users/${userId}/groups/roles`);
+      const groups = groupRes.data.data;
 
-      const userGroup = groupData.data.find(group => group.group.id == process.env.GROUP_ID);
+      const groupMember = groups.find(g => g.group.id == groupId);
 
-      if (!userGroup) {
-        return interaction.editReply('❌ Belirtilen gruba üye değilsin.');
+      if (!groupMember) {
+        return interaction.editReply({ content: '❌ Bu kullanıcı grupta değil.' });
       }
 
-      const robloxRoleName = userGroup.role.name;
+      // Rol ver
       const member = await interaction.guild.members.fetch(interaction.user.id);
+      await member.roles.add(verifiedRoleId);
 
-      // 3. Discord'da aynı isimli rol var mı kontrol et
-      const discordRole = interaction.guild.roles.cache.find(role =>
-        role.name.toLowerCase() === robloxRoleName.toLowerCase()
-      );
+      await interaction.editReply({ content: `✅ ${username} başarıyla doğrulandı!` });
 
-      if (!discordRole) {
-        return interaction.editReply(`❌ Roblox rolün: "${robloxRoleName}", ama Discord’da bu isimde bir rol yok.`);
+      // Log
+      const logChannel = await interaction.guild.channels.fetch(verifyLogChannelId).catch(() => null);
+      if (logChannel?.isTextBased()) {
+        logChannel.send(`✅ **${interaction.user.tag}** adlı kullanıcı \`${username}\` olarak doğrulandı. Grupta bulundu.`);
       }
 
-      // 4. Rolü ver
-      await member.roles.add(discordRole);
-      await interaction.editReply(`✅ Roblox rolün "${robloxRoleName}" Discord’da başarıyla verildi!`);
-    } catch (err) {
-      console.error('❌ Doğrulama hatası:', err);
-      await interaction.editReply('❌ Bir hata oluştu, lütfen tekrar dene.');
+    } catch (error) {
+      console.error('❌ Doğrulama hatası:', error.response?.data || error);
+      return interaction.editReply({ content: '❌ Doğrulama sırasında bir hata oluştu.' });
     }
   }
 };
