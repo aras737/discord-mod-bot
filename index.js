@@ -2,6 +2,8 @@ const { Client, GatewayIntentBits, Collection, REST, Routes } = require('discord
 const express = require('express');
 const fs = require('fs');
 const dotenv = require('dotenv');
+client.on('guildMemberAdd', member => require('./events/guildMemberAdd').execute(member));
+client.on('guildMemberRemove', member => require('./events/guildMemberRemove').execute(member));
 dotenv.config();
 
 // Discord client
