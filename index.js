@@ -78,18 +78,7 @@ client.on('interactionCreate', async interaction => {
 client.on('messageCreate', message => {
   if (message.author.bot) return;
 
-  const kufurler = [
-    'salak',
-    'aptal',
-    'malamk',
-    'aq',
-    'orospu',
-    'sik',
-    'piç',
-    'anan',
-    'yarrak',
-    'mk',
-  ]; // genişletilebilir
+  const kufurler = const kufurler = ['salak', 'aptal', 'malamk', 'aq', 'orospu', 'sik', 'piç', 'anan', 'yarrak', 'mk']; // genişletilebilir
 
   if (kufurler.some(k => message.content.toLowerCase().includes(k))) {
     message.delete().catch(() => {});
