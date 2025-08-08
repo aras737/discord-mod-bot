@@ -78,10 +78,22 @@ client.on('interactionCreate', async interaction => {
 client.on('messageCreate', message => {
   if (message.author.bot) return;
 
-  const kufurler = ['salak', 'aptal', 'malamk', 'aq', 'orospu', 'sik', 'piç', 'anan', 'yarrak', 'mk';] // genişletilebilir
+  const kufurler = [
+    'salak',
+    'aptal',
+    'malamk',
+    'aq',
+    'orospu',
+    'sik',
+    'piç',
+    'anan',
+    'yarrak',
+    'mk',
+  ]; // genişletilebilir
+
   if (kufurler.some(k => message.content.toLowerCase().includes(k))) {
     message.delete().catch(() => {});
-    message.channel.send('🚫 Bu sunucuda küfür yasaktır!');
+    message.channel.send({ content: '🚫 Bu sunucuda küfür yasaktır!', ephemeral: true }).catch(() => {});
   }
 });
 
