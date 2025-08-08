@@ -2,7 +2,6 @@ const { SlashCommandBuilder } = require('discord.js');
 const fs = require('fs');
 const path = require('path');
 
-// Ban listesi dosyasının yolu
 const banListPath = path.join(__dirname, '../data/banlist.json');
 
 module.exports = {
@@ -11,26 +10,30 @@ module.exports = {
     .setDescription('Banlanan kullanıcıların listesini gösterir'),
 
   async execute(interaction) {
-    if (!fs.existsSync(banListPath)) {
-      return interaction.reply({ content: '🚫 Henüz hiç ban kaydı yok.', ephemeral: true });
+    try {
+      if (!fs.existsSync(banListPath)) {
+        return interaction.reply({ content: '❌ Henüz kimse banlanmamış.', ephemeral: true });
+      }
+
+      const raw = fs.readFileSync(banListPath, 'utf8');
+      const list = JSON.parse(raw);
+
+      const entries = Object.entries(list);
+      if (entries.length === 0) {
+        return interaction.reply({ content: '📂 Ban listesi boş.', ephemeral: true });
+      }
+
+      const output = entries.map(([id, info], i) => 
+        `\`${i + 1}.\` 👤 **${info.tag}** (ID: \`${id}\`)\n` +
+        `📝 Sebep: ${info.reason}\n` +
+        `🔨 Yetkili: ${info.moderator}\n` +
+        `🕒 Tarih: <t:${Math.floor(new Date(info.date).getTime() / 1000)}:F>`
+      ).join('\n\n');
+
+      return interaction.reply({ content: `📄 **Ban Listesi:**\n\n${output}`, ephemeral: true });
+    } catch (err) {
+      console.error(err);
+      return interaction.reply({ content: '❌ Liste alınırken hata oluştu.', ephemeral: true });
     }
-
-    const banData = JSON.parse(fs.readFileSync(banListPath, 'utf8'));
-
-    if (Object.keys(banData).length === 0) {
-      return interaction.reply({ content: '🚫 Ban listesi boş.', ephemeral: true });
-    }
-
-    let list = '';
-    for (const [id, info] of Object.entries(banData)) {
-      list += `👤 **${info.tag}** (${id})\n📝 Sebep: ${info.reason}\n🔨 Mod: ${info.moderator}\n📅 Tarih: <t:${Math.floor(new Date(info.date).getTime() / 1000)}:f>\n\n`;
-    }
-
-    // Discord mesaj sınırına dikkat
-    if (list.length > 2000) {
-      list = list.slice(0, 1990) + '\n... (liste uzun, bazıları gösterilmedi)';
-    }
-
-    await interaction.reply({ content: `📄 **Ban Listesi:**\n\n${list}`, ephemeral: false });
   }
 };
