@@ -1,68 +1,57 @@
-const { SlashCommandBuilder, PermissionFlagsBits } = require('discord.js');
 const fs = require('fs');
 const path = require('path');
+const { SlashCommandBuilder, PermissionFlagsBits } = require('discord.js');
 
-const banListPath = path.join(__dirname, '..', 'banlist.json');
+// Ban kayıtlarının tutulduğu JSON dosyası
+const banListPath = path.join(__dirname, '../data/banlist.json');
 
 module.exports = {
   data: new SlashCommandBuilder()
     .setName('ban')
-    .setDescription('Bir kullanıcıyı banlar ve ban listesini kaydeder.')
+    .setDescription('Bir kullanıcıyı sunucudan banlar ve listeye ekler.')
     .addUserOption(option =>
       option.setName('kullanici')
-        .setDescription('Banlanacak kullanıcı')
-        .setRequired(true)
-    )
+        .setDescription('Banlanacak kullanıcıyı seçin.')
+        .setRequired(true))
     .addStringOption(option =>
       option.setName('sebep')
-        .setDescription('Ban sebebi')
-        .setRequired(false)
-    )
+        .setDescription('Ban sebebi (örneğin: spam, hakaret, vs)')
+        .setRequired(true))
     .setDefaultMemberPermissions(PermissionFlagsBits.BanMembers),
 
   async execute(interaction) {
-    const member = interaction.options.getMember('kullanici');
-    const reason = interaction.options.getString('sebep') || `Sebep belirtilmedi. Banlayan: ${interaction.user.tag}`;
-
-    if (!interaction.member.permissions.has(PermissionFlagsBits.BanMembers)) {
-      return interaction.reply({ content: '❌ Bu komutu kullanmak için yetkin yok.', ephemeral: true });
-    }
+    const user = interaction.options.getUser('kullanici');
+    const reason = interaction.options.getString('sebep') || 'Sebep belirtilmedi';
+    const member = await interaction.guild.members.fetch(user.id).catch(() => null);
 
     if (!member) {
-      return interaction.reply({ content: '❌ Kullanıcı bulunamadı.', ephemeral: true });
-    }
-
-    if (member.id === interaction.user.id) {
-      return interaction.reply({ content: '❌ Kendini banlayamazsın.', ephemeral: true });
+      return interaction.reply({ content: '❌ Bu kullanıcı sunucuda bulunamıyor.', ephemeral: true });
     }
 
     try {
-      // Banla
-      await member.ban({ reason });
+      await member.ban({ reason: `${reason} | Yetkili: ${interaction.user.tag}` });
 
-      // Ban listesini oku
+      // Ban listesine kaydet
       let banList = [];
       if (fs.existsSync(banListPath)) {
-        const data = fs.readFileSync(banListPath, 'utf8');
-        banList = JSON.parse(data);
+        const raw = fs.readFileSync(banListPath);
+        banList = JSON.parse(raw);
       }
 
-      // Ban bilgisini ekle
       banList.push({
-        id: member.id,
-        tag: member.user.tag,
-        reason,
-        date: new Date().toISOString(),
-        bannedBy: interaction.user.tag
+        userId: user.id,
+        tag: user.tag,
+        reason: reason,
+        bannedBy: interaction.user.tag,
+        date: new Date().toISOString()
       });
 
-      // Dosyaya kaydet
       fs.writeFileSync(banListPath, JSON.stringify(banList, null, 2));
 
-      await interaction.reply(`✅ ${member.user.tag} başarıyla banlandı.\n📝 Sebep: *${reason}*\n📋 Ban listesine kaydedildi.`);
+      await interaction.reply(`✅ ${user.tag} sunucudan banlandı. Sebep: **${reason}**`);
     } catch (err) {
       console.error(err);
-      await interaction.reply({ content: '❌ Ban işlemi başarısız oldu.', ephemeral: true });
+      await interaction.reply({ content: '❌ Ban işlemi başarısız.', ephemeral: true });
     }
   }
 };
