@@ -3,15 +3,6 @@ const express = require('express');
 const fs = require('fs');
 const dotenv = require('dotenv');
 dotenv.config();
-client.on('messageCreate', message => require('./events/messageCreate').execute(message));
-
-// Express (uptime için)
-const app = express();
-const PORT = process.env.PORT || 3000;
-app.get('/', (req, res) => res.send('Bot Aktif!'));
-app.listen(PORT, () => {
-  console.log(`🌐 Express portu dinleniyor: ${PORT}`);
-});
 
 // Discord client
 const client = new Client({
@@ -23,12 +14,20 @@ const client = new Client({
   ],
 });
 
+// Express (uptime için)
+const app = express();
+const PORT = process.env.PORT || 3000;
+app.get('/', (req, res) => res.send('Bot Aktif!'));
+app.listen(PORT, () => {
+  console.log(`🌐 Express portu dinleniyor: ${PORT}`);
+});
+
+// Komut sistemi
 client.commands = new Collection();
 const komutlar = [];
 const komutKlasoru = './commands';
 
 console.log('⚙️ Komutlar yükleniyor...');
-
 try {
   const komutDosyalari = fs.readdirSync(komutKlasoru).filter(f => f.endsWith('.js'));
 
@@ -74,6 +73,11 @@ client.on('interactionCreate', async interaction => {
     console.error(`❌ Komut hatası: ${err}`);
     await interaction.reply({ content: '❌ Komut çalıştırılamadı.', ephemeral: true });
   }
+});
+
+// Mesaj komutları
+client.on('messageCreate', message => {
+  require('./events/messageCreate').execute(message);
 });
 
 // Hata yakalayıcılar
