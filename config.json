@@ -1,8 +1,8 @@
 {
   "groupId": 33389098,
-  "verifyRoleId": "1399254986348560526", // Herkesin aldığı rol
-  "channelId": "1394408440478044302", // Sadece burada çalışır
-  "logChannelId": "1403286303335776347", // Loglar buraya
+  "verifyRoleId": "1399254986348560526", 
+  "channelId": "1394408440478044302", 
+  "logChannelId": "1403286303335776347", 
   "roleBindings": {
     "2": "1394407488241012867",
     "3": "1394407488241012867"
