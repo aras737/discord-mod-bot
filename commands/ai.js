@@ -1,30 +1,30 @@
 const { SlashCommandBuilder } = require('discord.js');
-const fs = require('fs');
+
+const knowledgeBase = {
+  "merhaba": "Merhaba! Size nasıl yardımcı olabilirim? 👋",
+  "nasılsın": "İyiyim, teşekkür ederim! Sen nasılsın? 😊",
+  "hava nasıl": "Bugün hava çok güzel görünüyor! ☀️",
+  "teşekkürler": "Rica ederim! Her zaman buradayım. 🤗",
+  "sa": "Aleyküm selam! Nasıl yardımcı olabilirim? 🙌"
+};
 
 module.exports = {
   data: new SlashCommandBuilder()
     .setName('ai')
     .setDescription('Yapay zeka ile sohbet eder.')
-    .addStringOption(option => option.setName('mesaj').setDescription('Sorunu yaz').setRequired(true)),
+    .addStringOption(option =>
+      option.setName('mesaj')
+        .setDescription('Sorunuzu yazınız')
+        .setRequired(true)
+    ),
 
   async execute(interaction) {
     await interaction.deferReply();
 
-    // JSON dosyasını güvenle oku
-    let kbData;
-    try {
-      const kbRaw = fs.readFileSync('./kg.json', 'utf-8');
-      kbData = JSON.parse(kbRaw);
-    } catch (e) {
-      console.error('JSON yüklenirken hata:', e);
-      return interaction.editReply('❌ Bilgi tabanı yüklenemedi!');
-    }
+    const userMessage = interaction.options.getString('mesaj').toLowerCase().trim();
 
-    const userMessage = interaction.options.getString('mesaj');
+    const answer = knowledgeBase[userMessage] || "Üzgünüm, bunu anlayamadım. Daha sonra geliştirebilirim. 🤖";
 
-    // Burada AI işlemi yapacaksan devam et...
-
-    // Örnek cevap
-    await interaction.editReply(`AI cevap: ${userMessage} 👏`);
-  },
+    await interaction.editReply(answer);
+  }
 };
