@@ -74,14 +74,19 @@ client.on('interactionCreate', async interaction => {
   }
 });
 
-// Mesaj komutları (örnek: küfür engel)
-client.on('messageCreate', message => {
+// Mesaj komutları (küfür edenleri otomatik banla)
+client.on('messageCreate', async message => {
   if (message.author.bot) return;
 
   const kufurler = ['salak', 'aptal', 'malamk', 'aq', 'orospu', 'sik', 'piç', 'anan', 'yarrak', 'mk']; // genişletilebilir
   if (kufurler.some(k => message.content.toLowerCase().includes(k))) {
-    message.delete().catch(() => {});
-    message.channel.send('🚫 Bu sunucuda küfür yasaktır!');
+    try {
+      await message.delete().catch(() => {});
+      await message.member.ban({ reason: 'Küfür ettiği için otomatik banlandı.' });
+      console.log(`⚠️ ${message.author.tag} küfür ettiği için banlandı.`);
+    } catch (err) {
+      console.error('❌ Ban atılırken hata:', err);
+    }
   }
 });
 
