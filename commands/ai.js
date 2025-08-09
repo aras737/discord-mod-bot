@@ -17,37 +17,44 @@ module.exports = {
     .addStringOption(opt => opt.setName('soru').setDescription('Sorunu yaz').setRequired(true)),
 
   async execute(interaction) {
-    await interaction.deferReply({ ephemeral: false }); // alkış reaksiyonu için public cevap
-    const question = interaction.options.getString('soru').toLowerCase().trim();
-    const kb = loadKB();
+    await interaction.deferReply({ ephemeral: false });
+    try {
+      const question = interaction.options.getString('soru').toLowerCase().trim();
+      const kb = loadKB();
 
-    // Basit eşleme: içeren anahtarları sırayla kontrol et
-    let foundKey = null;
-    for (const key of Object.keys(kb)) {
-      const k = key.toLowerCase();
-      if (question.includes(k) || k.includes(question) || question === k) {
-        foundKey = key;
-        break;
+      // Basit eşleme: en iyi anahtarı bul (tam eşleşme veya içeriyorsa)
+      let foundKey = null;
+      for (const key of Object.keys(kb)) {
+        const k = key.toLowerCase();
+        if (question === k || question.includes(k) || k.includes(question)) {
+          foundKey = key;
+          break;
+        }
       }
+
+      if (!foundKey) {
+        return interaction.editReply({ content: `Üzgünüm, bunu bilmiyorum. Yöneticiler KB'ye ekleyebilir.` });
+      }
+
+      const answer = kb[foundKey];
+      const embed = new EmbedBuilder()
+        .setTitle('🤖 AI Cevap')
+        .setDescription(answer)
+        .setColor('Blurple')
+        .setFooter({ text: `KB anahtar: ${foundKey}` })
+        .setTimestamp();
+
+      await interaction.editReply({ embeds: [embed] });
+
+      // fetchReply ile son gönderilen mesajı al, sonra reaksiyon ekle
+      const replyMsg = await interaction.fetchReply();
+      if (replyMsg && replyMsg.react) {
+        await replyMsg.react('👏').catch(() => {});
+      }
+    } catch (err) {
+      console.error('ai komut hatası:', err);
+      if (!interaction.replied) await interaction.reply({ content: '❌ Bir hata oluştu.', ephemeral: true });
+      else await interaction.editReply({ content: '❌ Bir hata oluştu.' });
     }
-
-    if (!foundKey) {
-      await interaction.editReply({
-        content: `Üzgünüm, bunu bilmiyorum. Eğer izin verirsen yöneticiler KB'ye ekleyebilir.`,
-      });
-      return;
-    }
-
-    const answer = kb[foundKey];
-    const embed = new EmbedBuilder()
-      .setTitle('🤖 AI Cevap')
-      .setDescription(answer)
-      .setColor('Blurple')
-      .setFooter({ text: `KB anahtar: ${foundKey}` })
-      .setTimestamp();
-
-    const replyMsg = await interaction.editReply({ embeds: [embed] });
-    // Alkış reaksiyonu ekle
-    try { await replyMsg.react('👏'); } catch (e) { /* reaksiyon eklenemezse görmezden gel */ }
   }
 };
