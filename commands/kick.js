@@ -1,9 +1,11 @@
+const { SlashCommandBuilder } = require('discord.js');
+
 module.exports = {
   data: new SlashCommandBuilder()
     .setName('kick')
     .setDescription('Bir üyeyi sunucudan atar.')
     .addUserOption(option => option.setName('kullanıcı').setDescription('Atılacak kullanıcı').setRequired(true)),
-  
+
   async execute(interaction) {
     const user = interaction.options.getUser('kullanıcı');
     const member = interaction.guild.members.cache.get(user.id);
@@ -18,7 +20,7 @@ module.exports = {
 
     try {
       await member.kick();
-      
+
       if (interaction.replied || interaction.deferred) {
         await interaction.followUp({ content: `${user.tag} sunucudan atıldı!`, ephemeral: true });
       } else {
