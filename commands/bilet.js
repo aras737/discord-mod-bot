@@ -2,7 +2,7 @@ const { SlashCommandBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle } = re
 
 module.exports = {
   data: new SlashCommandBuilder()
-    .setName('ticketpanel')
+    .setName('Bilet')
     .setDescription('Bilet oluşturma panelini gönderir.'),
 
   async execute(interaction) {
