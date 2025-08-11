@@ -60,7 +60,7 @@ client.on('interactionCreate', async interaction => {
     if (interaction.commandName === 'bilet') {
       const embed = new EmbedBuilder()
         .setTitle('🎫 Destek Sistemi')
-        .setDescription('Aşağıdaki butona tıklayarak bilet açabilirsiniz.')
+        .setDescription('Merhaba! Discord,Roblox oyunu vb Sorunlarımız için. Aşağıdaki butona tıklayarak bilet açabilirsiniz.')
         .setColor('Blue');
 
       const buton = new ButtonBuilder()
