@@ -3,35 +3,46 @@ const { SlashCommandBuilder } = require('discord.js');
 module.exports = {
   data: new SlashCommandBuilder()
     .setName('kick')
-    .setDescription('Bir kullanıcıyı sunucudan atar.')
-    .addUserOption(option => option.setName('kullanici').setDescription('Atılacak kullanıcı').setRequired(true)),
-  
+    .setDescription('Bir üyeyi sunucudan atar.')
+    .addUserOption(option => 
+      option.setName('kullanici')
+        .setDescription('Atılacak kullanıcıyı seçin')
+        .setRequired(true)
+    )
+    .addStringOption(option =>
+      option.setName('sebep')
+        .setDescription('Atılma sebebi')
+        .setRequired(false)
+    ),
+
   async execute(interaction) {
     const user = interaction.options.getUser('kullanici');
+    const sebep = interaction.options.getString('sebep') || 'Belirtilmedi';
     const member = interaction.guild.members.cache.get(user.id);
-    
-    if (!member) return interaction.reply({ content: 'Kullanıcı bulunamadı.', flags: 64 });
 
-    if (!member.kickable) return interaction.reply({ content: 'Bu kullanıcıyı atamam.', flags: 64 });
+    if (!member) {
+      return interaction.reply({ content: 'Bu kullanıcı sunucuda değil.', flags: 64 });
+    }
+
+    if (!member.kickable) {
+      return interaction.reply({ content: 'Bu kullanıcıyı atamam.', flags: 64 });
+    }
 
     try {
       // Kullanıcıya DM gönder
-      await user.send(`Merhaba, **${interaction.guild.name}** sunucusundan atıldınız.`).catch(() => {
-        // DM engelliyse sessizce geç
-      });
+      await user.send(`Sunucudan atıldınız. Sebep: ${sebep}`).catch(() => {});
 
-      // Sunucudan at
-      await member.kick();
+      // Üyeyi at
+      await member.kick(sebep);
 
-      // Komut sahibine başarı mesajı gönder
-      await interaction.reply({ content: `${user.tag} başarıyla sunucudan atıldı ve DM gönderildi.`, flags: 64 });
-
+      // Etkileşim yanıtı gönder (fetchReply yerine withResponse kullandık)
+      await interaction.reply({ content: `${user.tag} başarıyla atıldı. Sebep: ${sebep}`, flags: 64, withResponse: true });
     } catch (error) {
       console.error(error);
-      if (interaction.deferred || interaction.replied) {
-        await interaction.editReply({ content: 'Bir hata oluştu.', flags: 64 });
+      if (interaction.replied || interaction.deferred) {
+        await interaction.followUp({ content: '❌ Bir hata oluştu.', flags: 64 });
       } else {
-        await interaction.reply({ content: 'Bir hata oluştu.', flags: 64 });
+        await interaction.reply({ content: '❌ Bir hata oluştu.', flags: 64 });
       }
     }
   }
