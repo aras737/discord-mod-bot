@@ -1,12 +1,21 @@
-const { SlashCommandBuilder } = require('discord.js');
+const { SlashCommandBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle } = require('discord.js');
 
 module.exports = {
   data: new SlashCommandBuilder()
-    .setName('bilet')
+    .setName('ticketpanel')
     .setDescription('Bilet oluşturma panelini gönderir.'),
 
   async execute(interaction) {
-    await interaction.client.emit('interactionCreate', interaction); 
-    // index.js içinde zaten bilet panelini gönderen kod var
+    const row = new ActionRowBuilder().addComponents(
+      new ButtonBuilder()
+        .setCustomId('ticket-olustur')
+        .setLabel('🎫 Bilet Oluştur')
+        .setStyle(ButtonStyle.Primary)
+    );
+
+    await interaction.reply({
+      content: '📩 Destek talebi oluşturmak için aşağıdaki butona tıklayın:',
+      components: [row]
+    });
   }
 };
