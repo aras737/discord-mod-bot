@@ -1,4 +1,8 @@
-const { Client, GatewayIntentBits, Collection, REST, Routes, PermissionsBitField, ActionRowBuilder, ButtonBuilder, ButtonStyle, ChannelType } = require('discord.js');
+const { 
+  Client, GatewayIntentBits, Collection, REST, Routes, 
+  PermissionsBitField, ActionRowBuilder, ButtonBuilder, ButtonStyle, ChannelType 
+} = require('discord.js');
+
 const express = require('express');
 const fs = require('fs');
 const dotenv = require('dotenv');
@@ -6,68 +10,22 @@ dotenv.config();
 
 const config = require('./config.json');
 
-// **client'ı en önce oluştur**
 const client = new Client({
   intents: [
-    GatewayIntentBits.Guilds,
+    GatewayIntentBits.Guilds, 
     GatewayIntentBits.GuildMessages,
     GatewayIntentBits.MessageContent,
     GatewayIntentBits.GuildMembers,
   ],
 });
 
-// Slash komut tetikleme (client tanımlandıktan sonra)
-client.on('interactionCreate', async interaction => {
-  if (!interaction.isCommand()) return;
-
-  const commandName = interaction.commandName;
-  const memberRoles = interaction.member.roles.cache.map(role => role.name);
-
-  // Kullanıcının rol seviyesini bul
-  let seviye = null;
-  if (memberRoles.some(r => config.roles.ust.includes(r))) seviye = "ust";
-  else if (memberRoles.some(r => config.roles.orta.includes(r))) seviye = "orta";
-  else if (memberRoles.some(r => config.roles.alt.includes(r))) seviye = "alt";
-
-  // Rol seviyesi yoksa izin verme
-  if (!seviye) {
-    return interaction.reply({ content: "🚫 Bu komutu kullanmak için yetkin yok.", flags: 64 });
-  }
-
-  // Rol seviyesine göre komut izni
-  if (!config.commands[seviye].includes(commandName)) {
-    return interaction.reply({ content: "🚫 Bu komut senin yetki seviyene kapalı.", flags: 64 });
-  }
-
-  const command = client.commands.get(commandName);
-  if (!command) return;
-
-  try {
-    await command.execute(interaction);
-  } catch (err) {
-    console.error(`❌ Komut hatası:`, err);
-    if (!interaction.replied) {
-      await interaction.reply({ content: '❌ Komut çalıştırılamadı.', flags: 64 });
-    }
-  }
-});
-
-// Express (uptime için)
-const app = express();
-const PORT = process.env.PORT || 3000;
-app.get('/', (req, res) => res.send('✅ Bot çalışıyor.'));
-app.listen(PORT, () => {
-  console.log(`🌐 Express portu dinleniyor: ${PORT}`);
-});
-
-// Komutlar
+// Komutlar için koleksiyon ve komutları yükleme
 client.commands = new Collection();
 const komutlar = [];
 const komutKlasoru = './commands';
 
 try {
   const komutDosyalari = fs.readdirSync(komutKlasoru).filter(f => f.endsWith('.js'));
-
   for (const file of komutDosyalari) {
     const command = require(`${komutKlasoru}/${file}`);
     if (command.data && command.execute) {
@@ -82,7 +40,14 @@ try {
   console.error('❌ Komutlar yüklenemedi:', err);
 }
 
-// Bot hazır olunca
+// Rastgele isim oluşturucu (ticket sistemi için)
+function rastgeleIsim() {
+  const kelimeler = ["zephyr", "nova", "orbit", "pulse", "quantum", "vortex", "storm", "ember", "echo"];
+  const sayi = Math.floor(Math.random() * 1000);
+  const kelime = kelimeler[Math.floor(Math.random() * kelimeler.length)];
+  return `ticket-${kelime}-${sayi}`;
+}
+
 client.once('ready', async () => {
   console.log(`🤖 Bot aktif: ${client.user.tag}`);
 
@@ -98,14 +63,17 @@ client.once('ready', async () => {
   }
 });
 
-// Interaction sistemi (hem komutlar hem bilet butonları)
 client.on('interactionCreate', async interaction => {
-
-  // 📌 Bilet buton sistemi
+  // Buton etkileşimleri (ticket sistemi)
   if (interaction.isButton()) {
+    // Bilet açma butonu
     if (interaction.customId === 'ticket-olustur') {
+      // Daha önce açık bilet var mı kontrol edebilirsin (isteğe bağlı)
+
+      const kanalIsmi = rastgeleIsim();
+
       const kanal = await interaction.guild.channels.create({
-        name: `ticket-${interaction.user.username}`,
+        name: kanalIsmi,
         type: ChannelType.GuildText,
         permissionOverwrites: [
           {
@@ -114,35 +82,58 @@ client.on('interactionCreate', async interaction => {
           },
           {
             id: interaction.user.id,
-            allow: [PermissionsBitField.Flags.ViewChannel, PermissionsBitField.Flags.SendMessages],
-          }
-        ]
+            allow: [
+              PermissionsBitField.Flags.ViewChannel, 
+              PermissionsBitField.Flags.SendMessages,
+              PermissionsBitField.Flags.ReadMessageHistory
+            ],
+          },
+        ],
       });
 
-      await kanal.send({
-        content: `🎫 ${interaction.user}, destek talebin oluşturuldu.`,
-        components: [
-          new ActionRowBuilder().addComponents(
-            new ButtonBuilder()
-              .setCustomId('ticket-kapat')
-              .setLabel('❌ Bileti Kapat')
-              .setStyle(ButtonStyle.Danger)
-          )
-        ]
+      const kapatButton = new ButtonBuilder()
+        .setCustomId('ticket-kapat')
+        .setLabel('❌ Bileti Kapat')
+        .setStyle(ButtonStyle.Danger);
+
+      const row = new ActionRowBuilder().addComponents(kapatButton);
+
+      await kanal.send({ 
+        content: `${interaction.user}, destek talebin oluşturuldu!`,
+        components: [row]
       });
 
-      return interaction.reply({ content: `✅ Biletin açıldı: ${kanal}`, ephemeral: true });
+      await interaction.reply({ content: `✅ Bilet açıldı: ${kanal}`, ephemeral: true });
+      return;
     }
 
+    // Bilet kapatma butonu
     if (interaction.customId === 'ticket-kapat') {
       await interaction.channel.delete().catch(() => {});
       return;
     }
   }
 
-  // 📌 Slash komutlar
+  // Slash komutları yetki kontrolü ile
   if (interaction.isCommand()) {
-    const command = client.commands.get(interaction.commandName);
+    const commandName = interaction.commandName;
+    const memberRoles = interaction.member.roles.cache.map(r => r.name);
+
+    // Kullanıcının rol seviyesini bul
+    let seviye = null;
+    if (memberRoles.some(r => config.roles.ust.includes(r))) seviye = "ust";
+    else if (memberRoles.some(r => config.roles.orta.includes(r))) seviye = "orta";
+    else if (memberRoles.some(r => config.roles.alt.includes(r))) seviye = "alt";
+
+    if (!seviye) {
+      return interaction.reply({ content: "🚫 Bu komutu kullanmak için yetkin yok.", ephemeral: true });
+    }
+
+    if (!config.commands[seviye].includes(commandName)) {
+      return interaction.reply({ content: "🚫 Bu komut senin yetki seviyene kapalı.", ephemeral: true });
+    }
+
+    const command = client.commands.get(commandName);
     if (!command) return;
 
     try {
@@ -156,20 +147,26 @@ client.on('interactionCreate', async interaction => {
   }
 });
 
-// Mesaj komutları (küfür engel)
+// Küfür engelleme
 client.on('messageCreate', message => {
   if (message.author.bot) return;
 
-  const kufurler = ['salak', 'aptal', 'malamk', 'aq', 'orospu', 'sik', 'piç', 'anan', 'yarrak', 'mk']; // genişletilebilir
+  const kufurler = ['salak', 'aptal', 'malamk', 'aq', 'orospu', 'sik', 'piç', 'anan', 'yarrak', 'mk'];
   if (kufurler.some(k => message.content.toLowerCase().includes(k))) {
     message.delete().catch(() => {});
-    message.channel.send('🚫 Bu sunucuda küfür yasaktır!');
+    message.channel.send('🚫 Bu sunucuda küfür yasaktır!').catch(() => {});
   }
 });
+
+// Express uptime için
+const app = express();
+const PORT = process.env.PORT || 3000;
+app.get('/', (req, res) => res.send('✅ Bot çalışıyor.'));
+app.listen(PORT, () => console.log(`🌐 Express portu dinleniyor: ${PORT}`));
 
 // Hata yakalama
 process.on('uncaughtException', err => console.error('🚨 Uncaught Exception:', err));
 process.on('unhandledRejection', err => console.error('🚨 Unhandled Rejection:', err));
 
-// Giriş
+// Bot giriş
 client.login(process.env.TOKEN);
