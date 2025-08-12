@@ -17,7 +17,7 @@
     "ust": [
       "ban", "kick", "unban", "rolver",
       "uyar", "bilet-yardim", "bilet-olustur",
-      "yardim", "verify", "sunucubilgi", "kurallar", "bot-yönetim"
+      "yardim", "verify", "sunucubilgi", "kurallar", "bot-yonetim"
     ],
     "orta": [
       "kick", "uyar", "bilet-yardim",
