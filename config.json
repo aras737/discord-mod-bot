@@ -8,9 +8,9 @@
     "3": "1394407488241012867"
   },
   "roles": {
-    "ust": ["Grup sahibi", "Admin", "Yönetici"],
-    "orta": ["Moderatör", "Yetkili"],
-    "alt": ["Destek", "Deneme Yetkili"]
+    "ust": ["Grup sahibi", "Holder", "👑 Sunucu Sahibi"],
+    "orta": ["【TAG】★Genel Yetkili", "【TAG】Genel Yetkili Yardımcısı"],
+    "alt": ["bilet yetkilisi", "Deneme Yetkili"]
   },
   "commands": {
     "ust": ["ban", "kick", "unban", "rolver"],
