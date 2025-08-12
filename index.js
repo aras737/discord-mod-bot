@@ -3,8 +3,6 @@ const {
   PermissionsBitField, ActionRowBuilder, ButtonBuilder, ButtonStyle, ChannelType 
 } = require('discord.js');
 
-const { InteractionResponseFlags } = require('discord.js');
-interaction.reply({ content: 'Sadece sana görünüyor.', flags: InteractionResponseFlags.Ephemeral });
 const express = require('express');
 const fs = require('fs');
 const dotenv = require('dotenv');
