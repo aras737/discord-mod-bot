@@ -8,7 +8,7 @@
     "3": "1394407488241012867"
   },
   "roles": {
-    "ust": ["Kurucu", "Admin", "Yönetici"],
+    "ust": ["Grup sahibi", "Admin", "Yönetici"],
     "orta": ["Moderatör", "Yetkili"],
     "alt": ["Destek", "Deneme Yetkili"]
   },
