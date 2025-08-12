@@ -1,29 +1,21 @@
-const allCommands = ['ban', 'kick', 'unban', 'rolver', 'uyar', 'bilet-yardim', 'bilet-olustur', 'yardim', 'verify', 'sunucubilgi', 'kurallar', 'bot-yonetim'];
-
-// Örnek config başlangıcı
-let config = {
-  groupId: 33389098,
-  verifyRoleId: "1399254986348560526",
-  channelId: "1394408440478044302",
-  logChannelId: "1403286303335776347",
-  roleBindings: {
+{
+  "groupId": 33389098,
+  "verifyRoleId": "1399254986348560526",
+  "channelId": "1394408440478044302",
+  "logChannelId": "1403286303335776347",
+  "roleBindings": {
     "2": "1394407488241012867",
     "3": "1394407488241012867"
   },
-  roles: {
-    ust: ["Grup sahibi", "Holder", "👑 Sunucu Sahibi"],
-    orta: ["【TAG】★Genel Yetkili", "【TAG】Genel Yetkili Yardımcısı"],
-    alt: ["bilet yetkilisi", "Deneme Yetkili"],
-    masum: ["LR", "MR", "HR"]
+  "roles": {
+    "ust": ["Grup sahibi", "Holder", "👑 Sunucu Sahibi"],
+    "orta": ["【TAG】★Genel Yetkili", "【TAG】Genel Yetkili Yardımcısı"],
+    "alt": ["bilet yetkilisi", "Deneme Yetkili"],
+    "masum": ["LR", "MR", "HR"]
   },
-  commands: {
-    orta: ["kick", "uyar", "bilet-yardim", "verify", "yardim"],
-    alt: ["bilet-olustur", "yardim", "verify"],
-    masum: ["verify", "yardim", "bilet-yardim"]
+  "commands": {
+    "orta": ["kick", "uyar", "bilet-yardim", "verify", "yardim"],
+    "alt": ["bilet-olustur", "yardim", "verify"],
+    "masum": ["verify", "yardim", "bilet-yardim"]
   }
-};
-
-// Tüm komutları otomatik üst komutlara ekle
-config.commands.ust = allCommands;
-
-console.log(config.commands.ust);
+}
