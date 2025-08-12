@@ -4,6 +4,30 @@ const fs = require('fs');
 const dotenv = require('dotenv');
 dotenv.config();
 
+// Rütbe tablosu (yüksekten düşüğe)
+const rankMap = {
+  "Kurucu": 5,
+  "Yönetici": 4,
+  "Moderatör": 3,
+  "Denetçi": 2,
+  "Destek": 1
+};
+
+// Kullanıcının en yüksek rütbesini bul
+function getUserRankLevel(member) {
+  let highestRankLevel = 0;
+
+  for (const [roleName, rankLevel] of Object.entries(rankMap)) {
+    if (member.roles.cache.some(r => r.name === roleName)) {
+      if (rankLevel > highestRankLevel) {
+        highestRankLevel = rankLevel;
+      }
+    }
+  }
+
+  return highestRankLevel;
+}
+
 // Discord client
 const client = new Client({
   intents: [
