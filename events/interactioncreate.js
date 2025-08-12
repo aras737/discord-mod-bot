@@ -100,6 +100,55 @@ module.exports = {
           }
         }
 
+        client.on('interactionCreate', async interaction => {
+  if (!interaction.isCommand()) return;
+
+  const commandName = interaction.commandName;
+
+  // Sunucu sahibi ise tüm komutlara erişim ver
+  if (interaction.guild && interaction.guild.ownerId === interaction.user.id) {
+    const command = client.commands.get(commandName);
+    if (!command) return;
+
+    try {
+      await command.execute(interaction);
+    } catch (err) {
+      console.error(`❌ Komut çalıştırma hatası (Owner):`, err);
+      if (!interaction.replied) {
+        await interaction.reply({ content: '❌ Komut çalıştırılamadı.', ephemeral: true });
+      }
+    }
+    return; // Owner olduğundan diğer kontrolleri geç
+  }
+
+  // Sunucu sahibi değilse normal yetki kontrolü
+  const memberRoles = interaction.member.roles.cache.map(r => r.name);
+  let seviye = null;
+  if (memberRoles.some(r => config.roles.ust.includes(r))) seviye = "ust";
+  else if (memberRoles.some(r => config.roles.orta.includes(r))) seviye = "orta";
+  else if (memberRoles.some(r => config.roles.alt.includes(r))) seviye = "alt";
+
+  if (!seviye) {
+    return interaction.reply({ content: "🚫 Bu komutu kullanmak için yetkin yok.", ephemeral: true });
+  }
+
+  if (!config.commands[seviye].includes(commandName)) {
+    return interaction.reply({ content: "🚫 Bu komut senin yetki seviyene kapalı.", ephemeral: true });
+  }
+
+  const command = client.commands.get(commandName);
+  if (!command) return;
+
+  try {
+    await command.execute(interaction);
+  } catch (err) {
+    console.error(`❌ Komut hatası:`, err);
+    if (!interaction.replied) {
+      await interaction.reply({ content: '❌ Komut çalıştırılamadı.', ephemeral: true });
+    }
+  }
+});
+          
         // 📣 Duyuru Komutu
         else if (commandName === 'duyuru') {
           if (!interaction.member.permissions.has(PermissionsBitField.Flags.ManageMessages))
