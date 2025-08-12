@@ -14,6 +14,17 @@ client.on('interactionCreate', async interaction => {
   const command = client.commands.get(interaction.commandName);
   if (!command) return;
 
+  client.on('interactionCreate', async interaction => {
+    if (!interaction.isChatInputCommand()) return;
+
+    if (interaction.commandName === 'botuyonet') {
+        await interaction.reply({
+            content: 'Sadece sana görünüyor.',
+            flags: 64 // InteractionResponseFlags.Ephemeral yerine 64
+        });
+    }
+});
+  
   // Kullanıcı rütbesini al
   const userRank = getUserRankLevel(interaction.member);
 
