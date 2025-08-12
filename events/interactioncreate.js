@@ -8,6 +8,31 @@ const {
   ButtonStyle,
 } = require('discord.js');
 
+client.on('interactionCreate', async interaction => {
+  if (!interaction.isCommand()) return;
+
+  const command = client.commands.get(interaction.commandName);
+  if (!command) return;
+
+  // Kullanıcı rütbesini al
+  const userRank = getUserRankLevel(interaction.member);
+
+  // Eğer komutun minimum rütbe seviyesi varsa kontrol et
+  if (command.minRank && userRank < command.minRank) {
+    return interaction.reply({ 
+      content: '🚫 Bu komutu kullanmak için yeterli yetkiye sahip değilsin.', 
+      ephemeral: true 
+    });
+  }
+
+  try {
+    await command.execute(interaction);
+  } catch (err) {
+    console.error(`❌ Komut hatası:`, err);
+    await interaction.reply({ content: '❌ Komut çalıştırılamadı.', ephemeral: true });
+  }
+});
+
 module.exports = {
   name: 'interactionCreate',
   async execute(interaction, client) {
