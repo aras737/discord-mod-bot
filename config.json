@@ -11,12 +11,13 @@
     "ust": ["Grup sahibi", "Holder", "👑 Sunucu Sahibi"],
     "orta": ["【TAG】★Genel Yetkili", "【TAG】Genel Yetkili Yardımcısı"],
     "alt": ["bilet yetkilisi", "Deneme Yetkili"]
+    "masum": ["LR", "MR", "HR"]
   },
   "commands": {
     "ust": [
       "ban", "kick", "unban", "rolver",
       "uyar", "bilet-yardim", "bilet-olustur",
-      "yardim", "verify"
+      "yardim", "verify", "sunucubilgi"
     ],
     "orta": [
       "kick", "uyar", "bilet-yardim",
