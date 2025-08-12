@@ -51,6 +51,9 @@ function rastgeleIsim() {
 client.once('ready', async () => {
   console.log(`🤖 Bot aktif: ${client.user.tag}`);
 
+  // Burada tüm komut isimlerini "ust" yetkisine otomatik atıyoruz:
+  config.commands.ust = Array.from(client.commands.keys());
+
   const rest = new REST({ version: '10' }).setToken(process.env.TOKEN);
   try {
     await rest.put(
