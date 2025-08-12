@@ -6,7 +6,17 @@ dotenv.config();
 
 const config = require('./config.json');
 
-// Slash komut tetikleme
+// **client'ı en önce oluştur**
+const client = new Client({
+  intents: [
+    GatewayIntentBits.Guilds,
+    GatewayIntentBits.GuildMessages,
+    GatewayIntentBits.MessageContent,
+    GatewayIntentBits.GuildMembers,
+  ],
+});
+
+// Slash komut tetikleme (client tanımlandıktan sonra)
 client.on('interactionCreate', async interaction => {
   if (!interaction.isCommand()) return;
 
@@ -36,18 +46,10 @@ client.on('interactionCreate', async interaction => {
     await command.execute(interaction);
   } catch (err) {
     console.error(`❌ Komut hatası:`, err);
-    await interaction.reply({ content: '❌ Komut çalıştırılamadı.', flags: 64 });
+    if (!interaction.replied) {
+      await interaction.reply({ content: '❌ Komut çalıştırılamadı.', flags: 64 });
+    }
   }
-});
-
-// Discord client
-const client = new Client({
-  intents: [
-    GatewayIntentBits.Guilds,
-    GatewayIntentBits.GuildMessages,
-    GatewayIntentBits.MessageContent,
-    GatewayIntentBits.GuildMembers,
-  ],
 });
 
 // Express (uptime için)
