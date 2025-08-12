@@ -12,7 +12,7 @@
     "orta": ["【TAG】★Genel Yetkili", "【TAG】Genel Yetkili Yardımcısı"],
     "alt": ["bilet yetkilisi", "Deneme Yetkili"]
   },
-  ""commands": {
+  "commands": {
   "ust": [
     "ban", "kick", "unban", "rolver",
     "uyar", "bilet-yardim", "bilet-olustur",
