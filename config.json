@@ -12,9 +12,20 @@
     "orta": ["【TAG】★Genel Yetkili", "【TAG】Genel Yetkili Yardımcısı"],
     "alt": ["bilet yetkilisi", "Deneme Yetkili"]
   },
-  "commands": {
-    "ust": ["ban", "kick", "unban", "rolver"],
-    "orta": ["kick", "uyar", "bilet-yardim"],
-    "alt": ["bilet-olustur", "yardim"]
-  }
+  ""commands": {
+  "ust": [
+    "ban", "kick", "unban", "rolver",
+    "uyar", "bilet-yardim", "bilet-olustur",
+    "yardim", "verify"
+  ],
+  "orta": [
+    "kick", "uyar", "bilet-yardim",
+    "verify", "yardim"
+  ],
+  "alt": [
+    "bilet-olustur", "yardim", "verify"
+  ],
+  "masum": [
+    "verify", "yardim", "bilet-yardim"
+  ]
 }
