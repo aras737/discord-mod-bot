@@ -6,5 +6,18 @@
   "roleBindings": {
     "2": "1394407488241012867",
     "3": "1394407488241012867"
+ {
+  "roles": {
+    "ust": ["Kurucu", "Admin", "Yönetici"],
+    "orta": ["Moderatör", "Yetkili"],
+    "alt": ["Destek", "Deneme Yetkili"]
+  },
+  "commands": {
+    "ust": ["ban", "kick", "unban", "rolver"],
+    "orta": ["kick", "uyar", "bilet-yardim"],
+    "alt": ["bilet-olustur", "yardim"]
+  }
+}
+  
   }
 }
