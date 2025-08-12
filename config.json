@@ -1,12 +1,12 @@
 {
   "groupId": 33389098,
-  "verifyRoleId": "1399254986348560526", 
-  "channelId": "1394408440478044302", 
-  "logChannelId": "1403286303335776347", 
+  "verifyRoleId": "1399254986348560526",
+  "channelId": "1394408440478044302",
+  "logChannelId": "1403286303335776347",
   "roleBindings": {
     "2": "1394407488241012867",
     "3": "1394407488241012867"
- {
+  },
   "roles": {
     "ust": ["Kurucu", "Admin", "Yönetici"],
     "orta": ["Moderatör", "Yetkili"],
@@ -16,8 +16,5 @@
     "ust": ["ban", "kick", "unban", "rolver"],
     "orta": ["kick", "uyar", "bilet-yardim"],
     "alt": ["bilet-olustur", "yardim"]
-  }
-}
-  
   }
 }
