@@ -4,29 +4,41 @@ const fs = require('fs');
 const dotenv = require('dotenv');
 dotenv.config();
 
-// Rütbe tablosu (yüksekten düşüğe)
-const rankMap = {
-  "Kurucu": 5,
-  "Yönetici": 4,
-  "Moderatör": 3,
-  "Denetçi": 2,
-  "Destek": 1
-};
+const config = require('./config.json');
 
-// Kullanıcının en yüksek rütbesini bul
-function getUserRankLevel(member) {
-  let highestRankLevel = 0;
+// Slash komut tetikleme
+client.on('interactionCreate', async interaction => {
+  if (!interaction.isCommand()) return;
 
-  for (const [roleName, rankLevel] of Object.entries(rankMap)) {
-    if (member.roles.cache.some(r => r.name === roleName)) {
-      if (rankLevel > highestRankLevel) {
-        highestRankLevel = rankLevel;
-      }
-    }
+  const commandName = interaction.commandName;
+  const memberRoles = interaction.member.roles.cache.map(role => role.name);
+
+  // Kullanıcının rol seviyesini bul
+  let seviye = null;
+  if (memberRoles.some(r => config.roles.ust.includes(r))) seviye = "ust";
+  else if (memberRoles.some(r => config.roles.orta.includes(r))) seviye = "orta";
+  else if (memberRoles.some(r => config.roles.alt.includes(r))) seviye = "alt";
+
+  // Rol seviyesi yoksa izin verme
+  if (!seviye) {
+    return interaction.reply({ content: "🚫 Bu komutu kullanmak için yetkin yok.", flags: 64 });
   }
 
-  return highestRankLevel;
-}
+  // Rol seviyesine göre komut izni
+  if (!config.commands[seviye].includes(commandName)) {
+    return interaction.reply({ content: "🚫 Bu komut senin yetki seviyene kapalı.", flags: 64 });
+  }
+
+  const command = client.commands.get(commandName);
+  if (!command) return;
+
+  try {
+    await command.execute(interaction);
+  } catch (err) {
+    console.error(`❌ Komut hatası:`, err);
+    await interaction.reply({ content: '❌ Komut çalıştırılamadı.', flags: 64 });
+  }
+});
 
 // Discord client
 const client = new Client({
