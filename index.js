@@ -5,6 +5,7 @@ const {
 
 const express = require('express');
 const fs = require('fs');
+const path = require('path');
 const dotenv = require('dotenv');
 dotenv.config();
 
@@ -51,7 +52,7 @@ function rastgeleIsim() {
 client.once('ready', async () => {
   console.log(`🤖 Bot aktif: ${client.user.tag}`);
 
-  // Burada tüm komut isimlerini "ust" yetkisine otomatik atıyoruz:
+  // Üst yetkiye tüm komutları ekle
   config.commands.ust = Array.from(client.commands.keys());
 
   const rest = new REST({ version: '10' }).setToken(process.env.TOKEN);
@@ -69,10 +70,7 @@ client.once('ready', async () => {
 client.on('interactionCreate', async interaction => {
   // Buton etkileşimleri (ticket sistemi)
   if (interaction.isButton()) {
-    // Bilet açma butonu
     if (interaction.customId === 'ticket-olustur') {
-      // Daha önce açık bilet var mı kontrol edebilirsin (isteğe bağlı)
-
       const kanalIsmi = rastgeleIsim();
 
       const kanal = await interaction.guild.channels.create({
@@ -110,19 +108,17 @@ client.on('interactionCreate', async interaction => {
       return;
     }
 
-    // Bilet kapatma butonu
     if (interaction.customId === 'ticket-kapat') {
       await interaction.channel.delete().catch(() => {});
       return;
     }
   }
 
-  // Slash komutları yetki kontrolü ile
+  // Slash komutları yetki kontrolü
   if (interaction.isCommand()) {
     const commandName = interaction.commandName;
     const memberRoles = interaction.member.roles.cache.map(r => r.name);
 
-    // Kullanıcının rol seviyesini bul
     let seviye = null;
     if (memberRoles.some(r => config.roles.ust.includes(r))) seviye = "ust";
     else if (memberRoles.some(r => config.roles.orta.includes(r))) seviye = "orta";
@@ -153,7 +149,6 @@ client.on('interactionCreate', async interaction => {
 // Küfür engelleme
 client.on('messageCreate', message => {
   if (message.author.bot) return;
-
   const kufurler = ['salak', 'aptal', 'malamk', 'aq', 'orospu', 'sik', 'piç', 'anan', 'yarrak', 'mk'];
   if (kufurler.some(k => message.content.toLowerCase().includes(k))) {
     message.delete().catch(() => {});
@@ -161,11 +156,44 @@ client.on('messageCreate', message => {
   }
 });
 
-// Express uptime için
+// ---------------- WEB PANEL ----------------
 const app = express();
 const PORT = process.env.PORT || 3000;
-app.get('/', (req, res) => res.send('✅ Bot çalışıyor.'));
-app.listen(PORT, () => console.log(`🌐 Express portu dinleniyor: ${PORT}`));
+
+// Panel sayfası
+app.get('/', (req, res) => {
+  res.sendFile(path.join(__dirname, 'panel.html'));
+});
+
+// Web panel komutları
+app.get('/action/:cmd', async (req, res) => {
+  const cmd = req.params.cmd.toLowerCase();
+  const allowed = Array.from(client.commands.keys());
+
+  if (!allowed.includes(cmd)) {
+    return res.status(400).send(`Geçersiz komut: ${cmd}`);
+  }
+
+  const logChannel = client.channels.cache.get(config.logChannelId);
+  if (logChannel) logChannel.send(`🌐 Web Panel: **${cmd}** komutu çalıştırıldı.`);
+
+  // Discord slash komutunu webden çalıştır
+  try {
+    const fakeInteraction = {
+      commandName: cmd,
+      member: { roles: { cache: [{ name: config.roles.ust[0] }] } }, // ust yetki veriyoruz
+      reply: async (msg) => console.log(`Web Panel Yanıt:`, msg),
+      isCommand: () => true
+    };
+    await client.commands.get(cmd).execute(fakeInteraction);
+    res.send(`✅ ${cmd} komutu başarıyla çalıştırıldı.`);
+  } catch (err) {
+    console.error(`❌ Web Panel komut hatası:`, err);
+    res.status(500).send(`❌ Komut hatası: ${err.message}`);
+  }
+});
+
+app.listen(PORT, () => console.log(`🌐 Web panel portu dinleniyor: ${PORT}`));
 
 // Hata yakalama
 process.on('uncaughtException', err => console.error('🚨 Uncaught Exception:', err));
