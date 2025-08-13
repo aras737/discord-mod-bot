@@ -5,7 +5,6 @@ const {
 
 const express = require('express');
 const fs = require('fs');
-const path = require('path');
 const dotenv = require('dotenv');
 dotenv.config();
 
@@ -52,7 +51,7 @@ function rastgeleIsim() {
 client.once('ready', async () => {
   console.log(`🤖 Bot aktif: ${client.user.tag}`);
 
-  // Üst yetkiye tüm komutları ekle
+  // Tüm komut isimlerini "ust" yetkisine otomatik atıyoruz
   config.commands.ust = Array.from(client.commands.keys());
 
   const rest = new REST({ version: '10' }).setToken(process.env.TOKEN);
@@ -156,44 +155,19 @@ client.on('messageCreate', message => {
   }
 });
 
-// ---------------- WEB PANEL ----------------
+// Express server ve web panel linki
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-// Panel sayfası
-app.get('/', (req, res) => {
-  res.sendFile(path.join(__dirname, 'panel.html'));
+app.get('/', (req, res) => res.send('✅ Bot çalışıyor.'));
+app.get('/panel', (req, res) => res.send('🛠 Yönetim Paneli - Buraya HTML arayüz eklenebilir.'));
+
+// Render URL veya localhost
+const siteUrl = process.env.RENDER_EXTERNAL_URL || `http://localhost:${PORT}`;
+app.listen(PORT, () => {
+  console.log(`🌐 Express portu dinleniyor: ${PORT}`);
+  console.log(`📌 Yönetim paneli: ${siteUrl}/panel`);
 });
-
-// Web panel komutları
-app.get('/action/:cmd', async (req, res) => {
-  const cmd = req.params.cmd.toLowerCase();
-  const allowed = Array.from(client.commands.keys());
-
-  if (!allowed.includes(cmd)) {
-    return res.status(400).send(`Geçersiz komut: ${cmd}`);
-  }
-
-  const logChannel = client.channels.cache.get(config.logChannelId);
-  if (logChannel) logChannel.send(`🌐 Web Panel: **${cmd}** komutu çalıştırıldı.`);
-
-  // Discord slash komutunu webden çalıştır
-  try {
-    const fakeInteraction = {
-      commandName: cmd,
-      member: { roles: { cache: [{ name: config.roles.ust[0] }] } }, // ust yetki veriyoruz
-      reply: async (msg) => console.log(`Web Panel Yanıt:`, msg),
-      isCommand: () => true
-    };
-    await client.commands.get(cmd).execute(fakeInteraction);
-    res.send(`✅ ${cmd} komutu başarıyla çalıştırıldı.`);
-  } catch (err) {
-    console.error(`❌ Web Panel komut hatası:`, err);
-    res.status(500).send(`❌ Komut hatası: ${err.message}`);
-  }
-});
-
-app.listen(PORT, () => console.log(`🌐 Web panel portu dinleniyor: ${PORT}`));
 
 // Hata yakalama
 process.on('uncaughtException', err => console.error('🚨 Uncaught Exception:', err));
