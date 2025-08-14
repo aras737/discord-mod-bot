@@ -1,74 +1,30 @@
-const { SlashCommandBuilder } = require("discord.js");
+const { SlashCommandBuilder, EmbedBuilder } = require("discord.js");
 const fs = require("fs");
-const fetch = require("node-fetch");
 
-let verifiedData = {};
-if (fs.existsSync("./verified.json")) {
-    verifiedData = JSON.parse(fs.readFileSync("./verified.json", "utf8"));
+let codes = {};
+if (fs.existsSync("./codes.json")) {
+    codes = JSON.parse(fs.readFileSync("./codes.json", "utf8"));
 }
 
 module.exports = {
     data: new SlashCommandBuilder()
         .setName("verify")
-        .setDescription("Roblox doğrulama sistemi")
-        .addStringOption(option => 
-            option.setName("username")
-            .setDescription("Roblox kullanıcı adını gir")
-            .setRequired(true)
-        ),
+        .setDescription("Doğrulama kodu al"),
     async execute(interaction) {
-        const robloxUsername = interaction.options.getString("username");
         const userId = interaction.user.id;
-        const now = Date.now();
 
-        // Mevcut kodu kontrol et
-        let code = null;
-        if (verifiedData[userId] && verifiedData[userId].expiresAt > now) {
-            code = verifiedData[userId].code;
-        } else {
-            // Yeni kod oluştur
-            code = Math.floor(1000 + Math.random() * 9000);
-            verifiedData[userId] = {
-                username: robloxUsername,
-                code: code,
-                expiresAt: now + 2 * 60 * 1000 // 2 dakika
-            };
-            fs.writeFileSync("./verified.json", JSON.stringify(verifiedData, null, 4));
-        }
+        // Yeni kod üret
+        const code = "TKA " + Math.floor(1000 + Math.random() * 9000);
+        const expiresAt = Date.now() + 2 * 60 * 1000; // 2 dakika
 
-        try {
-            // Roblox kullanıcı ID al
-            const resUser = await fetch(`https://api.roblox.com/users/get-by-username?username=${robloxUsername}`);
-            const userData = await resUser.json();
+        codes[userId] = { code, expiresAt };
+        fs.writeFileSync("./codes.json", JSON.stringify(codes, null, 4));
 
-            if (userData.errorMessage) {
-                return interaction.reply({ content: "Geçersiz Roblox kullanıcı adı!", ephemeral: true });
-            }
+        const embed = new EmbedBuilder()
+            .setTitle("Doğrulama Kodu")
+            .setDescription(`Kodunuz: **${code}**\nBu kod **2 dakika** geçerli.`)
+            .setColor("Green");
 
-            const userIdRoblox = userData.Id;
-
-            // Açıklama al
-            const resDesc = await fetch(`https://users.roblox.com/v1/users/${userIdRoblox}`);
-            const descData = await resDesc.json();
-            const description = descData.description || "";
-
-            // Kod var mı kontrol et
-            if (description.includes(code.toString())) {
-                // Doğrulandı
-                const role = interaction.guild.roles.cache.find(r => r.name === "Verified");
-                if (role) await interaction.member.roles.add(role);
-
-                delete verifiedData[userId];
-                fs.writeFileSync("./verified.json", JSON.stringify(verifiedData, null, 4));
-
-                return interaction.reply({ content: "Başarıyla doğrulandın! ✅" });
-            } else {
-                return interaction.reply({ content: `Profil açıklamasında doğrulama kodu bulunamadı.\nKodun: **${code}**\nAçıklamana ekledikten sonra tekrar /verify ${robloxUsername} yaz.` });
-            }
-
-        } catch (err) {
-            console.log(err);
-            return interaction.reply({ content: "Doğrulama sırasında bir hata oluştu!", ephemeral: true });
-        }
+        await interaction.reply({ embeds: [embed], ephemeral: true });
     }
 };
