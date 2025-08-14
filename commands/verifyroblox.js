@@ -19,24 +19,25 @@ module.exports = {
     async execute(interaction) {
         const robloxUsername = interaction.options.getString("username");
         const userId = interaction.user.id;
+        const now = Date.now();
 
-        // Kod var mı ve süresi dolmamış mı kontrol et
-        const existing = verifiedData[userId];
-        if (existing && existing.expiresAt > Date.now()) {
-            return interaction.reply({ content: `Kodun hâlâ geçerli! Roblox açıklamana ekle: **${existing.code}**\nSüre dolmadan tekrar kontrol edebilirsin.`, ephemeral: true });
+        // Mevcut kodu kontrol et
+        let code = null;
+        if (verifiedData[userId] && verifiedData[userId].expiresAt > now) {
+            code = verifiedData[userId].code;
+        } else {
+            // Yeni kod oluştur
+            code = Math.floor(1000 + Math.random() * 9000);
+            verifiedData[userId] = {
+                username: robloxUsername,
+                code: code,
+                expiresAt: now + 2 * 60 * 1000 // 2 dakika
+            };
+            fs.writeFileSync("./verified.json", JSON.stringify(verifiedData, null, 4));
         }
 
-        // Yeni kod oluştur
-        const code = Math.floor(1000 + Math.random() * 9000); // 4 haneli
-        verifiedData[userId] = {
-            username: robloxUsername,
-            code: code,
-            expiresAt: Date.now() + 2 * 60 * 1000 // 2 dakika
-        };
-        fs.writeFileSync("./verified.json", JSON.stringify(verifiedData, null, 4));
-
-        // Kod kontrolü
         try {
+            // Roblox kullanıcı ID al
             const resUser = await fetch(`https://api.roblox.com/users/get-by-username?username=${robloxUsername}`);
             const userData = await resUser.json();
 
@@ -45,10 +46,13 @@ module.exports = {
             }
 
             const userIdRoblox = userData.Id;
+
+            // Açıklama al
             const resDesc = await fetch(`https://users.roblox.com/v1/users/${userIdRoblox}`);
             const descData = await resDesc.json();
             const description = descData.description || "";
 
+            // Kod var mı kontrol et
             if (description.includes(code.toString())) {
                 // Doğrulandı
                 const role = interaction.guild.roles.cache.find(r => r.name === "Verified");
@@ -59,7 +63,7 @@ module.exports = {
 
                 return interaction.reply({ content: "Başarıyla doğrulandın! ✅" });
             } else {
-                return interaction.reply({ content: `Doğrulama kodun: **${code}**\nAçıklamana ekledikten sonra tekrar /verify ${robloxUsername} yaz.` });
+                return interaction.reply({ content: `Profil açıklamasında doğrulama kodu bulunamadı.\nKodun: **${code}**\nAçıklamana ekledikten sonra tekrar /verify ${robloxUsername} yaz.` });
             }
 
         } catch (err) {
