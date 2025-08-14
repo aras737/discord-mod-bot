@@ -3,180 +3,53 @@ const {
   EmbedBuilder,
   ChannelType,
   InteractionType,
-  ActionRowBuilder,
-  ButtonBuilder,
-  ButtonStyle,
 } = require('discord.js');
-
-client.on('interactionCreate', async interaction => {
-  if (!interaction.isCommand()) return;
-
-  const command = client.commands.get(interaction.commandName);
-  if (!command) return;
-
-  client.on('interactionCreate', async interaction => {
-    if (!interaction.isChatInputCommand()) return;
-
-    if (interaction.commandName === 'botuyonet') {
-        await interaction.reply({
-            content: 'Sadece sana görünüyor.',
-            flags: 64 // InteractionResponseFlags.Ephemeral yerine 64
-        });
-    }
-});
-  
-  // Kullanıcı rütbesini al
-  const userRank = getUserRankLevel(interaction.member);
-
-  // Eğer komutun minimum rütbe seviyesi varsa kontrol et
-  if (command.minRank && userRank < command.minRank) {
-    return interaction.reply({ 
-      content: '🚫 Bu komutu kullanmak için yeterli yetkiye sahip değilsin.', 
-      ephemeral: true 
-    });
-  }
-
-  try {
-    await command.execute(interaction);
-  } catch (err) {
-    console.error(`❌ Komut hatası:`, err);
-    await interaction.reply({ content: '❌ Komut çalıştırılamadı.', ephemeral: true });
-  }
-});
+const config = require('./config.json'); // Rollerin ve komut yetkilerinin tanımlı olduğu dosya
 
 module.exports = {
   name: 'interactionCreate',
   async execute(interaction, client) {
     try {
-      // ✅ SLASH KOMUTLAR
+      // 📌 SLASH KOMUTLAR
       if (interaction.isChatInputCommand()) {
-        const { commandName } = interaction;
+        const commandName = interaction.commandName;
 
-        // 🔨 Ban Komutu
-        if (commandName === 'ban') {
-          if (!interaction.member.permissions.has(PermissionsBitField.Flags.BanMembers))
-            return interaction.reply({ content: '❌ Ban yetkiniz yok!', ephemeral: true });
-
-          const user = interaction.options.getUser('kullanici');
-          const reason = interaction.options.getString('sebep') || 'Sebep belirtilmedi';
-          if (!user) return interaction.reply({ content: '❌ Kullanıcı seçmelisiniz!', ephemeral: true });
-
-          try {
-            const member = await interaction.guild.members.fetch(user.id);
-            if (!member.bannable)
-              return interaction.reply({ content: '❌ Bu kullanıcıyı banlayamam!', ephemeral: true });
-
-            await member.ban({ reason });
-            try { await user.send(`🚫 ${interaction.guild.name} sunucusundan banlandınız. Sebep: ${reason}`); } catch {}
-            return interaction.reply({ content: `✅ ${user.tag} sunucudan banlandı. Sebep: ${reason}` });
-
-          } catch (err) {
-            console.error('Ban hatası:', err);
-            return interaction.reply({ content: '❌ Ban işlemi başarısız oldu!', ephemeral: true });
-          }
+        // ✅ Sunucu sahibi ise direkt çalıştır
+        if (interaction.guild?.ownerId === interaction.user.id) {
+          const cmd = client.commands.get(commandName);
+          if (cmd) await cmd.execute(interaction);
+          return;
         }
 
-        // 👢 Kick Komutu
-        else if (commandName === 'kick') {
-          if (!interaction.member.permissions.has(PermissionsBitField.Flags.KickMembers))
-            return interaction.reply({ content: '❌ Kick yetkiniz yok!', ephemeral: true });
+        // 📌 Yetki seviyesi belirle
+        const memberRoles = interaction.member.roles.cache.map(r => r.name);
+        let seviye = null;
+        if (memberRoles.some(r => config.roles?.ust?.includes(r))) seviye = "ust";
+        else if (memberRoles.some(r => config.roles?.orta?.includes(r))) seviye = "orta";
+        else if (memberRoles.some(r => config.roles?.alt?.includes(r))) seviye = "alt";
 
-          const user = interaction.options.getUser('kullanici');
-          const reason = interaction.options.getString('sebep') || 'Sebep belirtilmedi';
-          if (!user) return interaction.reply({ content: '❌ Kullanıcı seçmelisiniz!', ephemeral: true });
-
-          try {
-            const member = await interaction.guild.members.fetch(user.id);
-            if (!member.kickable)
-              return interaction.reply({ content: '❌ Bu kullanıcıyı atamam!', ephemeral: true });
-
-            await member.kick(reason);
-            try { await user.send(`⚠️ ${interaction.guild.name} sunucusundan atıldınız. Sebep: ${reason}`); } catch {}
-            return interaction.reply({ content: `✅ ${user.tag} başarıyla atıldı. Sebep: ${reason}` });
-
-          } catch (err) {
-            console.error('Kick hatası:', err);
-            return interaction.reply({ content: '❌ Kick işlemi başarısız oldu!', ephemeral: true });
-          }
+        if (!seviye) {
+          return interaction.reply({ content: "🚫 Bu komutu kullanmak için yetkin yok.", ephemeral: true });
         }
 
-        client.on('interactionCreate', async interaction => {
-  if (!interaction.isCommand()) return;
+        if (!Array.isArray(config.commands?.[seviye]) || !config.commands[seviye].includes(commandName)) {
+          return interaction.reply({ content: "🚫 Bu komut senin yetki seviyene kapalı.", ephemeral: true });
+        }
 
-  const commandName = interaction.commandName;
-
-  // Sunucu sahibi ise tüm komutlara erişim ver
-  if (interaction.guild && interaction.guild.ownerId === interaction.user.id) {
-    const command = client.commands.get(commandName);
-    if (!command) return;
-
-    try {
-      await command.execute(interaction);
-    } catch (err) {
-      console.error(`❌ Komut çalıştırma hatası (Owner):`, err);
-      if (!interaction.replied) {
-        await interaction.reply({ content: '❌ Komut çalıştırılamadı.', ephemeral: true });
-      }
-    }
-    return; // Owner olduğundan diğer kontrolleri geç
-  }
-
-  // Sunucu sahibi değilse normal yetki kontrolü
-  const memberRoles = interaction.member.roles.cache.map(r => r.name);
-  let seviye = null;
-  if (memberRoles.some(r => config.roles.ust.includes(r))) seviye = "ust";
-  else if (memberRoles.some(r => config.roles.orta.includes(r))) seviye = "orta";
-  else if (memberRoles.some(r => config.roles.alt.includes(r))) seviye = "alt";
-
-  if (!seviye) {
-    return interaction.reply({ content: "🚫 Bu komutu kullanmak için yetkin yok.", ephemeral: true });
-  }
-
-  if (!config.commands[seviye].includes(commandName)) {
-    return interaction.reply({ content: "🚫 Bu komut senin yetki seviyene kapalı.", ephemeral: true });
-  }
-
-  const command = client.commands.get(commandName);
-  if (!command) return;
-
-  try {
-    await command.execute(interaction);
-  } catch (err) {
-    console.error(`❌ Komut hatası:`, err);
-    if (!interaction.replied) {
-      await interaction.reply({ content: '❌ Komut çalıştırılamadı.', ephemeral: true });
-    }
-  }
-});
-          
-        // 📣 Duyuru Komutu
-        else if (commandName === 'duyuru') {
-          if (!interaction.member.permissions.has(PermissionsBitField.Flags.ManageMessages))
-            return interaction.reply({ content: '❌ Duyuru için yetkiniz yok!', ephemeral: true });
-
-          const kanal = interaction.options.getChannel('kanal');
-          const mesaj = interaction.options.getString('mesaj');
-          if (!kanal || kanal.type !== ChannelType.GuildText)
-            return interaction.reply({ content: '❌ Geçerli bir metin kanalı seçmelisiniz!', ephemeral: true });
-
-          const embed = new EmbedBuilder()
-            .setTitle('📢 Yeni Duyuru')
-            .setDescription(mesaj)
-            .setColor('Gold')
-            .setFooter({ text: `Duyuru: ${interaction.user.tag}` })
-            .setTimestamp();
-
-          try {
-            await kanal.send({ content: '@everyone', embeds: [embed] });
-            return interaction.reply({ content: `✅ Duyuru gönderildi: ${kanal}`, ephemeral: true });
-          } catch (err) {
-            console.error('Duyuru hatası:', err);
-            return interaction.reply({ content: '❌ Duyuru gönderilemedi.', ephemeral: true });
+        // 📌 Komutu çalıştır
+        const cmd = client.commands.get(commandName);
+        if (!cmd) return;
+        try {
+          await cmd.execute(interaction);
+        } catch (err) {
+          console.error(`❌ Komut hatası:`, err);
+          if (!interaction.replied) {
+            await interaction.reply({ content: '❌ Komut çalıştırılamadı.', ephemeral: true });
           }
         }
       }
 
-      // ✅ TICKET OLUŞTUR (Buton)
+      // 📌 TICKET BUTONU
       else if (interaction.isButton() && interaction.customId === 'ticket_olustur') {
         const existing = interaction.guild.channels.cache.find(c =>
           c.name === `ticket-${interaction.user.id}`
@@ -232,5 +105,5 @@ module.exports = {
         await interaction.reply({ content: '❌ Bir hata oluştu.', ephemeral: true });
       }
     }
-  },
+  }
 };
