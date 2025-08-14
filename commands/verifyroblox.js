@@ -13,7 +13,7 @@ module.exports = {
     async execute(interaction) {
         const userId = interaction.user.id;
 
-        // Yeni kod üret
+        // Kod üret
         const code = "TKA " + Math.floor(1000 + Math.random() * 9000);
         const expiresAt = Date.now() + 2 * 60 * 1000; // 2 dakika
 
