@@ -14,7 +14,7 @@
     "masum": ["LR", "MR", "HR"]
   },
   "commands": {
-    "orta": ["kick", "uyar", "bilet-yardim", "verify", "yardim"],
+    "orta": ["kick", "uyar", "bilet-yardim", "verify", "verify-kontrol", "yardim"],
     "alt": ["bilet-olustur", "yardim", "verify"],
     "masum": ["verify", "yardim", "bilet-yardim"]
   }
