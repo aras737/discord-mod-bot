@@ -1,76 +1,70 @@
-const { SlashCommandBuilder, EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle } = require('discord.js');
-const axios = require('axios');
-const fs = require('fs');
+const { SlashCommandBuilder } = require("discord.js");
+const fs = require("fs");
+const fetch = require("node-fetch");
+
+let verifiedData = {};
+if (fs.existsSync("./verified.json")) {
+    verifiedData = JSON.parse(fs.readFileSync("./verified.json", "utf8"));
+}
 
 module.exports = {
     data: new SlashCommandBuilder()
-        .setName('verify')
-        .setDescription('Roblox hesabınızı doğrular.'),
-
+        .setName("verify")
+        .setDescription("Roblox doğrulama sistemi")
+        .addStringOption(option => 
+            option.setName("username")
+            .setDescription("Roblox kullanıcı adını gir")
+            .setRequired(true)
+        ),
     async execute(interaction) {
+        const robloxUsername = interaction.options.getString("username");
         const userId = interaction.user.id;
-        const verifyData = JSON.parse(fs.readFileSync('./verified.json', 'utf8'));
 
-        // Daha önce doğrulanmış mı?
-        if (verifyData[userId]) {
-            return interaction.reply({ content: '✅ Zaten doğrulanmışsınız!', ephemeral: true });
+        // Kod var mı ve süresi dolmamış mı kontrol et
+        const existing = verifiedData[userId];
+        if (existing && existing.expiresAt > Date.now()) {
+            return interaction.reply({ content: `Kodun hâlâ geçerli! Roblox açıklamana ekle: **${existing.code}**\nSüre dolmadan tekrar kontrol edebilirsin.`, ephemeral: true });
         }
 
-        // Benzersiz doğrulama kodu
-        const uniqueCode = Math.random().toString(36).substring(2, 10).toUpperCase();
-        verifyData[userId] = { code: uniqueCode, verified: false };
-        fs.writeFileSync('./verified.json', JSON.stringify(verifyData, null, 2));
+        // Yeni kod oluştur
+        const code = Math.floor(1000 + Math.random() * 9000); // 4 haneli
+        verifiedData[userId] = {
+            username: robloxUsername,
+            code: code,
+            expiresAt: Date.now() + 2 * 60 * 1000 // 2 dakika
+        };
+        fs.writeFileSync("./verified.json", JSON.stringify(verifiedData, null, 4));
 
-        const embed = new EmbedBuilder()
-            .setTitle('🔑 Roblox Doğrulama')
-            .setDescription(`Roblox profil açıklamanıza aşağıdaki kodu ekleyin ve ardından **Doğrula** butonuna tıklayın.\n\n**Kod:** \`${uniqueCode}\``)
-            .setColor(0x00AE86);
-
-        const button = new ActionRowBuilder().addComponents(
-            new ButtonBuilder()
-                .setCustomId('verify-check')
-                .setLabel('✅ Doğrula')
-                .setStyle(ButtonStyle.Success)
-        );
-
-        await interaction.reply({ embeds: [embed], components: [button], ephemeral: true });
-    },
-
-    async button(interaction) {
-        if (interaction.customId !== 'verify-check') return;
-
-        const userId = interaction.user.id;
-        const verifyData = JSON.parse(fs.readFileSync('./verified.json', 'utf8'));
-
-        if (!verifyData[userId]) {
-            return interaction.reply({ content: '⚠ Önce /verify komutunu çalıştırmalısınız.', ephemeral: true });
-        }
-
-        const code = verifyData[userId].code;
-
+        // Kod kontrolü
         try {
-            // Roblox kullanıcı adını burada manuel alıyoruz
-            const username = 'KULLANICI_ADI'; // Bunu kullanıcıdan alacak şekilde düzenleyebilirsin
-            const userRes = await axios.get(`https://api.roblox.com/users/get-by-username?username=${username}`);
+            const resUser = await fetch(`https://api.roblox.com/users/get-by-username?username=${robloxUsername}`);
+            const userData = await resUser.json();
 
-            if (!userRes.data || !userRes.data.Id) {
-                return interaction.reply({ content: '❌ Roblox kullanıcı bulunamadı.', ephemeral: true });
+            if (userData.errorMessage) {
+                return interaction.reply({ content: "Geçersiz Roblox kullanıcı adı!", ephemeral: true });
             }
 
-            const aboutRes = await axios.get(`https://users.roblox.com/v1/users/${userRes.data.Id}`);
+            const userIdRoblox = userData.Id;
+            const resDesc = await fetch(`https://users.roblox.com/v1/users/${userIdRoblox}`);
+            const descData = await resDesc.json();
+            const description = descData.description || "";
 
-            // Hata önleme: açıklama gerçekten string mi kontrol et
-            if (typeof aboutRes.data.description === 'string' && aboutRes.data.description.includes(code)) {
-                verifyData[userId].verified = true;
-                fs.writeFileSync('./verified.json', JSON.stringify(verifyData, null, 2));
+            if (description.includes(code.toString())) {
+                // Doğrulandı
+                const role = interaction.guild.roles.cache.find(r => r.name === "Verified");
+                if (role) await interaction.member.roles.add(role);
 
-                return interaction.reply({ content: '✅ Roblox hesabınız başarıyla doğrulandı!', ephemeral: true });
+                delete verifiedData[userId];
+                fs.writeFileSync("./verified.json", JSON.stringify(verifiedData, null, 4));
+
+                return interaction.reply({ content: "Başarıyla doğrulandın! ✅" });
             } else {
-                return interaction.reply({ content: '❌ Profil açıklamanızda doğrulama kodu bulunamadı.', ephemeral: true });
+                return interaction.reply({ content: `Doğrulama kodun: **${code}**\nAçıklamana ekledikten sonra tekrar /verify ${robloxUsername} yaz.` });
             }
+
         } catch (err) {
-            console.error(err);
-            return interaction.reply({ content: '❌ Doğrulama sırasında bir hata oluştu.', ephemeral: true });
+            console.log(err);
+            return interaction.reply({ content: "Doğrulama sırasında bir hata oluştu!", ephemeral: true });
         }
     }
 };
