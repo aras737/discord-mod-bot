@@ -1,86 +1,85 @@
-// verify.js
-const fs = require('fs');
+const { SlashCommandBuilder, EmbedBuilder } = require('discord.js');
 const axios = require('axios');
-const path = './verified.json';
-const config = require('../config'); // Grup ID ve verified rol ID burada
+const fs = require('fs');
+
+// Ayarlar
+const GROUP_ID = "33389098"; // Roblox grup ID
+const VERIFIED_ROLE_ID = "1399254986348560526"; // Discord verified rol ID
+const LOG_CHANNEL_ID = "1403286303335776347"; // İsteğe bağlı log kanalı ID
+const DATA_FILE = './verified.json';
+
+// JSON dosyası yoksa oluştur
+if (!fs.existsSync(DATA_FILE)) {
+    fs.writeFileSync(DATA_FILE, JSON.stringify({}), 'utf8');
+}
 
 module.exports = {
-  name: 'verify',
-  description: 'Roblox hesabınızı doğrular',
-  async execute(interaction) {
-    const userId = interaction.user.id;
+    data: new SlashCommandBuilder()
+        .setName('verify')
+        .setDescription('Roblox hesabınızı doğrulayın'),
 
-    if (!fs.existsSync(path)) fs.writeFileSync(path, JSON.stringify({}));
+    async execute(interaction) {
+        const userId = interaction.user.id;
+        let data = JSON.parse(fs.readFileSync(DATA_FILE, 'utf8'));
 
-    let verifiedData = JSON.parse(fs.readFileSync(path));
-
-    if (verifiedData[userId]) {
-      return interaction.reply({ content: '✅ Zaten doğrulandın!', ephemeral: true });
-    }
-
-    const code = `DISCORD-${Math.random().toString(36).substring(2, 8).toUpperCase()}`;
-
-    await interaction.reply({
-      content: `🔍 **Doğrulama Talimatı**\n1️⃣ Roblox profil açıklamana şu kodu ekle:\n\`\`\`${code}\`\`\`\n2️⃣ 2 dakika içinde tekrar \`/verify\` yaz.`,
-      ephemeral: true
-    });
-
-    const timeout = Date.now() + 120000;
-
-    const interval = setInterval(async () => {
-      if (Date.now() > timeout) {
-        clearInterval(interval);
-        return;
-      }
-
-      try {
-        // Roblox kullanıcı adını Discord displayName üzerinden alıyoruz
-        const username = interaction.member.displayName;
-
-        const res = await axios.get(`https://api.roblox.com/users/get-by-username?username=${username}`);
-        if (!res.data.Id) return;
-
-        const robloxId = res.data.Id;
-
-        const descRes = await axios.get(`https://users.roblox.com/v1/users/${robloxId}`);
-        if (descRes.data.description && descRes.data.description.includes(code)) {
-          clearInterval(interval);
-
-          verifiedData[userId] = {
-            robloxId,
-            robloxName: username,
-            verifiedAt: new Date().toISOString()
-          };
-          fs.writeFileSync(path, JSON.stringify(verifiedData, null, 2));
-
-          // Sabit verified rolü
-          await interaction.member.roles.add(config.roles.verified).catch(() => {});
-
-          // Roblox grubundaki rolüne göre Discord rolü ver (isim eşleşmesi)
-          const groupRes = await axios.get(`https://groups.roblox.com/v1/users/${robloxId}/groups/roles`);
-          const groupData = groupRes.data.data.find(g => g.group.id == config.roblox.groupId);
-
-          if (groupData) {
-            const robloxRoleName = groupData.role.name;
-            const discordRole = interaction.guild.roles.cache.find(r => r.name.toLowerCase() === robloxRoleName.toLowerCase());
-            if (discordRole) {
-              await interaction.member.roles.add(discordRole).catch(() => {});
-            }
-          }
-
-          // Log kanalı
-          if (config.channels.verifyLog) {
-            const logChannel = interaction.guild.channels.cache.get(config.channels.verifyLog);
-            if (logChannel) {
-              logChannel.send(`✅ **${interaction.user.tag}** Roblox hesabı **${username}** ile doğrulandı.`);
-            }
-          }
-
-          return interaction.followUp({ content: '✅ Doğrulama başarılı!', ephemeral: true });
+        if (data[userId]) {
+            return interaction.reply({ content: "✅ Zaten doğrulandınız!", ephemeral: true });
         }
-      } catch (err) {
-        console.error(err);
-      }
-    }, 5000);
-  }
+
+        // Tek seferlik kod oluştur
+        const code = Math.random().toString(36).substring(2, 10);
+        await interaction.reply({ 
+            content: `🔑 Doğrulama kodunuz: **${code}**\nRoblox profilinizin "about" kısmına ekleyin ve **/verify** komutunu tekrar çalıştırın.`,
+            ephemeral: true 
+        });
+
+        // 2 dakika içinde kontrol
+        setTimeout(async () => {
+            try {
+                // Roblox kullanıcı adını al
+                const resUser = await axios.get(`https://users.roblox.com/v1/usernames/users`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    data: { usernames: [interaction.member.displayName] }
+                });
+
+                if (!resUser.data.data.length) return;
+
+                const robloxId = resUser.data.data[0].id;
+
+                // Profil açıklamasını kontrol et
+                const resDesc = await axios.get(`https://users.roblox.com/v1/users/${robloxId}`);
+                if (!resDesc.data.description.includes(code)) return;
+
+                // Grup rolünü al
+                const resGroup = await axios.get(`https://groups.roblox.com/v1/users/${robloxId}/groups/roles`);
+                const groupRole = resGroup.data.data.find(g => g.group.id == GROUP_ID);
+                if (!groupRole) return;
+
+                // Discord rol eşleştirmesi
+                const discordRole = interaction.guild.roles.cache.find(r => r.name === groupRole.role.name);
+                if (discordRole) await interaction.member.roles.add(discordRole);
+
+                // Verified rolünü ekle
+                await interaction.member.roles.add(VERIFIED_ROLE_ID);
+
+                // Kaydet
+                data[userId] = { robloxId, verifiedAt: Date.now() };
+                fs.writeFileSync(DATA_FILE, JSON.stringify(data, null, 2));
+
+                // Log kanalı
+                if (LOG_CHANNEL_ID) {
+                    const logChannel = interaction.guild.channels.cache.get(LOG_CHANNEL_ID);
+                    if (logChannel) {
+                        logChannel.send(`✅ ${interaction.user.tag} Roblox doğrulamasını tamamladı. Rol: **${groupRole.role.name}**`);
+                    }
+                }
+
+                await interaction.followUp({ content: "✅ Doğrulama başarılı!", ephemeral: true });
+
+            } catch (err) {
+                console.error(err);
+            }
+        }, 120000); // 2 dakika
+    }
 };
