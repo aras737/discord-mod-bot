@@ -16,7 +16,17 @@ module.exports = {
                     value: 'sm_kilavuz'
                 },
                 {
-                    label: 'Diğer Branş',
+                    label: 'Hava kuvvetleri',
+                    description: 'Hava Kuvvetleri Alım kılavuzu',
+                    value: 'hava_kuvvetleri_kilavız'
+                },
+                {
+                    label: 'Kara Kuvvetleri',
+                    description: 'Başka bir branşın kılavuzu',
+                    value: 'diger_kilavuz'
+                },
+                {
+                    label: 'Askeri İnzibat',
                     description: 'Başka bir branşın kılavuzu',
                     value: 'diger_kilavuz'
                 }
@@ -188,7 +198,9 @@ Katılma isteğiniz genellikle 1 saat içerisinde onaylanır. Eğer 1 saate aşk
                     title = 'Diğer Branş Kılavuzu';
                     text = `Buraya diğer branşın kılavuzu gelecek...`;
                 }
-
+                if (i.values[0] === 'hava_kuvvetleri_kilavız') {
+                    title = 'Hava Kuvvetleri Alım kılavuzu';
+                    text = `Hava kuvvetleri Alım Klavuzu`;
                 const chunks = text.match(/[\s\S]{1,4000}/g) || [];
 
                 try {
