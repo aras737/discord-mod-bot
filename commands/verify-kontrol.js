@@ -1,78 +1,43 @@
-const { SlashCommandBuilder } = require('discord.js');
-const axios = require('axios');
-const fs = require('fs');
-
-const GROUP_ID = process.env.GROUP_ID;
-const VERIFIED_ROLE_ID = process.env.VERIFIED_ROLE_ID;
-const LOG_CHANNEL_ID = process.env.LOG_CHANNEL_ID;
-const DATA_FILE = './verified.json';
+const { SlashCommandBuilder } = require("discord.js");
+const fs = require("fs");
+const path = require("path");
 
 module.exports = {
   data: new SlashCommandBuilder()
-    .setName('verifykontrol')
-    .setDescription('Roblox profil açıklamasında doğrulama kodunu kontrol et')
-    .addStringOption(option =>
-      option.setName('roblox_username')
-        .setDescription('Doğrulanacak Roblox kullanıcı adı')
+    .setName("verify")
+    .setDescription("Roblox hesabınızı doğrulayın.")
+    .addIntegerOption(option =>
+      option.setName("robloxid")
+        .setDescription("Roblox kullanıcı ID'nizi girin.")
         .setRequired(true)
     ),
 
   async execute(interaction) {
-    const robloxUsername = interaction.options.getString('roblox_username');
     const userId = interaction.user.id;
-    let data = JSON.parse(fs.readFileSync(DATA_FILE, 'utf8'));
+    const robloxId = interaction.options.getInteger("robloxid");
 
-    const userData = data[userId];
-    if (!userData || !userData.code || userData.robloxUsername !== robloxUsername) {
-      return interaction.reply({ content: "❌ Bu kullanıcı için doğrulama kodu bulunamadı. Önce /verify komutunu kullanmalısınız.", ephemeral: true });
+    const filePath = path.join(__dirname, "../data/verified.json");
+    let data = {};
+
+    // Dosya varsa oku
+    if (fs.existsSync(filePath)) {
+      const fileContent = fs.readFileSync(filePath);
+      data = JSON.parse(fileContent);
     }
 
-    const { code } = userData;
+    // Doğrulama kaydını güncelle
+    data[userId] = {
+      robloxId,
+      verified: true,
+      verifiedAt: Date.now()
+    };
 
-    try {
-      const resUser = await axios.post(`https://users.roblox.com/v1/usernames/users`, {
-        usernames: [robloxUsername]
-      }, {
-        headers: { 'Content-Type': 'application/json' }
-      });
+    // Dosyaya yaz
+    fs.writeFileSync(filePath, JSON.stringify(data, null, 2));
 
-      if (!resUser.data.data.length) {
-        return interaction.reply({ content: "❌ Roblox kullanıcı adı bulunamadı.", ephemeral: true });
-      }
-
-      const robloxId = resUser.data.data[0].id;
-
-      const resDesc = await axios.get(`https://users.roblox.com/v1/users/${robloxId}`);
-      if (!resDesc.data.description.includes(code)) {
-        return interaction.reply({ content: "❌ Doğrulama kodu profil açıklamasında bulunamadı.", ephemeral: true });
-      }
-
-      const resGroup = await axios.get(`https://groups.roblox.com/v1/users/${robloxId}/groups/roles`);
-      const groupRole = resGroup.data.data.find(g => g.group.id == parseInt(GROUP_ID));
-      if (!groupRole) {
-        return interaction.reply({ content: "❌ Roblox grubunda rolünüz bulunamadı.", ephemeral: true });
-      }
-
-      const discordRole = interaction.guild.roles.cache.find(r => r.name === groupRole.role.name);
-      if (discordRole) await interaction.member.roles.add(discordRole);
-
-      await interaction.member.roles.add(VERIFIED_ROLE_ID);
-
-      data[userId] = { robloxId, verified: true, verifiedAt: Date.now() };
-      fs.writeFileSync(DATA_FILE, JSON.stringify(data, null, 2));
-
-      if (LOG_CHANNEL_ID) {
-        const logChannel = interaction.guild.channels.cache.get(LOG_CHANNEL_ID);
-        if (logChannel) {
-          logChannel.send(`✅ ${interaction.user.tag} doğrulandı. Rol: **${groupRole.role.name}**`);
-        }
-      }
-
-      await interaction.reply({ content: `✅ Doğrulama başarılı! Rol: **${groupRole.role.name}**`, ephemeral: true });
-
-    } catch (err) {
-      console.error(err);
-      await interaction.reply({ content: "⚠️ Bir hata oluştu. Lütfen daha sonra tekrar deneyin.", ephemeral: true });
-    }
+    return interaction.reply({
+      content: `✅ Roblox ID'niz başarıyla doğrulandı: **${robloxId}**`,
+      ephemeral: true
+    });
   }
 };
