@@ -55,110 +55,90 @@ module.exports = {
                     case 'sm_kilavuz':
                         title = 'Sınır Müfettişleri Alım Kılavuzu';
                         text = `
-Alım için herhangi bir izin almanıza gerek yoktur. Sunucuda boş bir pad’in önüne geçin ve alıma başlayın.
-Bulunduğunuz paddeki duyuru atma tuşuna basınız ve oradan “Sınır Müfettişleri” branşını seçiniz ve duyuru atınız.
+**Giriş**
+Sınır Müfettişleri birimine hoş geldin! Bu kılavuz, alım sürecini sorunsuz tamamlaman için sana yol gösterecek. Hazırsan, birimdeki geleceğin için ilk adımı atalım.
 
-Not: Sakın “:n” ile duyuru atmayın. Atan personeller tenzil (demote) yiyecektir.
+**Duyuru ve Başlangıç**
+Alım için kimseye sormana gerek yok. Boş bir alım pad'ine geç ve duyuru tuşunu kullanarak “Sınır Müfettişleri” duyurusunu at.
+**UYARI:** Duyuruları “:n” komutuyla atmak kesinlikle yasaktır! Bu kuralı ihlal eden personeller derhal tenzil edilecektir.
 
 ---
 
 **Temel Şartlar**
-Hesap yaşı 50+ gün olmalıdır. (50 gün altı kesinlikle kabul edilemez.)
-TSK Rütbesi OR-2+ olmalıdır.
-Herhangi başka bir askeri grupta bulunmamalıdır. (İttifak olduğumuz gruplar hariç.)
-Hesabı -13 olmamalıdır.
-Discord hesabı olmalıdır.
-Başka bir branşta olmamalıdır. (Kişinin profiline girerek gruplarından kontrol ediniz.)
-Sınır Müfettişleri kara listesinde olmamalıdır. (DC üzerinden “#karaliste” kontrolü yapınız.)
-TA Discord sunucusunda /verify yapmış olmalı. (TA DC üzerinden katılımcıyı etiketlemeyi deneyerek kontrol edebilirsiniz.)
+* **Hesap Yaşı:** En az 50 gün. Bu, birimimizin aradığı olgunluğun temel göstergesidir.
+* **TSK Rütbesi:** En az OR-2+ (Er).
+* **Grup Durumu:** Başka askeri gruplarda bulunmaman gerekir. İttifak gruplarımız bu kuralın dışındadır.
+* **Hesap Güvenliği:** Hesap yaşın -13 olmamalı.
+* **İletişim:** Discord hesabına sahip olman zorunludur.
+* **Branş Kontrolü:** Başka bir TSK branşında olmamalısın.
+* **Kara Liste Kontrolü:** "SM Kara Liste"de isminin olmadığından emin ol. Discord'daki #karaliste kanalını kontrol et.
+* **Doğrulama:** TA Discord sunucusunda /verify komutunu kullanmış olmalısın.
 
 ---
 
-**1 - Kendinizi Tanıtın ve Kuralları Anlatılır**
-Merhaba, ben Başmüfettiş (İsim). Sınır Müfettişleri alımını ben gerçekleştireceğim. Alım boyunca bana "Başmüfettişim" diye hitap edeceksiniz. K.İ almadan konuşmak yasaktır. Dilerseniz başlayalım.
+**Alım Aşamaları**
 
-**2 - Temel Şartlar Kontrol Edilir**
-:profile (isim) yazılarak personelin profili kontrol edilir.
-Safe Chat Enabled kısmı “Kapalı” olmalı.
-Grup durumu “Temiz” olmalı.
-Hesap yaşı 50+ gün olmalı.
+**1. Kendini Tanıt ve Kuralları Öğren**
+“Merhaba, ben Başmüfettiş (İsmin). Sınır Müfettişleri alımını ben yöneteceğim. Alım boyunca bana **'Başmüfettişim'** diye hitap etmelisin. **'K.İ'** (Konuşma İzni) almadan konuşmak yasak. Hazırsan, başlayalım.”
 
----
+**2. Temel Şartlar Kontrolü**
+:profile (isim) komutu ile adayın profilini kontrol et.
+Safe Chat Enabled: “Kapalı” olmalı.
+Grup Durumu: “Temiz” olmalı.
+Hesap Yaşı: En az 50 gün olmalı.
+Adayın ismini Discord'daki #karaliste kanalından kontrol etmeyi unutma.
 
-**3 - Jackler Çektirilir**
-5 JJ 5 GJ 1 HJ Başla!
-Jackleri çeken personeller atlama yaparsa uyarılır ve devam ettiği takdirde alımdan atılacaktır. Mobiller ve yavaş çekenlere jack atlatabilirsiniz veya yarısını çekebilirler.
-HJ nedir bilmeyen personellere öğretiniz.
+**Önemli:** Aday Roblox gruplarında BL (yasaklı) bir grupta ise, çıkması için uyar. Çıkmazsa veya şartları karşılamazsa, eksik şartı belirterek alımdan at.
 
----
+**3. Fiziksel Testler**
+**a) Jack Hareketleri:**
+\`5 JJ, 5 GJ, 1 HJ Başla!\`
+Hatalı yapan veya atlayan adayları uyar. Tekrar eden hatalarda alımdan at. Yeni başlayanlara hareketleri öğretmekten çekinme.
 
-**4 - Dönmeler Yaptırılır**
-Dönmeleri yaptırın.
-Personelleri aşırı şekilde zorlamanıza gerek yoktur ama personel sağını ve solunu bile bilmiyorsa SM olamaz.
-En fazla 10 tane komut yaptırın. Toplamda 3 kere yanlış yaparsa atılır.
-Her hatasında personellere doğrusunu gösterin.
+**b) Dönüş Komutları:**
+En fazla 10 adet dönüş komutu vererek adayın yön bilgisini test et. \`Sağa dön\`, \`Sola dön\`, \`Arkaya dön\` gibi komutlar kullan. Toplamda 3 yanlış yapan elenir. Her hatada doğrusunu göster.
 
----
+**4. Formasyon Becerisi**
+SFL, Wedge, Sağ kanat, Sol kanat ve STS gibi temel formasyonları yaptır. Adayın sırayla ve doğru şekilde yapması önemlidir. Bilmeyenlere kısaca göster, ancak hatalar devam ederse alımdan atabilirsin.
 
-**5 - Formasyonlar Yaptırılır**
-SFL, Wedge, Sağ kanat, Sol kanat ve STS formasyonları yaptırın.
-Personelin sırayla yapması ve doğru yapması önemlidir.
-Bilmeyen olursa kısaca öğretin.
-Öğretmenize rağmen hata yapan varsa alımdan atabilirsiniz.
+**5. Dil Bilgisi Testi**
+Aşağıdaki hatalı cümlelerden en az 3 tanesini seçerek adaya gönder ve düzeltmesini iste.
+- \`komutanım rütbem verildimi\` (Doğrusu: Komutanım, rütbem verildi mi?)
+- \`komutanım gelirmisiniz\` (Doğrusu: Komutanım, gelir misiniz?)
+- \`hiçbirşey beni durduramaz\` (Doğrusu: Hiçbir şey beni durduramaz!)
+Adaydan cevaplarını \`/w\` (fısıltı) üzerinden göndermesini iste. 2 yanlış yapan elenir. Adayın dil bilgisi seviyesinden emin ol.
 
----
-
-**6 - Dil Bilgisi Testi Yaptırılır**
-Aşağıda bulunan hatalı cümlelerden 3 tanesini katılımcılara atarak düzeltmelerini isteyiniz.
-Örnekler:
-* komutanım rütbem verildimi (Doğrusu: Komutanım, rütbem verildi mi?)
-* komutanım gelirmisiniz (Doğrusu: Komutanım, gelir misiniz?)
-* hiçbirşey beni durduramaz (Doğrusu: Hiçbir şey beni durduramaz!)
-* paşam denetim varmı (Doğrusu: Paşam, denetim var mı?)
-* paşam nasılsınız (Doğrusu: Paşam, nasılsınız?)
-“/w” üzerinden cevaplamalarını isteyin.
-2 soruyu yanlış yapan atılır ve katılımcı yanlış yaptığı sorular için doğrusu gösterilir.
-
----
-
-**7 - Tanıtım Yapılır**
-:team (katılımcının tam ismi) Sınır 
-Bu komut ile personeli SM takımına atabilirsiniz.
-Personellerin reset çekmesini isteyin ve sizde reset çekin.
+**6. Tanıtım ve Hazırlık**
+\`!team (katılımcının tam ismi) Sınır\` komutu ile adayı takıma al.
+Hem adayın hem de senin reset çekmesini iste.
 
 **Kıyafet Tanıtımı**
-* **Zorunlu Yüz:** “Not Sure If...”
-* **SM LR Üniforması:** Öğrenci, Müfettişler ve Stajyer rütbeleri giyer.
-* **SM MR Üniforması:** Baş Müfettiş Adayı / Kıdemli Baş Müfettiş arası giyer.
-* **SM Tören Üniforması:** Sadece Genel Branş Denetimi olduğu zamanlarda giyilir.
-* **Kabin Üniforması:** Bütün rütbeler giyer; sadece kabin kullanılırken.
+* **Zorunlu Yüz:** “Not Sure If...” yüzünü takmalısın.
+* **SM LR Üniforması:** Öğrenci, Müfettişler ve Stajyerler giyer.
+* **SM MR Üniforması:** Baş Müfettiş Adayı / Kıdemli Baş Müfettiş rütbeleri giyer.
+* **SM Tören Üniforması:** Yalnızca Genel Branş Denetimleri sırasında giyilir.
 
-**Genel Tanıtım**
-Branşımızda iki tane birim vardır, bunlar Gardiyan & Muhafız (GM) ve Denetim Birimi (DB). Birimlerin ve üniformaların hakkında bilgiyi DC üzerinden edinebilirsiniz. Birimde değilseniz, birim kıyafetlerini giyemezsiniz.
+**Genel Bilgiler**
+* Birimimizde **Gardiyan & Muhafız (GM)** ve **Denetim Birimi (DB)** olmak üzere iki birim bulunur.
+* Birim kıyafetleri, yalnızca birime kabul edildiğinde giyilebilir.
 
 **Temel Kurallar**
-1. Sınır Müfettişlerinin altın kuralı adalettir.
-2. SM liderinin rütbesi SM-K-KO’dur. SM Lideri M0sby_1 Şef’tir.
-3. SM içerisinde disiplinsizlik, ciddiyetsizlik ve dil bilgisine uymamak yasaktır.
-4. Araç sürmek için III Müfettiş+ rütbesine ihtiyacınız vardır ve izin almadan araç süremezsiniz.
-5. Emre itaat etmemek ve sahip olduğunuz yetkileri kötüye kullanmak yasaktır.
-6. Öğrenci rütbesinde bulunan personeller kabini kullanamaz.
+1. Sınır Müfettişlerinin ana kuralı **adalettir**.
+2. SM Lideri **M0sby_1 Şef**'tir.
+3. Disiplinsizlik ve ciddiyetsizlik kesinlikle yasaktır.
+4. Araç kullanmak için en az **III Müfettiş+** rütbesinde olmalısın ve izin almalısın.
+5. Yetkini kötüye kullanmak veya emre itaatsizlik yasaktır.
+6. Öğrenci rütbesi kabin kullanamaz.
 
----
-
-**Son Aşama**
-Personellere anlamadıkları bir şey olup olmadığını sorun. Tüm anlamadıkları noktaları açıklayın. Ardından, Wedge komutu ile SS alınız. Tekrardan STS yaptırın ve personellerden size Discord üzerinden arkadaşlık isteği atmalarını söyleyin.
-Personellerin TA Discord sunucusunda olup olmadıklarını kontrol edin. Eğer yoksalar, kendilerine TA Resmi DC bağlantısını gönderin. (discord.gg/taf)
-Discord üzerinde “/verify” olmaları konusunda yardımcı olun.
+**7. Son Aşama**
+Adayın soruları varsa yanıtla. Wedge komutu ile SS al. Tekrar STS yaptır ve adaydan sana Discord'dan arkadaşlık isteği göndermesini iste.
+TA Discord'da değilse, bağlantıyı (\`discord.gg/taf\`) gönder ve \`/verify\` konusunda yardımcı ol.
 
 **Başarılı Aday Metni**
-Sınır Müfettişleri alımını başarıyla geçtin! Lütfen aşağıdaki linklerden Roblox grubuna katılma isteği gönderin ve Discord sunucusuna katılın.
-Rütben geldikten sonra, SM discord içerisinde /update atmayı ve bütün bilgilendirme kanallarını okumayı unutma. Çoğu sorunun cevabı o kanallarda hazır olarak yazıyor.
-
-Roblox: https://www.roblox.com/groups/33389098
-Discord: https://discord.gg/wCanBmD9XR
-
-Katılma isteğiniz genellikle 1 saat içerisinde onaylanır. Eğer 1 saate aşkın süredir gruba alınmadıysanız bana yazabilirsiniz ama geciktiği durumlarda sabırlı olmayı da unutmayın. Gece geç saatlerde onaylanmaması normaldir.
+**Sınır Müfettişleri alımını başarıyla geçtin!** Lütfen aşağıdaki linklerden Roblox grubuna katılma isteği gönder ve Discord sunucusuna katıl.
+Rütben geldikten sonra, SM discord içinde \`/update\` atmayı ve tüm bilgilendirme kanallarını okumayı unutma.
+**Roblox:** https://www.roblox.com/groups/33389098
+**Discord:** https://discord.gg/wCanBmD9XR
 `;
                         break;
                     case 'hava_kuvvetleri_kilavuzu':
