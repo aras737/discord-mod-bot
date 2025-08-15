@@ -1,34 +1,42 @@
-const { SlashCommandBuilder } = require('discord.js');
-const fs = require('fs');
-
-const DATA_FILE = './verified.json';
-if (!fs.existsSync(DATA_FILE)) fs.writeFileSync(DATA_FILE, JSON.stringify({}), 'utf8');
+const { SlashCommandBuilder } = require("discord.js");
+const fs = require("fs");
+const path = require("path");
 
 module.exports = {
   data: new SlashCommandBuilder()
-    .setName('verify')
-    .setDescription('Roblox hesabınızı doğrulamak için kod alın')
-    .addStringOption(option =>
-      option.setName('roblox_username')
-        .setDescription('Roblox kullanıcı adınız')
+    .setName("verify")
+    .setDescription("Roblox hesabınızı doğrulayın.")
+    .addIntegerOption(option =>
+      option.setName("robloxid")
+        .setDescription("Roblox kullanıcı ID'nizi girin.")
         .setRequired(true)
     ),
 
   async execute(interaction) {
     const userId = interaction.user.id;
-    const robloxUsername = interaction.options.getString('roblox_username');
-    let data = JSON.parse(fs.readFileSync(DATA_FILE, 'utf8'));
+    const robloxId = interaction.options.getInteger("robloxid");
 
-    if (data[userId] && data[userId].verified) {
-      return interaction.reply({ content: "✅ Zaten doğrulandınız!", ephemeral: true });
+    const filePath = path.join(__dirname, "../data/verified.json");
+    let data = {};
+
+    // Dosya varsa oku
+    if (fs.existsSync(filePath)) {
+      const fileContent = fs.readFileSync(filePath);
+      data = JSON.parse(fileContent);
     }
 
-    const code = Math.random().toString(36).substring(2, 10);
-    data[userId] = { robloxUsername, code };
-    fs.writeFileSync(DATA_FILE, JSON.stringify(data, null, 2));
+    // Doğrulama kaydını güncelle
+    data[userId] = {
+      robloxId,
+      verified: true,
+      verifiedAt: Date.now()
+    };
 
-    await interaction.reply({
-      content: `🔑 Doğrulama kodunuz: **${code}**\nLütfen Roblox profilinizin açıklama kısmına ekleyin ve ardından **/verifykontrol** komutunu kullanın.`,
+    // Dosyaya yaz
+    fs.writeFileSync(filePath, JSON.stringify(data, null, 2));
+
+    return interaction.reply({
+      content: `✅ Roblox ID'niz başarıyla doğrulandı: **${robloxId}**`,
       ephemeral: true
     });
   }
