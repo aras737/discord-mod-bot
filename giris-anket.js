@@ -2,7 +2,7 @@ const { Events, EmbedBuilder, ChannelType, AuditLogEvent } = require('discord.js
 
 module.exports = (client) => {
     // Logların gönderileceği kanalın ID'si. Burayı kendi log kanalınla değiştir.
-    const LOG_KANAL_ID = 'LOG_KANALIN_IDSI';
+    const LOG_KANAL_ID = '1394408532929024102';
 
     // Mesaj silme olayını dinle
     client.on(Events.MessageDelete, async message => {
