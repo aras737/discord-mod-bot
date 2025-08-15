@@ -8,7 +8,7 @@ module.exports = {
     
     async execute(interaction) {
         // Bu komutu sadece bot sahibi kullanabilir.
-        // 'BOT_SAHİBİ_ID' yerine kendi Discord kullanıcı kimliğini (ID) yaz.
+        // '1389930042200559706' yerine kendi Discord kullanıcı kimliğini (ID) yaz.
         const ownerId = 'BOT_SAHİBİ_ID'; 
         if (interaction.user.id !== ownerId) {
             return interaction.reply({ content: 'Bu komutu kullanma yetkiniz yok.', ephemeral: true });
