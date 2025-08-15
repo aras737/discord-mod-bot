@@ -2,7 +2,7 @@
 const fs = require('fs');
 const axios = require('axios');
 const path = './verified.json';
-const config = require('../config'); // Senin config dosyan
+const config = require('../config'); // Grup ID ve verified rol ID burada
 
 module.exports = {
   name: 'verify',
@@ -56,12 +56,16 @@ module.exports = {
           // Sabit verified rolü
           await interaction.member.roles.add(config.roles.verified).catch(() => {});
 
-          // Roblox grubundaki rolüne göre Discord rolü ver
+          // Roblox grubundaki rolüne göre Discord rolü ver (isim eşleşmesi)
           const groupRes = await axios.get(`https://groups.roblox.com/v1/users/${robloxId}/groups/roles`);
           const groupData = groupRes.data.data.find(g => g.group.id == config.roblox.groupId);
 
-          if (groupData && config.roles.grupRoller[groupData.role.rank]) {
-            await interaction.member.roles.add(config.roles.grupRoller[groupData.role.rank]).catch(() => {});
+          if (groupData) {
+            const robloxRoleName = groupData.role.name;
+            const discordRole = interaction.guild.roles.cache.find(r => r.name.toLowerCase() === robloxRoleName.toLowerCase());
+            if (discordRole) {
+              await interaction.member.roles.add(discordRole).catch(() => {});
+            }
           }
 
           // Log kanalı
