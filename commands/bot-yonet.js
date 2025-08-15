@@ -1,77 +1,97 @@
-const { SlashCommandBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, PermissionFlagsBits } = require('discord.js');
-const config = require('../config.json');
+const { SlashCommandBuilder, PermissionsBitField } = require('discord.js');
 
 module.exports = {
-  data: new SlashCommandBuilder()
-    .setName('bot-yonet')
-    .setDescription('Bot yönetim panelini açar.')
-    .setDefaultMemberPermissions(PermissionFlagsBits.Administrator), // Yalnızca adminler çalıştırabilir
+    data: new SlashCommandBuilder()
+        .setName('bot')
+        .setDescription('Botun temel yönetim ayarlarını düzenler.')
+        .setDefaultMemberPermissions(PermissionsBitField.Flags.Administrator)
+        .addSubcommand(subcommand =>
+            subcommand
+                .setName('isim-değiştir')
+                .setDescription('Botun sunucudaki ismini değiştirir.')
+                .addStringOption(option =>
+                    option.setName('isim')
+                        .setDescription('Botun yeni ismi.')
+                        .setRequired(true)))
+        .addSubcommand(subcommand =>
+            subcommand
+                .setName('açıklama-değiştir')
+                .setDescription('Botun açıklamasını değiştirir.')
+                .addStringOption(option =>
+                    option.setName('açıklama')
+                        .setDescription('Botun yeni açıklaması.')
+                        .setRequired(true)))
+        .addSubcommand(subcommand =>
+            subcommand
+                .setName('başlat')
+                .setDescription('Botu aktif hale getirir (durumunu değiştirir).'))
+        .addSubcommand(subcommand =>
+            subcommand
+                .setName('durdur')
+                .setDescription('Botu pasif hale getirir (durumunu değiştirir).')),
+    
+    async execute(interaction) {
+        // Bu komutu sadece bot sahibi kullanabilir.
+        // 'BOT_SAHİBİ_ID' yerine kendi Discord ID'ni yazın.
+        const ownerId = 'BOT_SAHİBİ_ID';
+        if (interaction.user.id !== ownerId) {
+            return interaction.reply({ content: 'Bu komutu kullanma yetkiniz yok.', ephemeral: true });
+        }
 
-  async execute(interaction) {
-    // Sunucu sahibi veya config.roles.ust içindeki roller engel tanımadan erişebilir
-    const isUst = interaction.member.roles.cache.some(r => config.roles.ust.includes(r.name)) || interaction.guild.ownerId === interaction.user.id;
-    if (!isUst) {
-      return interaction.reply({ content: '🚫 Bu komutu kullanmak için yetkin yok.', ephemeral: true });
-    }
+        const subcommand = interaction.options.getSubcommand();
 
-    // Butonlar (fazla olursa satırlara böleceğiz)
-    const buttons = [
-      new ButtonBuilder().setCustomId('start').setLabel('Başlat').setStyle(ButtonStyle.Success),
-      new ButtonBuilder().setCustomId('stop').setLabel('Durdur').setStyle(ButtonStyle.Danger),
-      new ButtonBuilder().setCustomId('restart').setLabel('Yeniden Başlat').setStyle(ButtonStyle.Primary),
-      new ButtonBuilder().setCustomId('reload').setLabel('Yeniden Yükle').setStyle(ButtonStyle.Secondary),
-      new ButtonBuilder().setCustomId('status').setLabel('Durum').setStyle(ButtonStyle.Primary),
-      new ButtonBuilder().setCustomId('logs').setLabel('Loglar').setStyle(ButtonStyle.Secondary),
-      new ButtonBuilder().setCustomId('settings').setLabel('Ayarlar').setStyle(ButtonStyle.Secondary),
-      new ButtonBuilder().setCustomId('update').setLabel('Güncelle').setStyle(ButtonStyle.Primary),
-      new ButtonBuilder().setCustomId('shutdown').setLabel('Kapat').setStyle(ButtonStyle.Danger),
-    ];
+        switch (subcommand) {
+            case 'isim-değiştir':
+                const newName = interaction.options.getString('isim');
+                try {
+                    await interaction.guild.members.me.setNickname(newName);
+                    await interaction.reply({ content: `✅ Botun ismi başarıyla **${newName}** olarak değiştirildi.`, ephemeral: true });
+                } catch (error) {
+                    console.error(error);
+                    await interaction.reply({ content: '❌ Botun ismini değiştirirken bir hata oluştu.', ephemeral: true });
+                }
+                break;
 
-    // 5'li gruplara ayır
-    const rows = [];
-    for (let i = 0; i < buttons.length; i += 5) {
-      rows.push(new ActionRowBuilder().addComponents(buttons.slice(i, i + 5)));
-    }
+            case 'açıklama-değiştir':
+                const newAbout = interaction.options.getString('açıklama');
+                try {
+                    await interaction.client.user.setAboutMe(newAbout);
+                    await interaction.reply({ content: `✅ Botun açıklaması başarıyla güncellendi.`, ephemeral: true });
+                } catch (error) {
+                    console.error(error);
+                    await interaction.reply({ content: '❌ Botun açıklamasını değiştirirken bir hata oluştu.', ephemeral: true });
+                }
+                break;
 
-    await interaction.reply({
-      content: '⚙️ **Bot Yönetim Paneli**\nButonlara tıklayarak işlemleri yapabilirsiniz.',
-      components: rows,
-      ephemeral: true
-    });
+            case 'başlat':
+                try {
+                    await interaction.client.user.setPresence({
+                        status: 'online', // 'online', 'dnd', 'idle' veya 'offline' olabilir
+                        activities: [{ name: 'Görevinin başında!', type: 'PLAYING' }] // PLAYING, STREAMING, LISTENING, WATCHING
+                    });
+                    await interaction.reply({ content: '✅ Bot başarıyla başlatıldı ve durumu güncellendi.', ephemeral: true });
+                } catch (error) {
+                    console.error(error);
+                    await interaction.reply({ content: '❌ Botu başlatırken bir hata oluştu.', ephemeral: true });
+                }
+                break;
 
-    // Buton tıklamalarını dinle
-    const collector = interaction.channel.createMessageComponentCollector({
-      time: 5 * 60 * 1000 // 5 dakika açık kalır
-    });
+            case 'durdur':
+                try {
+                    await interaction.client.user.setPresence({
+                        status: 'idle',
+                        activities: [{ name: 'Kapalı.', type: 'PLAYING' }]
+                    });
+                    await interaction.reply({ content: '✅ Bot durduruldu ve durumu güncellendi.', ephemeral: true });
+                } catch (error) {
+                    console.error(error);
+                    await interaction.reply({ content: '❌ Botu durdururken bir hata oluştu.', ephemeral: true });
+                }
+                break;
 
-    collector.on('collect', async i => {
-      if (i.user.id !== interaction.user.id) {
-        return i.reply({ content: '🚫 Bu paneli sadece komutu kullanan kişi yönetebilir.', ephemeral: true });
-      }
-
-      const logChannel = interaction.guild.channels.cache.get(config.logChannelId);
-      const actionName = {
-        start: 'Botu Başlattı',
-        stop: 'Botu Durdurdu',
-        restart: 'Botu Yeniden Başlattı',
-        reload: 'Botu Yeniden Yükledi',
-        status: 'Bot Durumunu Kontrol Etti',
-        logs: 'Bot Loglarını Görüntüledi',
-        settings: 'Bot Ayarlarını Açtı',
-        update: 'Botu Güncelledi',
-        shutdown: 'Botu Kapattı'
-      }[i.customId] || 'Bilinmeyen İşlem';
-
-      // Log kanalı varsa gönder
-      if (logChannel) {
-        logChannel.send(`🛠️ ${i.user.tag} **${actionName}**`);
-      }
-
-      await i.reply({ content: `✅ İşlem tamamlandı: **${actionName}**`, ephemeral: true });
-    });
-
-    collector.on('end', () => {
-      console.log('⏹️ Bot yönetim paneli kapandı.');
-    });
-  }
+            default:
+                await interaction.reply({ content: 'Hatalı alt komut kullanımı.', ephemeral: true });
+                break;
+        }
+    },
 };
