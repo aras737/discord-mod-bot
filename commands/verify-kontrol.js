@@ -10,17 +10,24 @@ const DATA_FILE = './verified.json';
 module.exports = {
   data: new SlashCommandBuilder()
     .setName('verifykontrol')
-    .setDescription('Roblox doğrulama kodunu kontrol et'),
+    .setDescription('Roblox profil açıklamasında doğrulama kodunu kontrol et')
+    .addStringOption(option =>
+      option.setName('roblox_username')
+        .setDescription('Doğrulanacak Roblox kullanıcı adı')
+        .setRequired(true)
+    ),
 
   async execute(interaction) {
+    const robloxUsername = interaction.options.getString('roblox_username');
     const userId = interaction.user.id;
     let data = JSON.parse(fs.readFileSync(DATA_FILE, 'utf8'));
 
-    if (!data[userId] || !data[userId].code || !data[userId].robloxUsername) {
-      return interaction.reply({ content: "❌ Önce /verify komutunu kullanmalısınız.", ephemeral: true });
+    const userData = data[userId];
+    if (!userData || !userData.code || userData.robloxUsername !== robloxUsername) {
+      return interaction.reply({ content: "❌ Bu kullanıcı için doğrulama kodu bulunamadı. Önce /verify komutunu kullanmalısınız.", ephemeral: true });
     }
 
-    const { robloxUsername, code } = data[userId];
+    const { code } = userData;
 
     try {
       const resUser = await axios.post(`https://users.roblox.com/v1/usernames/users`, {
@@ -37,7 +44,7 @@ module.exports = {
 
       const resDesc = await axios.get(`https://users.roblox.com/v1/users/${robloxId}`);
       if (!resDesc.data.description.includes(code)) {
-        return interaction.reply({ content: "❌ Doğrulama kodu açıklamada bulunamadı.", ephemeral: true });
+        return interaction.reply({ content: "❌ Doğrulama kodu profil açıklamasında bulunamadı.", ephemeral: true });
       }
 
       const resGroup = await axios.get(`https://groups.roblox.com/v1/users/${robloxId}/groups/roles`);
