@@ -1,14 +1,14 @@
-const { SlashCommandBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, EmbedBuilder } = require("discord.js");
+const { SlashCommandBuilder, EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle } = require("discord.js");
 
 module.exports = {
     data: new SlashCommandBuilder()
         .setName("bilet")
-        .setDescription("📩 Destek bileti açma panelini gönderir"),
+        .setDescription("📩 Destek bileti panelini gönderir."),
     async execute(interaction) {
         const embed = new EmbedBuilder()
+            .setColor("Blue")
             .setTitle("📩 Destek Talebi")
-            .setDescription("Destek talebi oluşturmak için aşağıdaki butona tıklayın:")
-            .setColor("Blue");
+            .setDescription("Destek talebi oluşturmak için aşağıdaki butona tıklayın:");
 
         const row = new ActionRowBuilder()
             .addComponents(
@@ -19,5 +19,5 @@ module.exports = {
             );
 
         await interaction.reply({ embeds: [embed], components: [row] });
-    }
+    },
 };
