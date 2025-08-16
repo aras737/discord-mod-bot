@@ -29,7 +29,7 @@ module.exports = {
             .setStyle(TextInputStyle.Paragraph)
             .setRequired(true);
 
-        const grupSayilariInput = new TextInputBuilder()
+        const grupUyeSayilariInput = new TextInputBuilder()
             .setCustomId('grupUyeSayilari')
             .setLabel("Geldiğiniz kampların grup üye sayıları?")
             .setStyle(TextInputStyle.Paragraph)
@@ -42,14 +42,32 @@ module.exports = {
             .setPlaceholder("Evet / Hayır")
             .setRequired(true);
             
+        const robloxGrupUyeligiInput = new TextInputBuilder()
+            .setCustomId('robloxGrupUyeligi')
+            .setLabel("Kampların Roblox grubunda yer alıyor musunuz?")
+            .setStyle(TextInputStyle.Short)
+            .setPlaceholder("Evet / Hayır")
+            .setRequired(true);
+
+        const ssKanitInput = new TextInputBuilder()
+            .setCustomId('ssKanit')
+            .setLabel("SS/Kanıt (Her kamp için iki SS linki)")
+            .setStyle(TextInputStyle.Paragraph)
+            .setRequired(true);
+
         // Soruları modal'a eklemek için ActionRow kullan
         modal.addComponents(
             new ActionRowBuilder().addComponents(robloxIsimInput),
             new ActionRowBuilder().addComponents(discordIsimInput),
             new ActionRowBuilder().addComponents(kamplarInput),
-            new ActionRowBuilder().addComponents(grupSayilariInput),
+            new ActionRowBuilder().addComponents(grupUyeSayilariInput),
             new ActionRowBuilder().addComponents(tkaDurumInput)
         );
+
+        // Yeni eklenen alanları yeni bir ActionRow'a ekleyelim
+        const ssRow = new ActionRowBuilder().addComponents(robloxGrupUyeligiInput);
+        const grupUyeligiRow = new ActionRowBuilder().addComponents(ssKanitInput);
+        modal.addComponents(ssRow, grupUyeligiRow);
 
         // Kullanıcıya modal'ı göster
         await interaction.showModal(modal);
@@ -67,8 +85,10 @@ module.exports.setupModalListener = (client) => {
         const robloxIsim = modalInteraction.fields.getTextInputValue('robloxIsim');
         const discordIsim = modalInteraction.fields.getTextInputValue('discordIsim');
         const kamplar = modalInteraction.fields.getTextInputValue('gelinenKamplar');
-        const grupSayilari = modalInteraction.fields.getTextInputValue('grupUyeSayilari');
+        const grupUyeSayilari = modalInteraction.fields.getTextInputValue('grupUyeSayilari');
         const tkaDurum = modalInteraction.fields.getTextInputValue('tkaDurumu');
+        const robloxGrupUyeligi = modalInteraction.fields.getTextInputValue('robloxGrupUyeligi');
+        const ssKanit = modalInteraction.fields.getTextInputValue('ssKanit');
 
         // Sonuçları bir Embed mesajı olarak hazırla
         const resultEmbed = new EmbedBuilder()
@@ -79,8 +99,10 @@ module.exports.setupModalListener = (client) => {
                 { name: 'Roblox İsmi', value: robloxIsim, inline: true },
                 { name: 'Discord İsmi', value: discordIsim, inline: true },
                 { name: 'Geldiği Kamplar', value: kamplar },
-                { name: 'Grup Üye Sayıları', value: grupSayilari },
-                { name: 'Daha Önce TKA Ordusunda Bulundu mu?', value: tkaDurum }
+                { name: 'Grup Üye Sayıları', value: grupUyeSayilari },
+                { name: 'Daha Önce TKA Ordusunda Bulundu mu?', value: tkaDurum },
+                { name: 'Roblox Grup Üyeliği', value: robloxGrupUyeligi },
+                { name: 'SS/Kanıt', value: ssKanit }
             )
             .setTimestamp();
 
