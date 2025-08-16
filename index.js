@@ -1,137 +1,155 @@
-const { Client, GatewayIntentBits, Partials, Collection, EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, PermissionFlagsBits } = require("discord.js");
-const fs = require("fs");
-require("dotenv").config();
+const { 
+    Client, 
+    Collection, 
+    GatewayIntentBits, 
+    Partials, 
+    Events, 
+    REST, 
+    Routes, 
+    PermissionsBitField,
+    ChannelType,
+    ActionRowBuilder,
+    ButtonBuilder,
+    ButtonStyle,
+    EmbedBuilder
+} = require('discord.js');
+const fs = require('fs');
+const express = require('express');
+require('dotenv').config();
 
+// BOT
 const client = new Client({
     intents: [
         GatewayIntentBits.Guilds,
+        GatewayIntentBits.GuildMembers,
         GatewayIntentBits.GuildMessages,
         GatewayIntentBits.MessageContent,
-        GatewayIntentBits.GuildMembers
+        GatewayIntentBits.GuildVoiceStates
     ],
     partials: [Partials.Channel]
 });
 
 client.commands = new Collection();
+const commandsArray = [];
 
-// ─────────────── KOMUTLARI YÜKLE ───────────────
-const commandFiles = fs.readdirSync("./commands").filter(file => file.endsWith(".js"));
+// 📂 Komutları yükle
+const commandFiles = fs.readdirSync('./commands').filter(file => file.endsWith('.js'));
+
 for (const file of commandFiles) {
-    const command = require(`./commands/${file}`);
-    if (command.data && command.execute) {
-        client.commands.set(command.data.name, command);
-        console.log(`✅ Komut yüklendi: ${file}`);
-    } else {
-        console.log(`⚠️ Hatalı komut atlandı: ${file}`);
+    try {
+        const command = require(`./commands/${file}`);
+        if ('data' in command && 'execute' in command) {
+            client.commands.set(command.data.name, command);
+            commandsArray.push(command.data.toJSON());
+            console.log(`✅ Komut yüklendi: ${command.data.name}`);
+        } else {
+            console.log(`⚠️ Atlandı (data veya execute eksik): ${file}`);
+        }
+    } catch (error) {
+        console.error(`❌ Komut yüklenirken hata: ${file}\n`, error);
     }
 }
 
-// ─────────────── BOT BAŞLATILDI ───────────────
-client.once("ready", () => {
-    console.log(`✅ Bot aktif: ${client.user.tag}`);
+// 🌐 Express Sunucu
+const app = express();
+const PORT = process.env.PORT || 8080;
+
+app.get('/', (req, res) => {
+    res.send('🤖 Bot aktif!');
 });
 
-// ─────────────── INTERACTIONLAR ───────────────
-client.on("interactionCreate", async (interaction) => {
+app.listen(PORT, () => {
+    console.log(`🌐 Express portu dinleniyor: ${PORT}`);
+    console.log(`📌 Panel: http://localhost:${PORT}/`);
+});
+
+// 🤖 Bot aktif olduğunda
+client.once(Events.ClientReady, async readyClient => {
+    console.log(`\n🤖 Bot aktif: ${readyClient.user.tag}`);
+
+    const rest = new REST({ version: '10' }).setToken(process.env.TOKEN);
+    try {
+        await rest.put(
+            Routes.applicationCommands(readyClient.user.id),
+            { body: commandsArray }
+        );
+        console.log('✅ Slash komutlar yüklendi.');
+    } catch (error) {
+        console.error('❌ Slash komutlar yüklenemedi:', error);
+    }
+});
+
+// 🎯 Slash Komutlar
+client.on(Events.InteractionCreate, async interaction => {
     if (interaction.isChatInputCommand()) {
         const command = client.commands.get(interaction.commandName);
         if (!command) return;
         try {
-            await command.execute(interaction, client);
+            await command.execute(interaction);
         } catch (error) {
             console.error(error);
-            await interaction.reply({ content: "❌ Komut çalıştırılırken hata oluştu.", ephemeral: true });
+            if (interaction.replied || interaction.deferred) {
+                await interaction.followUp({ content: '❌ Komut çalıştırılırken hata oluştu!', ephemeral: true });
+            } else {
+                await interaction.reply({ content: '❌ Komut çalıştırılırken hata oluştu!', ephemeral: true });
+            }
         }
     }
 
-    // 🎟 Bilet oluşturma
+    // 🎟️ Bilet Sistemi
     if (interaction.isButton()) {
-        if (interaction.customId === "create_ticket") {
-            const guild = interaction.guild;
-            const member = interaction.member;
-
-            // kategori bul / oluştur
-            let category = guild.channels.cache.find(c => c.name === "🎟・DESTEK" && c.type === 4);
-            if (!category) {
-                category = await guild.channels.create({
-                    name: "🎟・DESTEK",
-                    type: 4
-                });
+        if (interaction.customId === "ticket_create") {
+            const existingChannel = interaction.guild.channels.cache.find(
+                c => c.name === `ticket-${interaction.user.id}`
+            );
+            if (existingChannel) {
+                return interaction.reply({ content: "❌ Zaten açık bir biletiniz var.", ephemeral: true });
             }
 
-            // Zaten bilet var mı kontrol et
-            const existing = guild.channels.cache.find(c => c.name === `ticket-${member.user.username.toLowerCase()}`);
-            if (existing) {
-                return interaction.reply({
-                    embeds: [
-                        new EmbedBuilder()
-                            .setColor("Red")
-                            .setTitle("⚠️ Hata")
-                            .setDescription("Zaten açık bir biletiniz var!")
-                    ],
-                    ephemeral: true
-                });
-            }
-
-            // Kanal oluştur
-            const channel = await guild.channels.create({
-                name: `ticket-${member.user.username}`,
-                type: 0,
-                parent: category.id,
+            const ticketChannel = await interaction.guild.channels.create({
+                name: `ticket-${interaction.user.id}`,
+                type: ChannelType.GuildText,
                 permissionOverwrites: [
-                    { id: guild.id, deny: [PermissionFlagsBits.ViewChannel] },
-                    { id: member.id, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages, PermissionFlagsBits.ReadMessageHistory] },
-                    { id: client.user.id, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages, PermissionFlagsBits.ManageChannels] }
+                    {
+                        id: interaction.guild.id,
+                        deny: [PermissionsBitField.Flags.ViewChannel],
+                    },
+                    {
+                        id: interaction.user.id,
+                        allow: [PermissionsBitField.Flags.ViewChannel, PermissionsBitField.Flags.SendMessages],
+                    },
+                    {
+                        id: interaction.guild.roles.everyone.id,
+                        deny: [PermissionsBitField.Flags.ViewChannel],
+                    }
                 ]
             });
 
-            const embed = new EmbedBuilder()
-                .setColor("Blue")
-                .setAuthor({ name: "🎟 Destek Sistemi", iconURL: guild.iconURL() })
-                .setTitle("Bilet Açıldı ✅")
-                .setDescription("Merhaba! Yetkililer en kısa sürede sizinle ilgilenecektir.\n\nBileti kapatmak için aşağıdaki butona basabilirsiniz.")
-                .setThumbnail(member.displayAvatarURL())
-                .setFooter({ text: "TPA TKA Yönetim Botu", iconURL: client.user.displayAvatarURL() })
-                .setTimestamp();
-
-            const row = new ActionRowBuilder().addComponents(
+            const closeButton = new ActionRowBuilder().addComponents(
                 new ButtonBuilder()
-                    .setCustomId("close_ticket")
-                    .setLabel("🔒 Bileti Kapat")
+                    .setCustomId("ticket_close")
+                    .setLabel("🔒 Kapat")
                     .setStyle(ButtonStyle.Danger)
             );
 
-            await channel.send({ content: `<@${member.id}> 🎟 Bilet açıldı!`, embeds: [embed], components: [row] });
-
-            return interaction.reply({
+            await ticketChannel.send({
                 embeds: [
                     new EmbedBuilder()
-                        .setColor("Green")
-                        .setDescription(`✅ Biletiniz başarıyla açıldı: ${channel}`)
+                        .setTitle("🎟️ Destek Talebi")
+                        .setDescription(`Merhaba ${interaction.user}, destek ekibi seninle ilgilenecektir.`)
+                        .setColor(0x00AE86)
                 ],
-                ephemeral: true
+                components: [closeButton]
             });
+
+            await interaction.reply({ content: `✅ Biletiniz açıldı: ${ticketChannel}`, ephemeral: true });
         }
 
-        // 🔒 Bilet kapatma
-        if (interaction.customId === "close_ticket") {
-            const channel = interaction.channel;
-
-            await interaction.reply({
-                embeds: [
-                    new EmbedBuilder()
-                        .setColor("Orange")
-                        .setTitle("🔒 Bilet Kapatılıyor")
-                        .setDescription("Bilet 5 saniye içinde kapanacaktır...")
-                ]
-            });
-
-            setTimeout(() => {
-                channel.delete().catch(() => { });
-            }, 5000);
+        if (interaction.customId === "ticket_close") {
+            await interaction.channel.delete();
         }
     }
 });
 
-// ─────────────── BOT GİRİŞ ───────────────
+// 🔑 Botu başlat
 client.login(process.env.TOKEN);
