@@ -64,24 +64,20 @@ module.exports = {
             new ActionRowBuilder().addComponents(tkaDurumInput)
         );
 
-        // Yeni eklenen alanları yeni bir ActionRow'a ekleyelim
         const ssRow = new ActionRowBuilder().addComponents(robloxGrupUyeligiInput);
         const grupUyeligiRow = new ActionRowBuilder().addComponents(ssKanitInput);
         modal.addComponents(ssRow, grupUyeligiRow);
 
-        // Kullanıcıya modal'ı göster
         await interaction.showModal(modal);
     },
 };
 
-// Bu kısım, modal gönderildiğinde çalışacak
 module.exports.setupModalListener = (client) => {
     client.on(Events.InteractionCreate, async modalInteraction => {
         if (!modalInteraction.isModalSubmit() || modalInteraction.customId !== 'kamp_basvuru_formu') {
             return;
         }
 
-        // Formdan gelen yanıtları al
         const robloxIsim = modalInteraction.fields.getTextInputValue('robloxIsim');
         const discordIsim = modalInteraction.fields.getTextInputValue('discordIsim');
         const kamplar = modalInteraction.fields.getTextInputValue('gelinenKamplar');
@@ -90,7 +86,6 @@ module.exports.setupModalListener = (client) => {
         const robloxGrupUyeligi = modalInteraction.fields.getTextInputValue('robloxGrupUyeligi');
         const ssKanit = modalInteraction.fields.getTextInputValue('ssKanit');
 
-        // Sonuçları bir Embed mesajı olarak hazırla
         const resultEmbed = new EmbedBuilder()
             .setColor('#2ecc71')
             .setTitle('📝 Yeni Kamp Başvurusu')
@@ -106,14 +101,17 @@ module.exports.setupModalListener = (client) => {
             )
             .setTimestamp();
 
-        // Başvuruların gönderileceği kanalın ID'si. BURAYI DEĞİŞTİR!
         const logChannelId = 'BASVURU_LOG_KANAL_IDSI';
-        const logChannel = await modalInteraction.guild.channels.fetch(logChannelId);
-
-        if (logChannel) {
-            await logChannel.send({ embeds: [resultEmbed] });
-            await modalInteraction.reply({ content: 'Başvurunuz başarıyla gönderildi!', ephemeral: true });
-        } else {
+        try {
+            const logChannel = await modalInteraction.guild.channels.fetch(logChannelId);
+            if (logChannel) {
+                await logChannel.send({ embeds: [resultEmbed] });
+                await modalInteraction.reply({ content: 'Başvurunuz başarıyla gönderildi!', ephemeral: true });
+            } else {
+                 await modalInteraction.reply({ content: `❌ Başvuru kanalı bulunamadı. Lütfen "BASVURU_LOG_KANAL_IDSI" değerini doğru girdiğinizden emin olun.`, ephemeral: true });
+            }
+        } catch (error) {
+            console.error(error);
             await modalInteraction.reply({ content: 'Başvurunuz gönderilirken bir hata oluştu.', ephemeral: true });
         }
     });
