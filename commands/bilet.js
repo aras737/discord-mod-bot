@@ -1,31 +1,24 @@
-const { SlashCommandBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, EmbedBuilder, ChannelType, PermissionsBitField } = require('discord.js');
+const { SlashCommandBuilder, EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle } = require('discord.js');
 
 module.exports = {
-    data: new SlashCommandBuilder()
-        .setName('bilet')
-        .setDescription('Bilet sistemi menüsünü açar.'),
+  data: new SlashCommandBuilder()
+    .setName('bilet')
+    .setDescription('Destek bileti açma panelini gönderir.'),
 
-    async execute(interaction) {
-        const embed = new EmbedBuilder()
-            .setColor(0x00AE86)
-            .setTitle('🎫 TKA Bilet Sistemi')
-            .setDescription(
-                "Destek almak için aşağıdaki **Butona** basınız.\n\n" +
-                "📌 Kurallar:\n" +
-                "1️⃣ Spam yapmayınız.\n" +
-                "2️⃣ Açtığınız bilete sadece sizin ve yetkililerin erişimi olur.\n" +
-                "3️⃣ Gereksiz yere bilet açmayınız."
-            )
-            .setFooter({ text: 'TKA Destek Sistemi' })
-            .setTimestamp();
+  async execute(interaction) {
+    const embed = new EmbedBuilder()
+      .setColor(0x2b2d31)
+      .setTitle('🎫 Destek Sistemi')
+      .setDescription('Herhangi bir sorun ya da yardım için aşağıdaki butona tıklayarak bir **bilet açabilirsiniz.**\n\n📌 Lütfen gereksiz yere bilet açmayın.')
+      .setFooter({ text: 'Destek Ekibi' });
 
-        const row = new ActionRowBuilder().addComponents(
-            new ButtonBuilder()
-                .setCustomId('ticket-create')
-                .setLabel('🎟️ Bilet Aç')
-                .setStyle(ButtonStyle.Success)
-        );
+    const row = new ActionRowBuilder().addComponents(
+      new ButtonBuilder()
+        .setCustomId('ticket_open')
+        .setLabel('📩 Bilet Aç')
+        .setStyle(ButtonStyle.Primary)
+    );
 
-        await interaction.reply({ embeds: [embed], components: [row] });
-    }
+    await interaction.reply({ embeds: [embed], components: [row] });
+  }
 };
