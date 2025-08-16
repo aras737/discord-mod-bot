@@ -84,27 +84,37 @@ client.on('interactionCreate', async interaction => {
             }
 
             const channel = await interaction.guild.channels.create({
-                name: `ticket-${interaction.user.id}`,
-                type: ChannelType.GuildText,
-                permissionOverwrites: [
-                    {
-                        id: interaction.guild.id,
-                        deny: [PermissionsBitField.Flags.ViewChannel],
-                    },
-                    {
-                        id: interaction.user.id,
-                        allow: [PermissionsBitField.Flags.ViewChannel, PermissionsBitField.Flags.SendMessages],
-                    },
-                    {
-                        id: client.user.id,
-                        allow: [PermissionsBitField.Flags.ViewChannel, PermissionsBitField.Flags.SendMessages, PermissionsBitField.Flags.ManageChannels],
-                    },
-                    {
-                        id: "YETKILI_ROL_ID", // 👈 buraya yetkili rol ID'sini gir
-                        allow: [PermissionsBitField.Flags.ViewChannel, PermissionsBitField.Flags.SendMessages],
-                    }
-                ],
-            });
+    name: `ticket-${interaction.user.id}`,
+    type: ChannelType.GuildText,
+    permissionOverwrites: [
+        {
+            id: interaction.guild.id,
+            deny: [PermissionsBitField.Flags.ViewChannel],
+        },
+        {
+            id: interaction.user.id,
+            allow: [
+                PermissionsBitField.Flags.ViewChannel,
+                PermissionsBitField.Flags.SendMessages
+            ],
+        },
+        {
+            id: client.user.id,
+            allow: [
+                PermissionsBitField.Flags.ViewChannel,
+                PermissionsBitField.Flags.SendMessages,
+                PermissionsBitField.Flags.ManageChannels
+            ],
+        },
+        {
+            id: "123456789012345678", // ✅ buraya kendi YETKILI rolünün ID’sini koy
+            allow: [
+                PermissionsBitField.Flags.ViewChannel,
+                PermissionsBitField.Flags.SendMessages
+            ],
+        }
+    ],
+});
 
             const embed = new EmbedBuilder()
                 .setColor(0xffd000)
