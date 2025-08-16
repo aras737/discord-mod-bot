@@ -3,7 +3,7 @@ const { EmbedBuilder, SlashCommandBuilder } = require('discord.js');
 module.exports = {
   data: new SlashCommandBuilder()
     .setName('basvuru')
-    .setDescription('AAT başvuru formunu gönderir'),
+    .setDescription('TKA başvuru formunu gönderir'),
 
   async execute(interaction) {
     const embed = new EmbedBuilder()
@@ -12,15 +12,17 @@ module.exports = {
       .setDescription(
         '**• Roblox İsminiz:**\n\n' +
         '**• Discord İsminiz:**\n\n' +
-        '**• Hangi kamplardan geliyorsunuz: [HEPSİNİ SAY]**\n\n' +
-        '**• Geldiğiniz kampların grup üyesi sayıları: [HEPSİNİ SAY]**\n\n' +
-        '**• Daha önce TKA ordusunda bulundunuz mu:**\n\n' +
-        '**• Kampların Roblox grubunda yer alıyor musunuz:**\n\n' +
-        '**• SS/Kanıt:** [Her kamp için iki tane oyun içi SS gerekmektedir. Bu, sizin kamptan hemen girip hemen çıkmadığınızı anlamamız için getirilen bir kuraldır. İki SS\'in de farklı günlerde olması gerekmektedir.]'
+        '**• Hangi kamplardan geliyorsunuz? [Hepsini yazınız]**\n\n' +
+        '**• Geldiğiniz kampların grup üye sayıları: [Hepsini yazınız]**\n\n' +
+        '**• Daha önce TKA ordusunda bulundunuz mu?**\n\n' +
+        '**• Kampların Roblox grubunda yer alıyor musunuz?**\n\n' +
+        '**• SS / Kanıt:**\nHer kamp için **iki farklı oyun içi SS** gereklidir.\n' +
+        '→ SS\'lerin **farklı günlerde** olması şarttır.\n' +
+        '→ Bu kural, kampta uzun süre bulunduğunuzu kanıtlamak içindir.'
       )
       .setFooter({ text: 'TKA Başvuru Sistemi' })
       .setTimestamp();
 
-    await interaction.reply({ embeds: [embed], ephemeral: true });
+    await interaction.reply({ embeds: [embed], ephemeral: false }); // herkes görsün diye false
   },
 };
