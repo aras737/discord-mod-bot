@@ -4,7 +4,6 @@ module.exports = {
     data: new SlashCommandBuilder()
         .setName('telsiz')
         .setDescription('Telsiz kanalı açar veya kapatır.')
-        .setDefaultMemberPermissions(PermissionsBitField.Flags.ManageChannels)
         .addSubcommand(sub =>
             sub.setName('aç')
                 .setDescription('Telsiz kanalı açar ve isminizi telsiz koduna çevirir.')
