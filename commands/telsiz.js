@@ -1,6 +1,4 @@
 const { SlashCommandBuilder, ChannelType, PermissionsBitField } = require('discord.js');
-const { joinVoiceChannel, createAudioPlayer, createAudioResource, AudioPlayerStatus } = require('@discordjs/voice');
-const path = require('path');
 
 module.exports = {
     data: new SlashCommandBuilder()
@@ -20,7 +18,7 @@ module.exports = {
                         .setRequired(false)))
         .addSubcommand(sub =>
             sub.setName('kapat')
-                .setDescription('Telsiz kanalını kapatır ve kapanma sesi çalar.')),
+                .setDescription('Telsiz kanalını kapatır ve isminizi geri alır.')),
 
     async execute(interaction) {
         const subcommand = interaction.options.getSubcommand();
@@ -44,7 +42,11 @@ module.exports = {
                         },
                         {
                             id: member.id,
-                            allow: [PermissionsBitField.Flags.ViewChannel, PermissionsBitField.Flags.Connect, PermissionsBitField.Flags.Speak],
+                            allow: [
+                                PermissionsBitField.Flags.ViewChannel,
+                                PermissionsBitField.Flags.Connect,
+                                PermissionsBitField.Flags.Speak,
+                            ],
                         },
                     ],
                 });
@@ -53,11 +55,17 @@ module.exports = {
                     await member.voice.setChannel(voiceChannel);
                 }
 
-                await interaction.reply({ content: `📡 Telsiz kanalı **${voiceChannel.name}** açıldı. Takma adınız **${newNickname}** olarak değiştirildi.`, ephemeral: true });
+                await interaction.reply({ 
+                    content: `📡 Telsiz kanalı **${voiceChannel.name}** açıldı. Takma adınız **${newNickname}** olarak değiştirildi.`, 
+                    ephemeral: true 
+                });
 
             } catch (error) {
                 console.error(error);
-                await interaction.reply({ content: '❌ Telsiz kanalı açılırken hata oluştu.', ephemeral: true });
+                await interaction.reply({ 
+                    content: '❌ Telsiz kanalı açılırken hata oluştu. Botun gerekli yetkilere sahip olduğundan emin olun.', 
+                    ephemeral: true 
+                });
             }
         }
 
@@ -68,30 +76,19 @@ module.exports = {
             }
 
             try {
-                // Önce kapanma sesi çal
-                const connection = joinVoiceChannel({
-                    channelId: voiceChannel.id,
-                    guildId: voiceChannel.guild.id,
-                    adapterCreator: voiceChannel.guild.voiceAdapterCreator,
+                await voiceChannel.delete();
+                if (member.manageable) await member.setNickname(null);
+
+                await interaction.reply({ 
+                    content: '📴 Telsiz kanalı kapatıldı. Takma adınız eski haline döndürüldü.', 
+                    ephemeral: true 
                 });
-
-                const resource = createAudioResource(path.join(__dirname, 'telsiz.mp3')); // Ses dosyasını aynı klasöre koy
-                const player = createAudioPlayer();
-
-                player.play(resource);
-                connection.subscribe(player);
-
-                player.on(AudioPlayerStatus.Idle, async () => {
-                    connection.destroy(); // Ses bitince çık
-                    await voiceChannel.delete(); // Kanalı sil
-                    if (member.manageable) await member.setNickname(null);
-                });
-
-                await interaction.reply({ content: '📴 Telsiz kapatılıyor... **kkkkkk**', ephemeral: true });
-
             } catch (error) {
                 console.error(error);
-                await interaction.reply({ content: '❌ Telsiz kapatılırken hata oluştu.', ephemeral: true });
+                await interaction.reply({ 
+                    content: '❌ Telsiz kapatılırken hata oluştu.', 
+                    ephemeral: true 
+                });
             }
         }
     },
