@@ -2,24 +2,19 @@
 const {
   Client, GatewayIntentBits, Collection, REST, Routes,
   PermissionsBitField, ActionRowBuilder, ButtonBuilder, ButtonStyle,
-  ChannelType, EmbedBuilder, AttachmentBuilder, Events
+  ChannelType, EmbedBuilder, AttachmentBuilder, Events, ModalBuilder, TextInputBuilder, TextInputStyle
 } = require('discord.js');
 
 const express = require('express');
 const fs = require('fs');
 const path = require('path');
 const dotenv = require('dotenv');
+const ms = require('ms');
 dotenv.config();
 
 const config = require('./config.json');
 
-// ========== EK SİSTEMLERİMİZİ ÇAĞIR ==========
-const otomatikModSystem = require('./otomatikMod.js');
-const logsSystem = require('./logs.js');
-const { setupModalListener } = require('./commands/kampBasvuru.js');
-
 // ========== CLIENT ==========
-// Tüm yetkileri ekleyelim ki bot eksiksiz çalışsın
 const client = new Client({
   intents: [
     GatewayIntentBits.Guilds,
@@ -84,7 +79,7 @@ function resolveStaffRoleIds(guild) {
   return [...ids];
 }
 
-// ========== READY ==========
+// ========== HAZIRLIK VE GİRİŞ ==========
 client.once(Events.ClientReady, async () => {
   console.log(`🤖 Bot aktif: ${client.user.tag}`);
 
@@ -99,36 +94,100 @@ client.once(Events.ClientReady, async () => {
     console.error('❌ Slash komut yükleme hatası:', err);
   }
 
-  // Önceki sistemleri başlat
-  otomatikModSystem(client);
-  logsSystem(client);
-  setupModalListener(client);
-
+  // Express
   const app = express();
   const PORT = Number(process.env.PORT) || 8080;
   app.get('/', (_req, res) => res.send('✅ Bot çalışıyor.'));
   app.listen(PORT, () => {
     console.log(`🌐 Express portu dinleniyor: ${PORT}`);
-    if (process.env.WEB_BASE_URL) {
-      console.log(`🌍 WEB_BASE_URL: ${process.env.WEB_BASE_URL}`);
-    }
   });
 });
 
-// ========== INTERACTION (TEK NOKTA) ==========
+// ========== LOGS SİSTEMİ ==========
+client.on(Events.VoiceStateUpdate, (oldState, newState) => {
+    if (oldState.channelId === newState.channelId) return;
+    const logChannel = client.channels.cache.get(config.logChannelId);
+    if (!logChannel) return;
+
+    if (oldState.channelId && !newState.channelId) {
+        logChannel.send(`🔴 ${oldState.member.displayName} ses kanalından ayrıldı: **${oldState.channel.name}**`);
+    } else if (!oldState.channelId && newState.channelId) {
+        logChannel.send(`🟢 ${newState.member.displayName} ses kanalına katıldı: **${newState.channel.name}**`);
+    } else {
+        logChannel.send(`🔵 ${newState.member.displayName} ses kanalını değiştirdi: **${oldState.channel.name}** --> **${newState.channel.name}**`);
+    }
+});
+
+// ========== OTOMATİK MODERASYON ==========
+const bannedWords = ['salak', 'aptal', 'aq', 'orospu', 'piç', 'yarrak', 'mk'];
+const invitePattern = /(discord\.gg|discord\.com\/invite)\/[a-zA-Z0-9]+/g;
+const spamMap = new Map();
+
+client.on(Events.MessageCreate, async message => {
+    if (message.author.bot || !message.guild) return;
+
+    const messageContent = message.content.toLowerCase();
+
+    // Küfür kontrolü
+    if (bannedWords.some(word => messageContent.includes(word))) {
+        await message.delete();
+        message.channel.send(`Hey, ${message.author}! Bu kanalda bu kelimeleri kullanmak yasaktır.`).then(msg => setTimeout(() => msg.delete(), 5000));
+        return;
+    }
+
+    // Reklam kontrolü
+    if (invitePattern.test(messageContent)) {
+        await message.delete();
+        message.channel.send(`Hey, ${message.author}! Başka bir sunucuya davet bağlantısı paylaşmak yasaktır.`).then(msg => setTimeout(() => msg.delete(), 5000));
+        return;
+    }
+
+    // Spam kontrolü
+    const now = Date.now();
+    const userSpam = spamMap.get(message.author.id) || { count: 0, lastMessage: 0 };
+
+    if (now - userSpam.lastMessage < 3000) {
+        userSpam.count++;
+        if (userSpam.count > 5) {
+            await message.member.timeout(ms('1m'), 'Spam yapıyor.');
+            message.channel.send(`${message.author} spam yaptığı için 1 dakika susturuldu.`);
+            userSpam.count = 0;
+        }
+    } else {
+        userSpam.count = 1;
+    }
+    userSpam.lastMessage = now;
+    spamMap.set(message.author.id, userSpam);
+});
+
+// ========== INTERACTION (TÜM KOMUT VE BUTONLARI YÖNETİR) ==========
 client.on(Events.InteractionCreate, async (interaction) => {
-  try {
-    // --------- BUTONLAR ---------
+    // Slash komutları
+    if (interaction.isChatInputCommand()) {
+        const command = client.commands.get(interaction.commandName);
+        if (!command) return;
+
+        try {
+            await command.execute(interaction);
+        } catch (err) {
+            console.error('Komut çalıştırma hatası:', err);
+            if (interaction.replied || interaction.deferred) {
+                await interaction.followUp({ content: 'Komutu çalıştırırken bir hata oluştu!', ephemeral: true });
+            } else {
+                await interaction.reply({ content: 'Komutu çalıştırırken bir hata oluştu!', ephemeral: true });
+            }
+        }
+    }
+
+    // Buton etkileşimleri
     if (interaction.isButton()) {
         const id = interaction.customId;
         const staffRoleIds = resolveStaffRoleIds(interaction.guild);
-        
-        // Bilet oluşturma
+
+        // Bilet oluşturma butonu (ticket sistemi)
         if (id === 'create_ticket') {
             const existing = interaction.guild.channels.cache.find(c => c.type === ChannelType.GuildText && c.name.startsWith(`ticket-${interaction.user.username.toLowerCase().replace(/[^a-z0-9]/g, '')}`));
-            if (existing) {
-                return interaction.reply({ content: `❌ Zaten açık bir biletin var: ${existing}`, ephemeral: true });
-            }
+            if (existing) return interaction.reply({ content: `❌ Zaten açık bir biletin var: ${existing}`, ephemeral: true });
 
             const ch = await interaction.guild.channels.create({
                 name: `ticket-${interaction.user.username.toLowerCase().replace(/[^a-z0-9]/g, '')}`,
@@ -140,61 +199,61 @@ client.on(Events.InteractionCreate, async (interaction) => {
                     ...staffRoleIds.map(rid => ({ id: rid, allow: [PermissionsBitField.Flags.ViewChannel, PermissionsBitField.Flags.SendMessages, PermissionsBitField.Flags.ReadMessageHistory] }))
                 ]
             });
-
             const row = new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId('ticket_close').setLabel('Kapat').setStyle(ButtonStyle.Danger));
             await ch.send({ embeds: [new EmbedBuilder().setTitle('🎫 Destek Talebi').setDescription('Merhaba! Sorununu/isteğini detaylı yaz. Yetkililer kısa sürede yardımcı olacak.').setColor('Blue').setFooter({ text: `Açan: ${interaction.user.tag}` }).setTimestamp()], components: [row] });
             await interaction.reply({ content: `✅ Bilet oluşturuldu: ${ch}`, ephemeral: true });
             return;
         }
 
-        // Bilet kapatma
+        // Bilet kapatma butonu
         if (id === 'ticket_close') {
-            if (!interaction.member.roles.cache.some(r => staffRoleIds.includes(r.id))) {
-                return interaction.reply({ content: 'Bu butonu sadece yetkililer kullanabilir.', ephemeral: true });
-            }
-            if (!interaction.channel.name.startsWith('ticket-')) {
-                return interaction.reply({ content: 'Bu işlem sadece bilet kanallarında yapılabilir.', ephemeral: true });
-            }
+            if (!interaction.member.roles.cache.some(r => staffRoleIds.includes(r.id))) return interaction.reply({ content: 'Bu butonu sadece yetkililer kullanabilir.', ephemeral: true });
+            if (!interaction.channel.name.startsWith('ticket-')) return interaction.reply({ content: 'Bu işlem sadece bilet kanallarında yapılabilir.', ephemeral: true });
             await interaction.reply({ content: 'Bilet 5 saniye içinde kapatılacak.', ephemeral: true });
             setTimeout(() => interaction.channel.delete(), 5000);
             return;
         }
     }
 
-    // --------- SLASH KOMUTLAR ---------
-    if (interaction.isChatInputCommand()) {
-      const command = client.commands.get(interaction.commandName);
-      if (!command) return;
+    // Modal gönderme (başvuru formu için)
+    if (interaction.isModalSubmit() && interaction.customId === 'kamp_basvuru_formu') {
+        const robloxIsim = interaction.fields.getTextInputValue('robloxIsim');
+        const discordIsim = interaction.fields.getTextInputValue('discordIsim');
+        const kamplar = interaction.fields.getTextInputValue('gelinenKamplar');
+        const grupUyeSayilari = interaction.fields.getTextInputValue('grupUyeSayilari');
+        const tkaDurum = interaction.fields.getTextInputValue('tkaDurumu');
+        const robloxGrupUyeligi = interaction.fields.getTextInputValue('robloxGrupUyeligi');
+        const ssKanit = interaction.fields.getTextInputValue('ssKanit');
 
-      const seviye = getSeviye(interaction.member);
-      if (interaction.guild && interaction.guild.ownerId !== interaction.user.id) {
-          if (!seviye) {
-              return interaction.reply({ content: '🚫 Bu komutu kullanmak için yetkin yok.', ephemeral: true });
-          }
-          if (seviye !== 'ust') {
-              const izinli = (config.commands?.[seviye] || []).includes(interaction.commandName);
-              if (!izinli) {
-                  return interaction.reply({ content: '🚫 Bu komut senin yetki seviyene kapalı.', ephemeral: true });
-              }
-          }
-      }
-
-      await command.execute(interaction);
-    }
-    
-    // --------- MODAL GÖNDERİMİ (ModalSubmitInteraction) ---------
-    if (interaction.isModalSubmit()) {
-        const modalListener = client.listeners(Events.InteractionCreate).find(listener => listener.name === 'modalSubmitListener');
-        if (modalListener) {
-            await modalListener(interaction);
+        const resultEmbed = new EmbedBuilder()
+            .setColor('#2ecc71')
+            .setTitle('📝 Yeni Kamp Başvurusu')
+            .setDescription(`**Başvuran:** <@${interaction.user.id}> (${interaction.user.tag})`)
+            .addFields(
+                { name: 'Roblox İsmi', value: robloxIsim, inline: true },
+                { name: 'Discord İsmi', value: discordIsim, inline: true },
+                { name: 'Geldiği Kamplar', value: kamplar },
+                { name: 'Grup Üye Sayıları', value: grupUyeSayilari },
+                { name: 'Daha Önce TKA Ordusunda Bulundu mu?', value: tkaDurum },
+                { name: 'Roblox Grup Üyeliği', value: robloxGrupUyeligi },
+                { name: 'SS/Kanıt', value: ssKanit }
+            )
+            .setTimestamp();
+        
+        const logChannelId = 'BASVURU_LOG_KANAL_IDSI';
+        try {
+            const logChannel = await interaction.guild.channels.fetch(logChannelId);
+            if (logChannel) {
+                await logChannel.send({ embeds: [resultEmbed] });
+                await interaction.reply({ content: 'Başvurunuz başarıyla gönderildi!', ephemeral: true });
+            } else {
+                 await interaction.reply({ content: `❌ Başvuru kanalı bulunamadı. Lütfen "BASVURU_LOG_KANAL_IDSI" değerini doğru girdiğinizden emin olun.`, ephemeral: true });
+            }
+        } catch (error) {
+            console.error(error);
+            await interaction.reply({ content: 'Başvurunuz gönderilirken bir hata oluştu.', ephemeral: true });
         }
     }
-  } catch (err) {
-    console.error('interactionCreate hata:', err);
-    if (interaction.isRepliable() && !interaction.replied) {
-      interaction.reply({ content: '❌ Bir hata oluştu.', ephemeral: true }).catch(() => {});
-    }
-  }
 });
 
 // ========== HATA YAKALAMA ==========
