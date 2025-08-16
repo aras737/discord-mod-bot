@@ -13,6 +13,11 @@ dotenv.config();
 
 const config = require('./config.json');
 
+// ========== EK SİSTEMLERİMİZİ ÇAĞIR ==========
+const otomatikModSystem = require('./otomatikMod.js');
+const logsSystem = require('./logs.js');
+const { setupModalListener } = require('./commands/kampBasvuru.js');
+
 // ========== CLIENT ==========
 // Tüm yetkileri ekleyelim ki bot eksiksiz çalışsın
 const client = new Client({
@@ -22,22 +27,17 @@ const client = new Client({
     GatewayIntentBits.MessageContent,
     GatewayIntentBits.GuildMembers,
     GatewayIntentBits.GuildVoiceStates,
-    GatewayIntentBits.GuildPresences, // Üye durumlarını takip etmek için (offline/online)
+    GatewayIntentBits.GuildPresences,
     GatewayIntentBits.DirectMessages,
     GatewayIntentBits.GuildMessageReactions,
-    GatewayIntentBits.GuildModeration, // Ban ve kick olayları için
+    GatewayIntentBits.GuildModeration,
   ],
 });
-
-// ========== EK SİSTEMLER ==========
-// Otomatik moderasyon ve logs sistemlerini içeri al
-const otomatikModSystem = require('./otomatikMod.js');
-const logsSystem = require('./logs.js');
 
 // ========== KOMUT YÜKLEYİCİ ==========
 client.commands = new Collection();
 const komutlarJSON = [];
-const komutKlasoru = path.join(__dirname, 'komutlar');
+const komutKlasoru = path.join(__dirname, 'commands');
 
 try {
   if (fs.existsSync(komutKlasoru)) {
@@ -54,17 +54,43 @@ try {
       }
     }
   } else {
-    console.warn('⚠️ ./komutlar klasörü bulunamadı.');
+    console.warn('⚠️ ./commands klasörü bulunamadı.');
   }
 } catch (e) {
   console.error('❌ Komutlar yüklenemedi:', e);
+}
+
+// ========== YARDIMCI FONKSİYONLAR ==========
+function getSeviye(member) {
+  const names = member.roles.cache.map(r => r.name);
+  const ust = (config.roles?.ust || []).some(n => names.includes(n));
+  if (ust) return 'ust';
+  const orta = (config.roles?.orta || []).some(n => names.includes(n));
+  if (orta) return 'orta';
+  const alt = (config.roles?.alt || []).some(n => names.includes(n));
+  if (alt) return 'alt';
+  const masum = (config.roles?.masum || []).some(n => names.includes(n));
+  if (masum) return 'masum';
+  return null;
+}
+
+function resolveStaffRoleIds(guild) {
+  const allRoleNames = [...(config.roles?.ust || []), ...(config.roles?.orta || []), ...(config.roles?.alt || [])];
+  const ids = new Set();
+  for (const name of allRoleNames) {
+    const role = guild.roles.cache.find(r => r.name === name);
+    if (role) ids.add(role.id);
+  }
+  return [...ids];
 }
 
 // ========== READY ==========
 client.once(Events.ClientReady, async () => {
   console.log(`🤖 Bot aktif: ${client.user.tag}`);
 
-  // Slash komutları kaydet
+  config.commands = config.commands || {};
+  config.commands.ust = Array.from(client.commands.keys());
+
   try {
     const rest = new REST({ version: '10' }).setToken(process.env.TOKEN);
     await rest.put(Routes.applicationCommands(client.user.id), { body: komutlarJSON });
@@ -76,8 +102,8 @@ client.once(Events.ClientReady, async () => {
   // Önceki sistemleri başlat
   otomatikModSystem(client);
   logsSystem(client);
+  setupModalListener(client);
 
-  // Express
   const app = express();
   const PORT = Number(process.env.PORT) || 8080;
   app.get('/', (_req, res) => res.send('✅ Bot çalışıyor.'));
@@ -92,69 +118,47 @@ client.once(Events.ClientReady, async () => {
 // ========== INTERACTION (TEK NOKTA) ==========
 client.on(Events.InteractionCreate, async (interaction) => {
   try {
-    // --------- BUTONLAR: BİLET SİSTEMİ ---------
+    // --------- BUTONLAR ---------
     if (interaction.isButton()) {
-      const id = interaction.customId;
+        const id = interaction.customId;
+        const staffRoleIds = resolveStaffRoleIds(interaction.guild);
+        
+        // Bilet oluşturma
+        if (id === 'create_ticket') {
+            const existing = interaction.guild.channels.cache.find(c => c.type === ChannelType.GuildText && c.name.startsWith(`ticket-${interaction.user.username.toLowerCase().replace(/[^a-z0-9]/g, '')}`));
+            if (existing) {
+                return interaction.reply({ content: `❌ Zaten açık bir biletin var: ${existing}`, ephemeral: true });
+            }
 
-      const staffRoleIds = (config.roles?.ust || []).map(roleName => interaction.guild.roles.cache.find(r => r.name === roleName)?.id).filter(Boolean);
+            const ch = await interaction.guild.channels.create({
+                name: `ticket-${interaction.user.username.toLowerCase().replace(/[^a-z0-9]/g, '')}`,
+                type: ChannelType.GuildText,
+                parent: interaction.channel.parent,
+                permissionOverwrites: [
+                    { id: interaction.guild.id, deny: [PermissionsBitField.Flags.ViewChannel] },
+                    { id: interaction.user.id, allow: [PermissionsBitField.Flags.ViewChannel, PermissionsBitField.Flags.SendMessages, PermissionsBitField.Flags.ReadMessageHistory] },
+                    ...staffRoleIds.map(rid => ({ id: rid, allow: [PermissionsBitField.Flags.ViewChannel, PermissionsBitField.Flags.SendMessages, PermissionsBitField.Flags.ReadMessageHistory] }))
+                ]
+            });
 
-      // Bilet aç
-      if (id === 'create_ticket') {
-        const existing = interaction.guild.channels.cache.find(c =>
-            c.type === ChannelType.GuildText &&
-            c.name.startsWith(`ticket-${interaction.user.username.toLowerCase().replace(/[^a-z0-9]/g, '')}`)
-        );
-        if (existing) {
-          return interaction.reply({ content: `❌ Zaten açık bir biletin var: ${existing}`, ephemeral: true });
+            const row = new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId('ticket_close').setLabel('Kapat').setStyle(ButtonStyle.Danger));
+            await ch.send({ embeds: [new EmbedBuilder().setTitle('🎫 Destek Talebi').setDescription('Merhaba! Sorununu/isteğini detaylı yaz. Yetkililer kısa sürede yardımcı olacak.').setColor('Blue').setFooter({ text: `Açan: ${interaction.user.tag}` }).setTimestamp()], components: [row] });
+            await interaction.reply({ content: `✅ Bilet oluşturuldu: ${ch}`, ephemeral: true });
+            return;
         }
 
-        const ch = await interaction.guild.channels.create({
-          name: `ticket-${interaction.user.username.toLowerCase().replace(/[^a-z0-9]/g, '')}`,
-          type: ChannelType.GuildText,
-          parent: interaction.channel.parent,
-          permissionOverwrites: [
-            { id: interaction.guild.id, deny: [PermissionsBitField.Flags.ViewChannel] },
-            { id: interaction.user.id, allow: [PermissionsBitField.Flags.ViewChannel, PermissionsBitField.Flags.SendMessages, PermissionsBitField.Flags.ReadMessageHistory] },
-            ...staffRoleIds.map(rid => ({
-              id: rid,
-              allow: [PermissionsBitField.Flags.ViewChannel, PermissionsBitField.Flags.SendMessages, PermissionsBitField.Flags.ReadMessageHistory]
-            }))
-          ]
-        });
-
-        const row = new ActionRowBuilder().addComponents(
-          new ButtonBuilder().setCustomId('ticket_close').setLabel('Kapat').setStyle(ButtonStyle.Danger),
-        );
-
-        await ch.send({
-          embeds: [
-            new EmbedBuilder()
-              .setTitle('🎫 Destek Talebi')
-              .setDescription('Merhaba! Sorununu/isteğini detaylı yaz. Yetkililer kısa sürede yardımcı olacak.')
-              .setColor('Blue')
-              .setFooter({ text: `Açan: ${interaction.user.tag}` })
-              .setTimestamp()
-          ],
-          components: [row]
-        });
-
-        await interaction.reply({ content: `✅ Bilet oluşturuldu: ${ch}`, ephemeral: true });
-        return;
-      }
-      
-      // Bilet kapat
-      if (id === 'ticket_close') {
-          if (!interaction.member.roles.cache.some(r => staffRoleIds.includes(r.id))) {
-              return interaction.reply({ content: 'Bu butonu sadece yetkililer kullanabilir.', ephemeral: true });
-          }
-          if (!interaction.channel.name.startsWith('ticket-')) {
-              return interaction.reply({ content: 'Bu işlem sadece bilet kanallarında yapılabilir.', ephemeral: true });
-          }
-
-          await interaction.reply({ content: 'Bilet 5 saniye içinde kapatılacak.', ephemeral: true });
-          setTimeout(() => interaction.channel.delete(), 5000);
-          return;
-      }
+        // Bilet kapatma
+        if (id === 'ticket_close') {
+            if (!interaction.member.roles.cache.some(r => staffRoleIds.includes(r.id))) {
+                return interaction.reply({ content: 'Bu butonu sadece yetkililer kullanabilir.', ephemeral: true });
+            }
+            if (!interaction.channel.name.startsWith('ticket-')) {
+                return interaction.reply({ content: 'Bu işlem sadece bilet kanallarında yapılabilir.', ephemeral: true });
+            }
+            await interaction.reply({ content: 'Bilet 5 saniye içinde kapatılacak.', ephemeral: true });
+            setTimeout(() => interaction.channel.delete(), 5000);
+            return;
+        }
     }
 
     // --------- SLASH KOMUTLAR ---------
@@ -162,16 +166,28 @@ client.on(Events.InteractionCreate, async (interaction) => {
       const command = client.commands.get(interaction.commandName);
       if (!command) return;
 
-      try {
-        await command.execute(interaction);
-      } catch (err) {
-        console.error('interactionCreate hata:', err);
-        if (interaction.replied || interaction.deferred) {
-            await interaction.followUp({ content: 'Komutu çalıştırırken bir hata oluştu!', ephemeral: true });
-        } else {
-            await interaction.reply({ content: 'Komutu çalıştırırken bir hata oluştu!', ephemeral: true });
-        }
+      const seviye = getSeviye(interaction.member);
+      if (interaction.guild && interaction.guild.ownerId !== interaction.user.id) {
+          if (!seviye) {
+              return interaction.reply({ content: '🚫 Bu komutu kullanmak için yetkin yok.', ephemeral: true });
+          }
+          if (seviye !== 'ust') {
+              const izinli = (config.commands?.[seviye] || []).includes(interaction.commandName);
+              if (!izinli) {
+                  return interaction.reply({ content: '🚫 Bu komut senin yetki seviyene kapalı.', ephemeral: true });
+              }
+          }
       }
+
+      await command.execute(interaction);
+    }
+    
+    // --------- MODAL GÖNDERİMİ (ModalSubmitInteraction) ---------
+    if (interaction.isModalSubmit()) {
+        const modalListener = client.listeners(Events.InteractionCreate).find(listener => listener.name === 'modalSubmitListener');
+        if (modalListener) {
+            await modalListener(interaction);
+        }
     }
   } catch (err) {
     console.error('interactionCreate hata:', err);
