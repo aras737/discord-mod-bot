@@ -1,113 +1,98 @@
-const { SlashCommandBuilder, ModalBuilder, TextInputBuilder, ActionRowBuilder, TextInputStyle, EmbedBuilder, Events } = require('discord.js');
+const { SlashCommandBuilder, EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, Events } = require('discord.js');
+
+const pages = [
+    new EmbedBuilder()
+        .setTitle('📚 Kılavuz - Sayfa 1/3')
+        .setDescription('Resmi Kılavuzumuza Hoş Geldiniz!')
+        .setColor('Blurple')
+        .addFields(
+            { name: '1️⃣ Genel Bilgiler', value: 'Bu botun ve sunucunun temel komutları hakkında bilgi verir.', inline: false },
+            { name: '2️⃣ Rütbe Sistemi', value: 'Askeri rütbe sistemimiz ve kurallarımız hakkında bilgi verir.', inline: false },
+            { name: '3️⃣ Kurallar', value: 'Sunucu kurallarımızı ve ihlal durumlarını anlatır.', inline: false }
+        ),
+    new EmbedBuilder()
+        .setTitle('📚 Kılavuz - Sayfa 2/3: Rütbe Sistemi')
+        .setDescription('Askeri rütbe sistemimiz ve yetkilerimiz aşağıda açıklanmıştır.')
+        .setColor('Red')
+        .addFields(
+            { name: '💂 Rütbeler', value: '• Komutan\n• Üsteğmen\n• Teğmen\n• Er\n• Asker', inline: true },
+            { name: '🎖️ Yetkiler', value: '• `duyuru`\n• `telsiz`\n• `rütbe`', inline: true }
+        ),
+    new EmbedBuilder()
+        .setTitle('📚 Kılavuz - Sayfa 3/3: Sunucu Kuralları')
+        .setDescription('Sunucuda huzurlu bir ortam için lütfen bu kurallara uyun.')
+        .setColor('Green')
+        .addFields(
+            { name: '1. Küfür ve Hakaret', value: 'Kesinlikle yasaktır ve cezası süresiz susturulmadır.', inline: false },
+            { name: '2. Spam', value: '5 dakikada 5\'ten fazla mesaj atmak spam sayılır ve ceza süresi 1 saattir.', inline: false },
+            { name: '3. Reklam', value: 'Başka bir sunucunun veya markanın reklamını yapmak yasaktır ve kalıcı olarak yasaklanırsınız.', inline: false }
+        ),
+];
 
 module.exports = {
     data: new SlashCommandBuilder()
-        .setName('kampbasvuru')
-        .setDescription('Kampa katılım için bir başvuru formu açar.'),
+        .setName('kılavuz')
+        .setDescription('Sunucu kılavuzunu görüntüler.'),
     async execute(interaction) {
-        const modal = new ModalBuilder()
-            .setCustomId('kamp_basvuru_formu')
-            .setTitle('Kampa Katılım Başvuru Formu');
+        let currentPageIndex = 0;
 
-        const robloxIsimInput = new TextInputBuilder()
-            .setCustomId('robloxIsim')
-            .setLabel("Roblox İsminiz?")
-            .setStyle(TextInputStyle.Short)
-            .setRequired(true);
-
-        const discordIsimInput = new TextInputBuilder()
-            .setCustomId('discordIsim')
-            .setLabel("Discord İsminiz?")
-            .setStyle(TextInputStyle.Short)
-            .setRequired(true);
-        
-        const kamplarInput = new TextInputBuilder()
-            .setCustomId('gelinenKamplar')
-            .setLabel("Hangi kamplardan geliyorsunuz? [HEPSİNİ SAY]")
-            .setStyle(TextInputStyle.Paragraph)
-            .setRequired(true);
-
-        const grupUyeSayilariInput = new TextInputBuilder()
-            .setCustomId('grupUyeSayilari')
-            .setLabel("Geldiğiniz kampların grup üye sayıları?")
-            .setStyle(TextInputStyle.Paragraph)
-            .setRequired(true);
-
-        const tkaDurumInput = new TextInputBuilder()
-            .setCustomId('tkaDurumu')
-            .setLabel("Daha önce TKA ordusunda bulundunuz mu?")
-            .setStyle(TextInputStyle.Short)
-            .setPlaceholder("Evet / Hayır")
-            .setRequired(true);
-            
-        const robloxGrupUyeligiInput = new TextInputBuilder()
-            .setCustomId('robloxGrupUyeligi')
-            .setLabel("Kampların Roblox grubunda yer alıyor musunuz?")
-            .setStyle(TextInputStyle.Short)
-            .setPlaceholder("Evet / Hayır")
-            .setRequired(true);
-
-        const ssKanitInput = new TextInputBuilder()
-            .setCustomId('ssKanit')
-            .setLabel("SS/Kanıt (Her kamp için iki SS linki)")
-            .setStyle(TextInputStyle.Paragraph)
-            .setRequired(true);
-
-        modal.addComponents(
-            new ActionRowBuilder().addComponents(robloxIsimInput),
-            new ActionRowBuilder().addComponents(discordIsimInput),
-            new ActionRowBuilder().addComponents(kamplarInput),
-            new ActionRowBuilder().addComponents(grupUyeSayilariInput),
-            new ActionRowBuilder().addComponents(tkaDurumInput),
-            new ActionRowBuilder().addComponents(robloxGrupUyeligiInput),
-            new ActionRowBuilder().addComponents(ssKanitInput)
+        const row = new ActionRowBuilder().addComponents(
+            new ButtonBuilder()
+                .setCustomId('previous_page')
+                .setLabel('◀️ Önceki')
+                .setStyle(ButtonStyle.Secondary)
+                .setDisabled(true),
+            new ButtonBuilder()
+                .setCustomId('next_page')
+                .setLabel('Sonraki ▶️')
+                .setStyle(ButtonStyle.Secondary)
+                .setDisabled(false)
         );
 
-        await interaction.showModal(modal);
-    },
-};
+        await interaction.reply({
+            embeds: [pages[currentPageIndex]],
+            components: [row]
+        });
 
-module.exports.setupModalListener = (client) => {
-    client.on(Events.InteractionCreate, async modalInteraction => {
-        if (!modalInteraction.isModalSubmit() || modalInteraction.customId !== 'kamp_basvuru_formu') {
-            return;
-        }
+        // Buton etkileşimlerini dinle
+        const filter = i => i.customId === 'next_page' || i.customId === 'previous_page';
+        const collector = interaction.channel.createMessageComponentCollector({ filter, time: 60000 });
 
-        const robloxIsim = modalInteraction.fields.getTextInputValue('robloxIsim');
-        const discordIsim = modalInteraction.fields.getTextInputValue('discordIsim');
-        const kamplar = modalInteraction.fields.getTextInputValue('gelinenKamplar');
-        const grupUyeSayilari = modalInteraction.fields.getTextInputValue('grupUyeSayilari');
-        const tkaDurum = modalInteraction.fields.getTextInputValue('tkaDurumu');
-        const robloxGrupUyeligi = modalInteraction.fields.getTextInputValue('robloxGrupUyeligi');
-        const ssKanit = modalInteraction.fields.getTextInputValue('ssKanit');
-
-        const resultEmbed = new EmbedBuilder()
-            .setColor('#2ecc71')
-            .setTitle('📝 Yeni Kamp Başvurusu')
-            .setDescription(`**Başvuran:** <@${modalInteraction.user.id}> (${modalInteraction.user.tag})`)
-            .addFields(
-                { name: 'Roblox İsmi', value: robloxIsim, inline: true },
-                { name: 'Discord İsmi', value: discordIsim, inline: true },
-                { name: 'Geldiği Kamplar', value: kamplar },
-                { name: 'Grup Üye Sayıları', value: grupUyeSayilari },
-                { name: 'Daha Önce TKA Ordusunda Bulundu mu?', value: tkaDurum },
-                { name: 'Roblox Grup Üyeliği', value: robloxGrupUyeligi },
-                { name: 'SS/Kanıt', value: ssKanit }
-            )
-            .setTimestamp();
-
-        const logChannelId = 'BASVURU_LOG_KANAL_IDSI';
-        try {
-            const logChannel = await modalInteraction.guild.channels.fetch(logChannelId);
-            if (logChannel) {
-                await logChannel.send({ embeds: [resultEmbed] });
-                await modalInteraction.reply({ content: 'Başvurunuz başarıyla gönderildi!', ephemeral: true });
-            } else {
-                 await modalInteraction.reply({ content: `❌ Başvuru kanalı bulunamadı. Lütfen "BASVURU_LOG_KANAL_IDSI" değerini doğru girdiğinizden emin olun.`, ephemeral: true });
+        collector.on('collect', async i => {
+            if (i.customId === 'next_page') {
+                if (currentPageIndex < pages.length - 1) {
+                    currentPageIndex++;
+                }
+            } else if (i.customId === 'previous_page') {
+                if (currentPageIndex > 0) {
+                    currentPageIndex--;
+                }
             }
-        } catch (error) {
-            console.error(error);
-            await modalInteraction.reply({ content: 'Başvurunuz gönderilirken bir hata oluştu.', ephemeral: true });
-        }
-    });
+
+            const newRow = new ActionRowBuilder().addComponents(
+                new ButtonBuilder()
+                    .setCustomId('previous_page')
+                    .setLabel('◀️ Önceki')
+                    .setStyle(ButtonStyle.Secondary)
+                    .setDisabled(currentPageIndex === 0),
+                new ButtonBuilder()
+                    .setCustomId('next_page')
+                    .setLabel('Sonraki ▶️')
+                    .setStyle(ButtonStyle.Secondary)
+                    .setDisabled(currentPageIndex === pages.length - 1)
+            );
+
+            await i.update({
+                embeds: [pages[currentPageIndex]],
+                components: [newRow]
+            });
+        });
+
+        collector.on('end', async collected => {
+            const lastRow = new ActionRowBuilder().addComponents(
+                new ButtonBuilder().setCustomId('disabled_buttons').setLabel('Kılavuz zaman aşımına uğradı.').setStyle(ButtonStyle.Secondary).setDisabled(true)
+            );
+            await interaction.editReply({ components: [lastRow] });
+        });
+    },
 };
