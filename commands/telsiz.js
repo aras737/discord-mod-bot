@@ -32,8 +32,10 @@ module.exports = {
             const newNickname = `${rutbe ? `[${rutbe}] ` : ''}Telsiz ${telsizKodu}`;
 
             try {
+                // Üyenin takma adını değiştir
                 await member.setNickname(newNickname);
 
+                // Ses kanalı oluştur ve üyeyi o kanala taşı
                 const voiceChannel = await interaction.guild.channels.create({
                     name: `Telsiz - ${telsizKodu}`,
                     type: ChannelType.GuildVoice,
@@ -68,7 +70,10 @@ module.exports = {
             }
 
             try {
+                // Telsiz kanalını sil
                 await voiceChannel.delete();
+                
+                // Üyenin takma adını eski haline getir (eğer yetkisi varsa)
                 if (member.manageable) {
                     await member.setNickname(null);
                 }
