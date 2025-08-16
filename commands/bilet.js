@@ -8,7 +8,7 @@ module.exports = {
         const embed = new EmbedBuilder()
             .setColor("Blue")
             .setTitle("📩 Destek Talebi")
-            .setDescription("Destek talebi oluşturmak için aşağıdaki butona tıklayın:");
+            .setDescription("Merhaba sayın TKA personeli roblox veya discord sorununuz varsa bu butona basarak destek bileti açabilirsin.:");
 
         const row = new ActionRowBuilder()
             .addComponents(
