@@ -1,22 +1,20 @@
-const { SlashCommandBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, PermissionFlagsBits, ChannelType, EmbedBuilder } = require('discord.js');
+const { SlashCommandBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, EmbedBuilder } = require("discord.js");
 
 module.exports = {
     data: new SlashCommandBuilder()
-        .setName('ticket')
-        .setDescription('Bilet sistemi için panel gönderir')
-        .setDefaultMemberPermissions(PermissionFlagsBits.Administrator),
-
+        .setName("bilet")
+        .setDescription("📩 Destek bileti açma panelini gönderir"),
     async execute(interaction) {
         const embed = new EmbedBuilder()
-            .setTitle("🎟️ Destek Sistemi")
-            .setDescription("Bir sorun ya da yardım için aşağıdaki butona tıklayarak bilet açabilirsiniz.")
+            .setTitle("📩 Destek Talebi")
+            .setDescription("Destek talebi oluşturmak için aşağıdaki butona tıklayın:")
             .setColor("Blue");
 
         const row = new ActionRowBuilder()
             .addComponents(
                 new ButtonBuilder()
                     .setCustomId("create_ticket")
-                    .setLabel("📩 Bilet Aç")
+                    .setLabel("🎫 Bilet Oluştur")
                     .setStyle(ButtonStyle.Primary)
             );
 
