@@ -2,12 +2,10 @@ const { SlashCommandBuilder } = require('discord.js');
 
 module.exports = {
     data: new SlashCommandBuilder()
-        .setName('Transfer-Form')
+        .setName('transfer-form')
         .setDescription('Kampa katılım başvuru formunu gönderir.'),
     async execute(interaction) {
         const formText = `**• Roblox İsminiz:**
-
-**• Roblox isim:•**
 
 **• Discord İsminiz:**
 
