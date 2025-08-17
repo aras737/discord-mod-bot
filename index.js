@@ -30,21 +30,21 @@ const client = new Client({
 
 // ========== KOMUT YÜKLEYİCİ ==========
 client.commands = new Collection();
-const commandsJSON = [];
-const commandsFolder = path.join(__dirname, 'commands');
+const komutlarJSON = [];
+const komutKlasoru = path.join(__dirname, 'commands');
 
 try {
-  if (fs.existsSync(commandsFolder)) {
-    const files = fs.readdirSync(commandsFolder).filter(f => f.endsWith('.js'));
-    for (const file of files) {
-      const filePath = path.join(commandsFolder, file);
+  if (fs.existsSync(komutKlasoru)) {
+    const dosyalar = fs.readdirSync(komutKlasoru).filter(f => f.endsWith('.js'));
+    for (const f of dosyalar) {
+      const filePath = path.join(komutKlasoru, f);
       const cmd = require(filePath);
       if (cmd?.data && cmd?.execute) {
         client.commands.set(cmd.data.name, cmd);
-        commandsJSON.push(cmd.data.toJSON());
+        komutlarJSON.push(cmd.data.toJSON());
         console.log(`✅ Komut yüklendi: ${cmd.data.name}`);
       } else {
-        console.warn(`⚠️ Hatalı komut dosyası: ${file}`);
+        console.warn(`⚠️ Hatalı komut dosyası: ${f}`);
       }
     }
   } else {
@@ -71,7 +71,7 @@ client.once(Events.ClientReady, async () => {
 
   try {
     const rest = new REST({ version: '10' }).setToken(process.env.TOKEN);
-    await rest.put(Routes.applicationCommands(client.user.id), { body: commandsJSON });
+    await rest.put(Routes.applicationCommands(client.user.id), { body: komutlarJSON });
     console.log('✅ Slash komutlar yüklendi.');
   } catch (err) {
     console.error('❌ Slash komut yükleme hatası:', err);
