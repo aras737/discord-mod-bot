@@ -1,23 +1,26 @@
-const { SlashCommandBuilder, EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle } = require('discord.js');
+const { SlashCommandBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, EmbedBuilder } = require('discord.js');
 
 module.exports = {
     data: new SlashCommandBuilder()
         .setName('bilet')
-        .setDescription('Bilet sistemi panelini gönderir'),
-    
-    async execute(interaction) {
-        const embed = new EmbedBuilder()
-            .setColor(0x00AE86)
-            .setTitle('🎫 Destek Sistemi')
-            .setDescription('📩 Aşağıdaki butona tıklayarak bir bilet açabilirsiniz.\nYetkililer en kısa sürede sizinle ilgilenecektir.');
+        .setDescription('Bilet sistemi için buton gönderir.'),
 
-        const row = new ActionRowBuilder().addComponents(
-            new ButtonBuilder()
-                .setCustomId('bilet-ac')
-                .setLabel('📩 Bilet Aç')
-                .setStyle(ButtonStyle.Primary)
-        );
+    async execute(interaction) {
+        // Embed
+        const embed = new EmbedBuilder()
+            .setTitle('🎫 Destek Sistemi')
+            .setDescription('Bir sorun yaşıyorsanız veya yardım almak istiyorsanız aşağıdaki butona basarak bir bilet açabilirsiniz.\n\n⚠️ Sadece **1 aktif bilet** açabilirsiniz.')
+            .setColor('Blue');
+
+        // Buton
+        const row = new ActionRowBuilder()
+            .addComponents(
+                new ButtonBuilder()
+                    .setCustomId('create_ticket')
+                    .setLabel('📩 Bilet Aç')
+                    .setStyle(ButtonStyle.Primary)
+            );
 
         await interaction.reply({ embeds: [embed], components: [row] });
-    },
+    }
 };
