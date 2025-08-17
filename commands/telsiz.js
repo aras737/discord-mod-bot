@@ -21,10 +21,27 @@ module.exports = {
             subcommand
                 .setName('kapat')
                 .setDescription('Telsiz kanalını kapatır ve isminizi eski haline getirir.')),
-    
+
     async execute(interaction) {
         const subcommand = interaction.options.getSubcommand();
         const member = interaction.member;
+
+        // 🔒 Botun gerekli yetkilerini kontrol et
+        const neededPermissions = [
+            PermissionsBitField.Flags.ManageNicknames,
+            PermissionsBitField.Flags.ManageChannels,
+            PermissionsBitField.Flags.MoveMembers,
+            PermissionsBitField.Flags.Connect,
+            PermissionsBitField.Flags.Speak,
+        ];
+
+        if (!interaction.guild.members.me.permissions.has(neededPermissions)) {
+            return interaction.reply({
+                content: '❌ Botun gerekli yetkileri yok. Lütfen şu yetkileri verin:\n' +
+                    '`Manage Nicknames`, `Manage Channels`, `Move Members`, `Connect`, `Speak`',
+                ephemeral: true
+            });
+        }
 
         if (subcommand === 'aç') {
             const telsizKodu = interaction.options.getString('telsiz_kodu');
@@ -32,17 +49,19 @@ module.exports = {
             const newNickname = `${rutbe ? `[${rutbe}] ` : ''}Telsiz ${telsizKodu}`;
 
             try {
-                // Üyenin takma adını değiştir
-                await member.setNickname(newNickname);
+                // 📝 Nickname değiştir
+                if (member.manageable) {
+                    await member.setNickname(newNickname);
+                }
 
-                // Ses kanalı oluştur ve üyeyi o kanala taşı
+                // 🎙️ Ses kanalı oluştur
                 const voiceChannel = await interaction.guild.channels.create({
-                    name: `Telsiz - ${telsizKodu}`,
+                    name: `📞 Telsiz - ${telsizKodu}`,
                     type: ChannelType.GuildVoice,
                     permissionOverwrites: [
                         {
                             id: interaction.guild.id,
-                            allow: [PermissionsBitField.Flags.ViewChannel],
+                            deny: [PermissionsBitField.Flags.Connect], // Herkes giremesin
                         },
                         {
                             id: member.id,
@@ -51,37 +70,50 @@ module.exports = {
                     ],
                 });
 
+                // Kullanıcı zaten ses kanalındaysa -> yeni kanala taşı
                 if (member.voice.channel) {
                     await member.voice.setChannel(voiceChannel);
                 }
 
-                await interaction.reply({ content: `✅ Telsiz kanalı (**${voiceChannel.name}**) açıldı. Takma adınız **${newNickname}** olarak değiştirildi.`, ephemeral: true });
+                await interaction.reply({
+                    content: `✅ Telsiz kanalı (**${voiceChannel.name}**) açıldı.\nTakma adınız **${newNickname}** olarak ayarlandı.`,
+                    ephemeral: true
+                });
 
             } catch (error) {
                 console.error(error);
-                await interaction.reply({ content: '❌ Telsiz kanalı açılırken bir hata oluştu. Botun gerekli yetkilere sahip olduğundan emin olun.', ephemeral: true });
+                await interaction.reply({
+                    content: '❌ Telsiz kanalı açılırken hata oluştu. Botun yetkilerini kontrol edin.',
+                    ephemeral: true
+                });
             }
 
         } else if (subcommand === 'kapat') {
             const voiceChannel = member.voice.channel;
 
-            if (!voiceChannel || !voiceChannel.name.startsWith('Telsiz -')) {
+            if (!voiceChannel || !voiceChannel.name.startsWith('📻 Telsiz -')) {
                 return interaction.reply({ content: '❌ Bir telsiz kanalında değilsiniz.', ephemeral: true });
             }
 
             try {
-                // Telsiz kanalını sil
+                // 🎙️ Kanalı sil
                 await voiceChannel.delete();
-                
-                // Üyenin takma adını eski haline getir (eğer yetkisi varsa)
+
+                // 📝 Nick eski haline döner
                 if (member.manageable) {
                     await member.setNickname(null);
                 }
 
-                await interaction.reply({ content: '✅ Telsiz kanalı başarıyla kapatıldı. Takma adınız eski haline döndürüldü.', ephemeral: true });
+                await interaction.reply({
+                    content: '✅ Telsiz kapatıldı. Takma adınız eski haline döndü.',
+                    ephemeral: true
+                });
             } catch (error) {
                 console.error(error);
-                await interaction.reply({ content: '❌ Telsiz kanalı kapatılırken bir hata oluştu.', ephemeral: true });
+                await interaction.reply({
+                    content: '❌ Telsiz kapatılamadı. Botun yetkilerini kontrol edin.',
+                    ephemeral: true
+                });
             }
         }
     }
