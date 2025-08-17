@@ -1,195 +1,230 @@
-// ========== ÇEKİRDEK ==========
-const {
-  Client, GatewayIntentBits, Collection, REST, Routes,
-  PermissionsBitField, ActionRowBuilder, ButtonBuilder, ButtonStyle,
-  ChannelType, EmbedBuilder, Events
+const { 
+    Client, GatewayIntentBits, Partials,
+    Collection,
+    PermissionsBitField, ChannelType,
+    EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle,
+    SlashCommandBuilder, Routes, StringSelectMenuBuilder
 } = require('discord.js');
+const { REST } = require('@discordjs/rest');
+require('dotenv').config();
 
-const express = require('express');
-const fs = require('fs');
-const path = require('path');
-const dotenv = require('dotenv');
-const ms = require('ms');
-dotenv.config();
-
-const config = require('./config.json');
-
-// ========== CLIENT ==========
+// ================== BOT OLUŞTUR ==================
 const client = new Client({
-  intents: [
-    GatewayIntentBits.Guilds,
-    GatewayIntentBits.GuildMessages,
-    GatewayIntentBits.MessageContent,
-    GatewayIntentBits.GuildMembers,
-    GatewayIntentBits.GuildVoiceStates,
-    GatewayIntentBits.GuildPresences,
-    GatewayIntentBits.GuildMessageReactions,
-    GatewayIntentBits.GuildModeration,
-  ],
+    intents: [
+        GatewayIntentBits.Guilds,
+        GatewayIntentBits.GuildMessages,
+        GatewayIntentBits.MessageContent,
+        GatewayIntentBits.GuildMembers
+    ],
+    partials: [Partials.Channel]
 });
 
-// ========== KOMUT YÜKLEYİCİ ==========
 client.commands = new Collection();
-const komutlarJSON = [];
-const komutKlasoru = path.join(__dirname, 'commands');
 
-try {
-  if (fs.existsSync(komutKlasoru)) {
-    const dosyalar = fs.readdirSync(komutKlasoru).filter(f => f.endsWith('.js'));
-    for (const f of dosyalar) {
-      const filePath = path.join(komutKlasoru, f);
-      const cmd = require(filePath);
-      if (cmd?.data && cmd?.execute) {
-        client.commands.set(cmd.data.name, cmd);
-        komutlarJSON.push(cmd.data.toJSON());
-        console.log(`✅ Komut yüklendi: ${cmd.data.name}`);
-      } else {
-        console.warn(`⚠️ Hatalı komut dosyası: ${f}`);
-      }
-    }
-  } else {
-    console.warn('⚠️ ./commands klasörü bulunamadı.');
-  }
-} catch (e) {
-  console.error('❌ Komutlar yüklenemedi:', e);
-}
+// ================== KOMUTLAR ==================
+const commands = [
 
-// ========== YARDIMCI ==========
-function resolveStaffRoleIds(guild) {
-  const allRoleNames = [...(config.roles?.ust || []), ...(config.roles?.orta || []), ...(config.roles?.alt || [])];
-  const ids = new Set();
-  for (const name of allRoleNames) {
-    const role = guild.roles.cache.find(r => r.name === name);
-    if (role) ids.add(role.id);
-  }
-  return [...ids];
-}
+    // ----- /ban -----
+    new SlashCommandBuilder()
+        .setName('ban')
+        .setDescription('Bir kullanıcıyı banlar.')
+        .addUserOption(opt => opt.setName('kullanici').setDescription('Banlanacak kullanıcı').setRequired(true))
+        .addStringOption(opt => opt.setName('sebep').setDescription('Ban sebebi')),
 
-// ========== BOT AKTİF ==========
-client.once(Events.ClientReady, async () => {
-  console.log(`🤖 Bot aktif: ${client.user.tag}`);
+    // ----- /kick -----
+    new SlashCommandBuilder()
+        .setName('kick')
+        .setDescription('Bir kullanıcıyı sunucudan atar.')
+        .addUserOption(opt => opt.setName('kullanici').setDescription('Atılacak kullanıcı').setRequired(true))
+        .addStringOption(opt => opt.setName('sebep').setDescription('Atma sebebi')),
 
-  try {
-    const rest = new REST({ version: '10' }).setToken(process.env.TOKEN);
-    await rest.put(Routes.applicationCommands(client.user.id), { body: komutlarJSON });
-    console.log('✅ Slash komutlar yüklendi.');
-  } catch (err) {
-    console.error('❌ Slash komut yükleme hatası:', err);
-  }
+    // ----- /banlist -----
+    new SlashCommandBuilder()
+        .setName('banlist')
+        .setDescription('Banlı kullanıcıların listesini gösterir.'),
 
-  // Express ping
-  const app = express();
-  const PORT = Number(process.env.PORT) || 8080;
-  app.get('/', (_req, res) => res.send('✅ Bot çalışıyor.'));
-  app.listen(PORT, () => console.log(`🌐 Express port: ${PORT}`));
-});
+    // ----- /bilet -----
+    new SlashCommandBuilder()
+        .setName('bilet')
+        .setDescription('Bilet menüsünü gönderir.')
+]
+.map(cmd => cmd.toJSON());
 
-// ========== MODERASYON (küfür / reklam / spam) ==========
-const bannedWords = ['salak','aptal','aq','orospu','piç','yarrak','mk'];
-const invitePattern = /(discord\.gg|discord\.com\/invite)\/[a-zA-Z0-9]+/g;
-const spamMap = new Map();
+// ================== KOMUTLARI YÜKLE ==================
+const rest = new REST({ version: '10' }).setToken(process.env.TOKEN);
 
-client.on(Events.MessageCreate, async message => {
-  if (message.author.bot || !message.guild) return;
-  const content = message.content.toLowerCase();
-
-  if (bannedWords.some(w => content.includes(w))) {
-    await message.delete().catch(()=>{});
-    return message.channel.send(`${message.author}, küfür yasak!`).then(m => setTimeout(()=>m.delete(), 5000));
-  }
-
-  if (invitePattern.test(content)) {
-    await message.delete().catch(()=>{});
-    return message.channel.send(`${message.author}, davet linki paylaşmak yasak!`).then(m => setTimeout(()=>m.delete(), 5000));
-  }
-
-  const now = Date.now();
-  const spamData = spamMap.get(message.author.id) || { count: 0, last: 0 };
-
-  if (now - spamData.last < 3000) {
-    spamData.count++;
-    if (spamData.count > 5) {
-      await message.member.timeout(ms('1m'), 'Spam yaptı.').catch(()=>{});
-      message.channel.send(`${message.author} 1 dakika susturuldu.`);
-      spamData.count = 0;
-    }
-  } else {
-    spamData.count = 1;
-  }
-  spamData.last = now;
-  spamMap.set(message.author.id, spamData);
-});
-
-// ========== INTERACTION ==========
-client.on(Events.InteractionCreate, async interaction => {
-  // Slash komut
-  if (interaction.isChatInputCommand()) {
-    const command = client.commands.get(interaction.commandName);
-    if (!command) return;
+(async () => {
     try {
-      await command.execute(interaction, client);
-    } catch (e) {
-      console.error(e);
-      return interaction.reply({ content: '❌ Hata oluştu.', ephemeral: true }).catch(()=>{});
+        console.log('⏳ Komutlar yükleniyor...');
+        await rest.put(
+            Routes.applicationCommands(process.env.CLIENT_ID),
+            { body: commands }
+        );
+        console.log('✅ Komutlar başarıyla yüklendi.');
+    } catch (err) {
+        console.error(err);
     }
-  }
+})();
 
-  // Butonlar
-  if (interaction.isButton()) {
-    const id = interaction.customId;
-    const staffRoleIds = resolveStaffRoleIds(interaction.guild);
-
-    // Bilet aç
-    if (id === 'create_ticket') {
-      const existing = interaction.guild.channels.cache.find(c => 
-        c.type === ChannelType.GuildText && 
-        c.name === `ticket-${interaction.user.id}`
-      );
-      if (existing) return interaction.reply({ content: `❌ Zaten bir biletin var: ${existing}`, ephemeral: true });
-
-      const ch = await interaction.guild.channels.create({
-        name: `ticket-${interaction.user.id}`,
-        type: ChannelType.GuildText,
-        parent: interaction.channel.parent,
-        permissionOverwrites: [
-          { id: interaction.guild.id, deny: [PermissionsBitField.Flags.ViewChannel] },
-          { id: interaction.user.id, allow: [PermissionsBitField.Flags.ViewChannel, PermissionsBitField.Flags.SendMessages, PermissionsBitField.Flags.ReadMessageHistory] },
-          ...staffRoleIds.map(rid => ({ id: rid, allow: [PermissionsBitField.Flags.ViewChannel, PermissionsBitField.Flags.SendMessages, PermissionsBitField.Flags.ReadMessageHistory] }))
-        ]
-      });
-
-      const row = new ActionRowBuilder().addComponents(
-        new ButtonBuilder().setCustomId('ticket_close').setLabel('🔒 Kapat').setStyle(ButtonStyle.Danger)
-      );
-
-      await ch.send({ 
-        embeds: [new EmbedBuilder().setTitle('🎫 Destek Talebi').setDescription('Yetkililer yakında sizinle ilgilenecek.').setColor('Blue')],
-        components: [row]
-      });
-
-      return interaction.reply({ content: `✅ Bilet oluşturuldu: ${ch}`, ephemeral: true });
-    }
-
-    // Bilet kapat
-    if (id === 'ticket_close') {
-      if (!interaction.member.roles.cache.some(r => staffRoleIds.includes(r.id))) 
-        return interaction.reply({ content: '❌ Bu butonu sadece yetkililer kullanabilir.', ephemeral: true });
-      if (!interaction.channel.name.startsWith('ticket-')) 
-        return interaction.reply({ content: '❌ Bu sadece bilet kanallarında geçerli.', ephemeral: true });
-
-      await interaction.reply({ content: '📪 Bilet 5 saniye içinde kapatılacak.', ephemeral: true });
-      setTimeout(() => interaction.channel.delete().catch(()=>{}), 5000);
-    }
-  }
+// ================== BOT READY ==================
+client.once('ready', () => {
+    console.log(`🤖 ${client.user.tag} aktif!`);
 });
 
-// ========== HATA ==========
-process.on('uncaughtException', e => console.error('🚨 Uncaught Exception:', e));
-process.on('unhandledRejection', e => console.error('🚨 Unhandled Rejection:', e));
+// ================== INTERACTION ==================
+const ticketLogChannelId = "LOG_KANAL_ID"; // 🎯 BURAYA log kanalının ID’sini yaz
 
-// ========== LOGIN ==========
-if (!process.env.TOKEN) {
-  console.error('❌ .env içine TOKEN eklemelisin!');
-  process.exit(1);
-}
+client.on('interactionCreate', async (interaction) => {
+
+    // ====== SLASH KOMUTLAR ======
+    if (interaction.isChatInputCommand()) {
+
+        // ----- /ban -----
+        if (interaction.commandName === 'ban') {
+            await interaction.deferReply({ ephemeral: true });
+
+            if (!interaction.member.permissions.has(PermissionsBitField.Flags.BanMembers)) {
+                return interaction.editReply('🚫 Ban yetkin yok.');
+            }
+
+            const user = interaction.options.getUser('kullanici');
+            const reason = interaction.options.getString('sebep') || 'Sebep belirtilmedi';
+
+            try {
+                const member = await interaction.guild.members.fetch(user.id);
+                if (!member.bannable) return interaction.editReply('🚫 Bu kullanıcıyı banlayamam.');
+                await member.ban({ reason });
+                await interaction.editReply(`✅ ${user.tag} banlandı. Sebep: ${reason}`);
+            } catch (err) {
+                console.error(err);
+                await interaction.editReply('❌ Ban başarısız.');
+            }
+        }
+
+        // ----- /kick -----
+        if (interaction.commandName === 'kick') {
+            await interaction.deferReply({ ephemeral: true });
+
+            if (!interaction.member.permissions.has(PermissionsBitField.Flags.KickMembers)) {
+                return interaction.editReply('🚫 Kick yetkin yok.');
+            }
+
+            const user = interaction.options.getUser('kullanici');
+            const reason = interaction.options.getString('sebep') || 'Sebep belirtilmedi';
+
+            try {
+                const member = await interaction.guild.members.fetch(user.id);
+                if (!member.kickable) return interaction.editReply('🚫 Bu kullanıcıyı atamam.');
+                await member.kick(reason);
+                await interaction.editReply(`✅ ${user.tag} atıldı. Sebep: ${reason}`);
+            } catch (err) {
+                console.error(err);
+                await interaction.editReply('❌ Kick başarısız.');
+            }
+        }
+
+        // ----- /banlist -----
+        if (interaction.commandName === 'banlist') {
+            await interaction.deferReply({ ephemeral: true });
+
+            try {
+                const bans = await interaction.guild.bans.fetch();
+                if (bans.size === 0) return interaction.editReply('🚫 Banlı kullanıcı yok.');
+                const list = bans.map(b => `${b.user.tag} (${b.user.id})`).join('\n');
+                await interaction.editReply(`📜 Banlı kullanıcılar:\n${list}`);
+            } catch (err) {
+                console.error(err);
+                await interaction.editReply('❌ Ban listesi alınamadı.');
+            }
+        }
+
+        // ----- /bilet -----
+        if (interaction.commandName === 'bilet') {
+            const embed = new EmbedBuilder()
+                .setTitle('🎫 Destek Sistemi')
+                .setDescription('Kategori seçerek bilet açabilirsiniz. ⚠️ Sadece **1 aktif bilet** açabilirsiniz.')
+                .setColor('Blue');
+
+            const menu = new StringSelectMenuBuilder()
+                .setCustomId('ticket_menu')
+                .setPlaceholder('Bir kategori seçin...')
+                .addOptions([
+                    { label: '🛠️ Destek', value: 'destek', description: 'Genel yardım' },
+                    { label: '💸 Ödeme', value: 'odeme', description: 'Ödeme sorunları' },
+                    { label: '🚨 Şikayet', value: 'sikayet', description: 'Kullanıcı şikayeti' },
+                ]);
+
+            const row = new ActionRowBuilder().addComponents(menu);
+
+            await interaction.reply({ embeds: [embed], components: [row] });
+        }
+    }
+
+    // ====== BİLET SİSTEMİ ======
+    if (interaction.isStringSelectMenu() && interaction.customId === 'ticket_menu') {
+        const category = interaction.values[0];
+
+        const existing = interaction.guild.channels.cache.find(
+            c => c.type === ChannelType.GuildText && c.name === `ticket-${interaction.user.id}`
+        );
+        if (existing) return interaction.reply({ content: `❌ Zaten açık bir biletin var: ${existing}`, ephemeral: true });
+
+        const ch = await interaction.guild.channels.create({
+            name: `ticket-${interaction.user.id}`,
+            type: ChannelType.GuildText,
+            permissionOverwrites: [
+                { id: interaction.guild.id, deny: [PermissionsBitField.Flags.ViewChannel] },
+                { id: interaction.user.id, allow: [PermissionsBitField.Flags.ViewChannel, PermissionsBitField.Flags.SendMessages] }
+            ]
+        });
+
+        const row = new ActionRowBuilder().addComponents(
+            new ButtonBuilder().setCustomId('ticket_close').setLabel('Kapat').setStyle(ButtonStyle.Danger)
+        );
+
+        await ch.send({
+            embeds: [
+                new EmbedBuilder()
+                    .setTitle('🎫 Destek Talebi')
+                    .setDescription(`Kategori: **${category}**\n\nMerhaba ${interaction.user}, sorununu detaylı yaz.`)
+                    .setColor('Blue')
+                    .setFooter({ text: `Açan: ${interaction.user.tag}` })
+                    .setTimestamp()
+            ],
+            components: [row]
+        });
+
+        await interaction.reply({ content: `✅ Biletiniz açıldı: ${ch}`, ephemeral: true });
+
+        const logChannel = interaction.guild.channels.cache.get(ticketLogChannelId);
+        if (logChannel) {
+            logChannel.send(`📩 Yeni bilet açıldı: ${ch} | Açan: ${interaction.user.tag} | Kategori: **${category}**`);
+        }
+    }
+
+    if (interaction.isButton() && interaction.customId === 'ticket_close') {
+        if (!interaction.channel.name.startsWith('ticket-')) return;
+
+        const row = new ActionRowBuilder().addComponents(
+            new ButtonBuilder().setCustomId('ticket_confirm_close').setLabel('✅ Evet, kapat').setStyle(ButtonStyle.Danger),
+            new ButtonBuilder().setCustomId('ticket_cancel_close').setLabel('❌ İptal').setStyle(ButtonStyle.Secondary)
+        );
+
+        await interaction.reply({ content: 'Bu bileti kapatmak istediğinize emin misiniz?', components: [row], ephemeral: true });
+    }
+
+    if (interaction.isButton() && interaction.customId === 'ticket_confirm_close') {
+        await interaction.channel.delete().catch(() => {});
+        const logChannel = interaction.guild.channels.cache.get(ticketLogChannelId);
+        if (logChannel) {
+            logChannel.send(`📪 Bilet kapatıldı.`);
+        }
+    }
+
+    if (interaction.isButton() && interaction.customId === 'ticket_cancel_close') {
+        await interaction.reply({ content: '❌ Kapatma iptal edildi.', ephemeral: true });
+    }
+});
+
+// ================== BOTU BAŞLAT ==================
 client.login(process.env.TOKEN);
