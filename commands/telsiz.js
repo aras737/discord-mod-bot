@@ -56,7 +56,7 @@ module.exports = {
 
                 // 🎙️ Ses kanalı oluştur
                 const voiceChannel = await interaction.guild.channels.create({
-                    name: `📞 Telsiz - ${telsizKodu}`,
+                    name: `📻 Telsiz - ${telsizKodu}`,
                     type: ChannelType.GuildVoice,
                     permissionOverwrites: [
                         {
