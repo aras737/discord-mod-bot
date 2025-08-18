@@ -1,33 +1,23 @@
-const { 
-    SlashCommandBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, 
-    EmbedBuilder, StringSelectMenuBuilder 
-} = require('discord.js');
+const { SlashCommandBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, PermissionFlagsBits } = require('discord.js');
 
 module.exports = {
-    data: new SlashCommandBuilder()
-        .setName('bilet')
-        .setDescription('Bilet sistemi için menü gönderir.'),
+  data: new SlashCommandBuilder()
+    .setName('ticket-setup')
+    .setDescription('Bilet sistemi için mesaj gönderir')
+    .setDefaultMemberPermissions(PermissionFlagsBits.Administrator),
 
-    async execute(interaction) {
-        const embed = new EmbedBuilder()
-            .setTitle(' Destek Sistemi')
-            .setDescription(
-                'Bir sorun yaşıyorsanız veya yardım almak istiyorsanız aşağıdaki menüden bir kategori seçerek bilet açabilirsiniz.\n\n' +
-                '⚠️ Sadece **1 aktif bilet** açabilirsiniz.'
-            )
-            .setColor('Blue');
+  async execute(interaction) {
+    const row = new ActionRowBuilder().addComponents(
+      new ButtonBuilder()
+        .setCustomId('create_ticket')
+        .setLabel('🎫 Bilet Oluştur')
+        .setStyle(ButtonStyle.Primary)
+    );
 
-        const menu = new StringSelectMenuBuilder()
-            .setCustomId('ticket_menu')
-            .setPlaceholder('Bir kategori seçin...')
-            .addOptions([
-                { label: ' Destek', value: 'destek', description: 'Genel yardım almak için.' },
-                { label: ' Ödeme', value: 'odeme', description: 'Ödeme & bağış sorunları için.' },
-                { label: ' Şikayet', value: 'sikayet', description: 'Bir kullanıcıyı şikayet etmek için.' },
-            ]);
-
-        const row = new ActionRowBuilder().addComponents(menu);
-
-        await interaction.reply({ embeds: [embed], components: [row] });
-    }
+    await interaction.reply({ content: '✅ Bilet sistemi kuruldu.', ephemeral: true });
+    await interaction.channel.send({
+      content: '🎟️ Destek için aşağıdaki butona bas!',
+      components: [row],
+    });
+  },
 };
