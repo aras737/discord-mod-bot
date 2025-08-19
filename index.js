@@ -87,7 +87,7 @@ client.once(Events.ClientReady, async () => {
     }
     
     // --- BURAYA AKTİFLİK KODUNU EKLEDİK ---
-    const channelId = "KANAL_ID"; // Aktifliğin atılacağı kanal ID'si
+    const channelId = "1407448511091314739"; // Aktifliğin atılacağı kanal ID'si
     const channel = client.channels.cache.get(channelId);
     if (!channel) {
         console.error("❌ Kanal bulunamadı!");
