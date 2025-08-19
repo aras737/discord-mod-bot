@@ -1,49 +1,38 @@
-// /commands/oyunaktiflik.js
-const { SlashCommandBuilder } = require('discord.js');
 const fetch = require('node-fetch');
 
-const data = new SlashCommandBuilder()
-    .setName('oyun-durumu')
-    .setDescription('Roblox oyununun anlık durumunu gösterir.');
-
-async function execute(interaction) {
-    await interaction.deferReply(); // Cevap gönderilene kadar bekle
-
+// Roblox oyun aktiflik kontrolü
+async function checkRobloxGameStatus() {
     const universeId = "91145006228484";
     const url = `https://games.roblox.com/v1/games?universeIds=${universeId}`;
 
+    console.log("Roblox oyun durumu kontrol ediliyor...");
+
     try {
         const res = await fetch(url);
+
         if (!res.ok) {
-            console.error(`Roblox API'den hata kodu alındı: ${res.status} - ${res.statusText}`);
-            return interaction.editReply("❌ Roblox API'den bilgi alınamadı.");
+            console.error(`❌ Roblox API'den hata kodu alındı: ${res.status} - ${res.statusText}`);
+            return;
         }
-        
+
         const data = await res.json();
         const game = data.data[0];
 
         if (!game) {
-            return interaction.editReply("❌ Oyun bilgisi bulunamadı! Universe ID'yi kontrol edin.");
+            console.log("❌ Oyun bilgisi bulunamadı! Evren ID'sini kontrol edin.");
+            return;
         }
 
-        const table = `
-🎮 **TKA Asker Oyunu Anlık Durum**
----------------------------------
-👥 Oyuncular: **${game.playing}**
-⭐ Favoriler: **${game.favoritedCount}**
-👀 Ziyaretler: **${game.visits}**
-🔗 [Oyuna Git](${game.link})
----------------------------------
-        `;
+        console.log(`✅ Oyun bulundu: TKA Asker Oyunu`);
+        console.log(`👥 Oyuncular: ${game.playing}`);
+        console.log(`⭐ Favoriler: ${game.favoritedCount}`);
+        console.log(`👀 Ziyaretler: ${game.visits}`);
+        console.log(`🔗 Link: https://www.roblox.com/games/${universeId}`);
 
-        await interaction.editReply(table);
     } catch (err) {
-        console.error("Roblox API hatası:", err);
-        await interaction.editReply("❌ Bir hata oluştu ve oyun bilgisi alınamadı.");
+        console.error("❌ Roblox API'ye bağlanırken bir hata oluştu:", err);
     }
 }
 
-module.exports = {
-    data,
-    execute,
-};
+// Fonksiyonu çalıştır
+checkRobloxGameStatus();
