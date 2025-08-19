@@ -46,18 +46,29 @@ for (const file of commandFiles) {
   }
 }
 
-// Roblox oyun aktiflik kontrolü fonksiyonu
+// Roblox oyun aktiflik kontrolü fonksiyonu (Hata yakalama eklendi)
 async function checkRobloxGame() {
     const universeId = "91145006228484";
     const url = `https://games.roblox.com/v1/games?universeIds=${universeId}`;
     try {
         const res = await fetch(url);
-        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        
+        // Hatanın tam olarak ne olduğunu görmek için buraya log ekleyin
+        if (!res.ok) {
+            console.error(`Roblox API'den hata kodu alındı: ${res.status} - ${res.statusText}`);
+            console.error("API yanıtı:", await res.text());
+            throw new Error(`HTTP ${res.status}`);
+        }
+        
         const data = await res.json();
+        console.log("Roblox API yanıtı:", data); // Yanıtı konsola yazdırın
+        
         const game = data.data[0];
         if (!game) {
+            console.error("Oyun bilgisi API yanıtında bulunamadı!");
             return null;
         }
+
         return {
             oyuncular: game.playing,
             favoriler: game.favoritedCount,
@@ -87,11 +98,10 @@ client.once(Events.ClientReady, async () => {
     }
     
     // --- BURAYA AKTİFLİK KODUNU EKLEDİK ---
-    const channelId = "1407448511091314739"; // Aktifliğin atılacağı kanal ID'si
+    const channelId = "KANAL_ID"; // Aktifliğin atılacağı kanal ID'si
     const channel = client.channels.cache.get(channelId);
     if (!channel) {
         console.error("❌ Kanal bulunamadı!");
-        // Eğer kanal bulunamazsa daha fazla işlem yapmaya gerek yok
         return; 
     }
 
@@ -111,11 +121,9 @@ client.once(Events.ClientReady, async () => {
         if (updatedInfo && statusMessage) {
             const updatedTable = `🎮 **TKA Asker Oyunu Aktiflik**\n---------------------------------\n👥 Oyuncular: **${updatedInfo.oyuncular}**\n⭐ Favoriler: **${updatedInfo.favoriler}**\n👀 Ziyaretler: **${updatedInfo.ziyaretler}**\n🔗 [Oyuna Git](${updatedInfo.link})\n---------------------------------`;
             try {
-                // Mesajın içeriğini düzenle
                 await statusMessage.edit(updatedTable);
             } catch (error) {
                 console.error("Mesaj düzenlenirken bir hata oluştu:", error);
-                // Mesaj silinirse, yeni bir tane oluştur
                 statusMessage = await channel.send(updatedTable);
             }
         }
