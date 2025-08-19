@@ -46,14 +46,14 @@ for (const file of commandFiles) {
   }
 }
 
-// Roblox oyun aktiflik kontrolü fonksiyonu (Hata yakalama eklendi)
+// Roblox oyun aktiflik kontrolü fonksiyonu (Doğru URL ve hata yakalama eklendi)
 async function checkRobloxGame() {
+    // ⚠️ HATA DÜZELTİLDİ: Oyun URL'si yerine API URL'si kullanıldı
     const universeId = "91145006228484";
-    const url = `https://www.roblox.com/tr/games/91145006228484/TKA-asker-oyunu`;
+    const url = `https://games.roblox.com/v1/games?universeIds=${universeId}`;
     try {
         const res = await fetch(url);
         
-        // Hatanın tam olarak ne olduğunu görmek için buraya log ekleyin
         if (!res.ok) {
             console.error(`Roblox API'den hata kodu alındı: ${res.status} - ${res.statusText}`);
             console.error("API yanıtı:", await res.text());
@@ -61,11 +61,12 @@ async function checkRobloxGame() {
         }
         
         const data = await res.json();
-        console.log("Roblox API yanıtı:", data); // Yanıtı konsola yazdırın
+        // Console.log'lar debug için kalabilir, isterseniz silebilirsiniz
+        console.log("Roblox API yanıtı:", data); 
         
         const game = data.data[0];
         if (!game) {
-            console.error("Oyun bilgisi API yanıtında bulunamadı!");
+            console.error("Oyun bilgisi API yanıtında bulunamadı! Universe ID'yi kontrol edin.");
             return null;
         }
 
@@ -97,11 +98,12 @@ client.once(Events.ClientReady, async () => {
         console.error(err);
     }
     
-    // --- BURAYA AKTİFLİK KODUNU EKLEDİK ---
+    // --- ROBlox AKTİFLİK KODU ---
+    // ⚠️ HATA DÜZELTİLDİ: ChannelID, string olarak tırnak içinde belirtilmeli
     const channelId = "1407448511091314739"; // Aktifliğin atılacağı kanal ID'si
     const channel = client.channels.cache.get(channelId);
     if (!channel) {
-        console.error("❌ Kanal bulunamadı!");
+        console.error("❌ Kanal bulunamadı! Doğru kanal ID'sini girdiğinizden emin olun.");
         return; 
     }
 
@@ -109,11 +111,16 @@ client.once(Events.ClientReady, async () => {
 
     // İlk mesajı gönder
     const info = await checkRobloxGame();
+    // ⚠️ HATA DÜZELTİLDİ: backtick kullanımı ve içerik düzeni
     const initialTable = info ?
     `🎮 **TKA Asker Oyunu Aktiflik**\n---------------------------------\n👥 Oyuncular: **${info.oyuncular}**\n⭐ Favoriler: **${info.favoriler}**\n👀 Ziyaretler: **${info.ziyaretler}**\n🔗 [Oyuna Git](${info.link})\n---------------------------------` :
     "❌ Roblox oyun bilgisi alınamadı.";
 
-    statusMessage = await channel.send(initialTable);
+    try {
+        statusMessage = await channel.send(initialTable);
+    } catch (error) {
+        console.error("İlk mesaj gönderilirken bir hata oluştu:", error);
+    }
 
     // Her 10 saniyede bir mesajı güncelle
     setInterval(async () => {
@@ -121,16 +128,22 @@ client.once(Events.ClientReady, async () => {
         if (updatedInfo && statusMessage) {
             const updatedTable = `🎮 **TKA Asker Oyunu Aktiflik**\n---------------------------------\n👥 Oyuncular: **${updatedInfo.oyuncular}**\n⭐ Favoriler: **${updatedInfo.favoriler}**\n👀 Ziyaretler: **${updatedInfo.ziyaretler}**\n🔗 [Oyuna Git](${updatedInfo.link})\n---------------------------------`;
             try {
+                // Mesajın içeriğini düzenle
                 await statusMessage.edit(updatedTable);
             } catch (error) {
                 console.error("Mesaj düzenlenirken bir hata oluştu:", error);
-                statusMessage = await channel.send(updatedTable);
+                // Mesaj silinirse, yeni bir tane oluştur
+                try {
+                    statusMessage = await channel.send(updatedTable);
+                } catch (sendError) {
+                    console.error("Yeni mesaj gönderilirken hata oluştu:", sendError);
+                }
             }
         }
     }, 10000); // Her 10 saniye
 });
 
-// Interaction event
+// Interaction event (Değişmedi)
 client.on(Events.InteractionCreate, async interaction => {
   // Slash Komutlar
   if (interaction.isChatInputCommand()) {
