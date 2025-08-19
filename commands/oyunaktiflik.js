@@ -1,21 +1,19 @@
-// oyunaktiflik.js
 const fetch = require("node-fetch"); // node-fetch@2
+
+let robloxGameInfo = null; // Bilgileri tutacak değişken
 
 // Roblox oyun aktiflik kontrolü
 async function checkRobloxGame() {
-    const universeId = "91145006228484"; // Senin oyun ID'n
+    // ... (Önceki kodla aynı)
+    const universeId = "91145006228484";
     const url = `https://games.roblox.com/v1/games?universeIds=${universeId}`;
-
     try {
         const res = await fetch(url);
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
         const data = await res.json();
-
         if (!data.data || data.data.length === 0) {
-            console.log("❌ Oyun bulunamadı!");
             return null;
         }
-
         const game = data.data[0];
         return {
             oyuncular: game.playing,
@@ -30,35 +28,34 @@ async function checkRobloxGame() {
 }
 
 // Discord'da tabloyu at
+// 'robloxGameInfo' değişkenini kullanıyor
 async function sendRobloxStatus(channel) {
-    const info = await checkRobloxGame();
-    if (!info) return channel.send("❌ Roblox oyun bilgisi alınamadı.");
+    if (!robloxGameInfo) return channel.send("❌ Roblox oyun bilgisi alınamadı.");
 
     const table = `
 🎮 **TKA Asker Oyunu Aktiflik**
 ---------------------------------
-👥 Oyuncular: **${info.oyuncular}**
-⭐ Favoriler: **${info.favoriler}**
-👀 Ziyaretler: **${info.ziyaretler}**
-🔗 [Oyuna Git](${info.link})
+👥 Oyuncular: **${robloxGameInfo.oyuncular}**
+⭐ Favoriler: **${robloxGameInfo.favoriler}**
+👀 Ziyaretler: **${robloxGameInfo.ziyaretler}**
+🔗 [Oyuna Git](${robloxGameInfo.link})
 ---------------------------------
     `;
-
     await channel.send(table);
 }
 
-// Modülü dışa aktararak client parametresini almasını sağlayın
+// Modülü dışa aktar ve client'ı al
 module.exports = (client) => {
-    // Bot açıldığında her 10 saniyede bir tabloyu güncelle
     client.once("ready", () => {
         console.log("✅ Roblox aktiflik sistemi başlatıldı!");
 
-        const channelId = "KANAL_ID"; // Aktifliğin atılacağı kanal ID'si
+        const channelId = "KANAL_ID";
         const channel = client.channels.cache.get(channelId);
         if (!channel) return console.error("❌ Kanal bulunamadı!");
 
-        setInterval(() => {
-            sendRobloxStatus(channel);
-        }, 10000); // Her 10 saniye
+        setInterval(async () => {
+            robloxGameInfo = await checkRobloxGame(); // Değişkeni güncelle
+            sendRobloxStatus(channel); // Fonksiyonu çağır
+        }, 10000); // her 10 saniye
     });
 };
