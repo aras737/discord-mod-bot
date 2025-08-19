@@ -1,20 +1,26 @@
-const fetch = require("node-fetch"); // node-fetch@2
+const { SlashCommandBuilder } = require('discord.js');
+const fetch = require('node-fetch'); // node-fetch@2
 
-let robloxGameInfo = null; // Bilgileri tutacak değişken
+// Slash komutu verilerini ayarla
+const command = new SlashCommandBuilder()
+    .setName('oyun-durumu')
+    .setDescription('Roblox oyununun anlık durumunu gösterir.');
 
 // Roblox oyun aktiflik kontrolü
 async function checkRobloxGame() {
-    // ... (Önceki kodla aynı)
     const universeId = "91145006228484";
     const url = `https://games.roblox.com/v1/games?universeIds=${universeId}`;
+
     try {
         const res = await fetch(url);
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
         const data = await res.json();
-        if (!data.data || data.data.length === 0) {
+        const game = data.data[0];
+
+        if (!game) {
             return null;
         }
-        const game = data.data[0];
+
         return {
             oyuncular: game.playing,
             favoriler: game.favoritedCount,
@@ -27,35 +33,30 @@ async function checkRobloxGame() {
     }
 }
 
-// Discord'da tabloyu at
-// 'robloxGameInfo' değişkenini kullanıyor
-async function sendRobloxStatus(channel) {
-    if (!robloxGameInfo) return channel.send("❌ Roblox oyun bilgisi alınamadı.");
+// Komutun çalıştırılacağı fonksiyon
+async function execute(interaction) {
+    await interaction.deferReply({ ephemeral: false }); // Cevap gönderilene kadar bekleniyor
+
+    const info = await checkRobloxGame();
+
+    if (!info) {
+        return interaction.editReply("❌ Roblox oyun bilgisi alınamadı.");
+    }
 
     const table = `
 🎮 **TKA Asker Oyunu Aktiflik**
 ---------------------------------
-👥 Oyuncular: **${robloxGameInfo.oyuncular}**
-⭐ Favoriler: **${robloxGameInfo.favoriler}**
-👀 Ziyaretler: **${robloxGameInfo.ziyaretler}**
-🔗 [Oyuna Git](${robloxGameInfo.link})
+👥 Oyuncular: **${info.oyuncular}**
+⭐ Favoriler: **${info.favoriler}**
+👀 Ziyaretler: **${info.ziyaretler}**
+🔗 [Oyuna Git](${info.link})
 ---------------------------------
     `;
-    await channel.send(table);
+
+    await interaction.editReply(table);
 }
 
-// Modülü dışa aktar ve client'ı al
-module.exports = (client) => {
-    client.once("ready", () => {
-        console.log("✅ Roblox aktiflik sistemi başlatıldı!");
-
-        const channelId = "KANAL_ID";
-        const channel = client.channels.cache.get(channelId);
-        if (!channel) return console.error("❌ Kanal bulunamadı!");
-
-        setInterval(async () => {
-            robloxGameInfo = await checkRobloxGame(); // Değişkeni güncelle
-            sendRobloxStatus(channel); // Fonksiyonu çağır
-        }, 10000); // her 10 saniye
-    });
+module.exports = {
+    data: command,
+    execute,
 };
