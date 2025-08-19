@@ -1,78 +1,49 @@
-const fetch = require("node-fetch"); // node-fetch@2
+// /commands/oyunaktiflik.js
+const { SlashCommandBuilder } = require('discord.js');
+const fetch = require('node-fetch');
 
-// Roblox oyun aktiflik kontrolü
-async function checkRobloxGame() {
+const data = new SlashCommandBuilder()
+    .setName('oyun-durumu')
+    .setDescription('Roblox oyununun anlık durumunu gösterir.');
+
+async function execute(interaction) {
+    await interaction.deferReply(); // Cevap gönderilene kadar bekle
+
     const universeId = "91145006228484";
     const url = `https://games.roblox.com/v1/games?universeIds=${universeId}`;
+
     try {
         const res = await fetch(url);
-        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        if (!res.ok) {
+            console.error(`Roblox API'den hata kodu alındı: ${res.status} - ${res.statusText}`);
+            return interaction.editReply("❌ Roblox API'den bilgi alınamadı.");
+        }
+        
         const data = await res.json();
         const game = data.data[0];
+
         if (!game) {
-            return null;
+            return interaction.editReply("❌ Oyun bilgisi bulunamadı! Universe ID'yi kontrol edin.");
         }
-        return {
-            oyuncular: game.playing,
-            favoriler: game.favoritedCount,
-            ziyaretler: game.visits,
-            link: "https://www.roblox.com/tr/games/91145006228484/TKA-asker-oyunu"
-        };
+
+        const table = `
+🎮 **TKA Asker Oyunu Anlık Durum**
+---------------------------------
+👥 Oyuncular: **${game.playing}**
+⭐ Favoriler: **${game.favoritedCount}**
+👀 Ziyaretler: **${game.visits}**
+🔗 [Oyuna Git](${game.link})
+---------------------------------
+        `;
+
+        await interaction.editReply(table);
     } catch (err) {
         console.error("Roblox API hatası:", err);
-        return null;
+        await interaction.editReply("❌ Bir hata oluştu ve oyun bilgisi alınamadı.");
     }
 }
 
-// Bot başladığında çalışacak ana fonksiyon
-module.exports = (client) => {
-    client.once("ready", async () => {
-        console.log("✅ Roblox aktiflik sistemi başlatıldı!");
-
-        const channelId = "KANAL_ID"; // Aktiflik mesajının atılacağı kanal ID'si
-        const channel = client.channels.cache.get(channelId);
-        if (!channel) return console.error("❌ Kanal bulunamadı!");
-
-        let statusMessage = null; // Mesajı tutacak değişken
-
-        // Mesajı ilk kez gönder
-        const info = await checkRobloxGame();
-        if (info) {
-            const table = `
-🎮 **TKA Asker Oyunu Aktiflik**
----------------------------------
-👥 Oyuncular: **${info.oyuncular}**
-⭐ Favoriler: **${info.favoriler}**
-👀 Ziyaretler: **${info.ziyaretler}**
-🔗 [Oyuna Git](${info.link})
----------------------------------
-            `;
-            statusMessage = await channel.send(table);
-        } else {
-            statusMessage = await channel.send("❌ Roblox oyun bilgisi alınamadı.");
-        }
-
-        // Her 10 saniyede bir mesajı düzenle
-        setInterval(async () => {
-            const updatedInfo = await checkRobloxGame();
-            if (updatedInfo && statusMessage) {
-                const updatedTable = `
-🎮 **TKA Asker Oyunu Aktiflik**
----------------------------------
-👥 Oyuncular: **${updatedInfo.oyuncular}**
-⭐ Favoriler: **${updatedInfo.favoriler}**
-👀 Ziyaretler: **${updatedInfo.ziyaretler}**
-🔗 [Oyuna Git](${updatedInfo.link})
----------------------------------
-                `;
-                try {
-                    await statusMessage.edit(updatedTable);
-                } catch (error) {
-                    console.error("Mesaj düzenlenirken bir hata oluştu:", error);
-                    // Eğer mesaj silinirse, tekrar oluştur
-                    statusMessage = await channel.send(updatedTable);
-                }
-            }
-        }, 10000); // Her 10 saniye
-    });
+module.exports = {
+    data,
+    execute,
 };
