@@ -1,8 +1,9 @@
+// oyunaktiflik.js
 const fetch = require("node-fetch"); // node-fetch@2
 
 // Roblox oyun aktiflik kontrolü
 async function checkRobloxGame() {
-    const universeId = "91145006228484"; // senin oyun ID
+    const universeId = "91145006228484"; // Senin oyun ID'n
     const url = `https://games.roblox.com/v1/games?universeIds=${universeId}`;
 
     try {
@@ -46,15 +47,18 @@ async function sendRobloxStatus(channel) {
     await channel.send(table);
 }
 
-// Bot açıldığında her 10 saniyede bir tabloyu güncelle
-client.once("ready", () => {
-    console.log("✅ Roblox aktiflik sistemi başlatıldı!");
+// Modülü dışa aktararak client parametresini almasını sağlayın
+module.exports = (client) => {
+    // Bot açıldığında her 10 saniyede bir tabloyu güncelle
+    client.once("ready", () => {
+        console.log("✅ Roblox aktiflik sistemi başlatıldı!");
 
-    const channelId = "KANAL_ID"; // aktifliğin atılacağı kanal ID'si
-    const channel = client.channels.cache.get(channelId);
-    if (!channel) return console.error("❌ Kanal bulunamadı!");
+        const channelId = "KANAL_ID"; // Aktifliğin atılacağı kanal ID'si
+        const channel = client.channels.cache.get(channelId);
+        if (!channel) return console.error("❌ Kanal bulunamadı!");
 
-    setInterval(() => {
-        sendRobloxStatus(channel);
-    }, 10000); // her 10 saniye
-});
+        setInterval(() => {
+            sendRobloxStatus(channel);
+        }, 10000); // Her 10 saniye
+    });
+};
