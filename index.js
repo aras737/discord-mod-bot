@@ -1,4 +1,3 @@
-// index.js (veya ana bot dosyanız)
 const fs = require('fs');
 const path = require('path');
 const { 
@@ -13,7 +12,7 @@ const {
   ButtonBuilder,
   ButtonStyle
 } = require('discord.js');
-const fetch = require('node-fetch'); // node-fetch modülünü ekleyin
+const fetch = require('node-fetch'); // node-fetch modülünü ekledim
 require('dotenv').config();
 
 // Client oluştur
@@ -46,104 +45,24 @@ for (const file of commandFiles) {
   }
 }
 
-// Roblox oyun aktiflik kontrolü fonksiyonu (Doğru URL ve hata yakalama eklendi)
-async function checkRobloxGame() {
-    // ⚠️ HATA DÜZELTİLDİ: Oyun URL'si yerine API URL'si kullanıldı
-    const universeId = "91145006228484";
-    const url = `https://games.roblox.com/v1/games?universeIds=${universeId}`;
-    try {
-        const res = await fetch(url);
-        
-        if (!res.ok) {
-            console.error(`Roblox API'den hata kodu alındı: ${res.status} - ${res.statusText}`);
-            console.error("API yanıtı:", await res.text());
-            throw new Error(`HTTP ${res.status}`);
-        }
-        
-        const data = await res.json();
-        // Console.log'lar debug için kalabilir, isterseniz silebilirsiniz
-        console.log("Roblox API yanıtı:", data); 
-        
-        const game = data.data[0];
-        if (!game) {
-            console.error("Oyun bilgisi API yanıtında bulunamadı! Universe ID'yi kontrol edin.");
-            return null;
-        }
-
-        return {
-            oyuncular: game.playing,
-            favoriler: game.favoritedCount,
-            ziyaretler: game.visits,
-            link: "https://www.roblox.com/tr/games/91145006228484/TKA-asker-oyunu"
-        };
-    } catch (err) {
-        console.error("Roblox API hatası:", err);
-        return null;
-    }
-}
-
-// Komutları Discord'a kaydet ve bot hazır olduğunda aktiflik sistemini başlat
+// Komutları Discord'a kaydet
 client.once(Events.ClientReady, async () => {
-    console.log(`🤖 Bot giriş yaptı: ${client.user.tag}`);
+  console.log(`🤖 Bot giriş yaptı: ${client.user.tag}`);
 
-    // Slash komutlarını yükle
-    const rest = new REST({ version: '10' }).setToken(process.env.TOKEN);
-    try {
-        await rest.put(
-            Routes.applicationCommands(client.user.id),
-            { body: commands },
-        );
-        console.log('✅ Slash komutları başarıyla yüklendi.');
-    } catch (err) {
-        console.error(err);
-    }
-    
-    // --- ROBlox AKTİFLİK KODU ---
-    // ⚠️ HATA DÜZELTİLDİ: ChannelID, string olarak tırnak içinde belirtilmeli
-    const channelId = "1407448511091314739"; // Aktifliğin atılacağı kanal ID'si
-    const channel = client.channels.cache.get(channelId);
-    if (!channel) {
-        console.error("❌ Kanal bulunamadı! Doğru kanal ID'sini girdiğinizden emin olun.");
-        return; 
-    }
+  const rest = new REST({ version: '10' }).setToken(process.env.TOKEN);
 
-    let statusMessage = null; 
-
-    // İlk mesajı gönder
-    const info = await checkRobloxGame();
-    // ⚠️ HATA DÜZELTİLDİ: backtick kullanımı ve içerik düzeni
-    const initialTable = info ?
-    `🎮 **TKA Asker Oyunu Aktiflik**\n---------------------------------\n👥 Oyuncular: **${info.oyuncular}**\n⭐ Favoriler: **${info.favoriler}**\n👀 Ziyaretler: **${info.ziyaretler}**\n🔗 [Oyuna Git](${info.link})\n---------------------------------` :
-    "❌ Roblox oyun bilgisi alınamadı.";
-
-    try {
-        statusMessage = await channel.send(initialTable);
-    } catch (error) {
-        console.error("İlk mesaj gönderilirken bir hata oluştu:", error);
-    }
-
-    // Her 10 saniyede bir mesajı güncelle
-    setInterval(async () => {
-        const updatedInfo = await checkRobloxGame();
-        if (updatedInfo && statusMessage) {
-            const updatedTable = `🎮 **TKA Asker Oyunu Aktiflik**\n---------------------------------\n👥 Oyuncular: **${updatedInfo.oyuncular}**\n⭐ Favoriler: **${updatedInfo.favoriler}**\n👀 Ziyaretler: **${updatedInfo.ziyaretler}**\n🔗 [Oyuna Git](${updatedInfo.link})\n---------------------------------`;
-            try {
-                // Mesajın içeriğini düzenle
-                await statusMessage.edit(updatedTable);
-            } catch (error) {
-                console.error("Mesaj düzenlenirken bir hata oluştu:", error);
-                // Mesaj silinirse, yeni bir tane oluştur
-                try {
-                    statusMessage = await channel.send(updatedTable);
-                } catch (sendError) {
-                    console.error("Yeni mesaj gönderilirken hata oluştu:", sendError);
-                }
-            }
-        }
-    }, 10000); // Her 10 saniye
+  try {
+    await rest.put(
+      Routes.applicationCommands(client.user.id),
+      { body: commands },
+    );
+    console.log('✅ Slash komutları başarıyla yüklendi.');
+  } catch (err) {
+    console.error(err);
+  }
 });
 
-// Interaction event (Değişmedi)
+// Interaction event
 client.on(Events.InteractionCreate, async interaction => {
   // Slash Komutlar
   if (interaction.isChatInputCommand()) {
