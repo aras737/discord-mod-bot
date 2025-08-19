@@ -49,7 +49,7 @@ for (const file of commandFiles) {
 // Roblox oyun aktiflik kontrolü fonksiyonu (Hata yakalama eklendi)
 async function checkRobloxGame() {
     const universeId = "91145006228484";
-    const url = `https://games.roblox.com/v1/games?universeIds=${universeId}`;
+    const url = `https://www.roblox.com/tr/games/91145006228484/TKA-asker-oyunu`;
     try {
         const res = await fetch(url);
         
