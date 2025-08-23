@@ -1,10 +1,4 @@
-import {
-  SlashCommandBuilder,
-  EmbedBuilder,
-  ActionRowBuilder,
-  ButtonBuilder,
-  ButtonStyle
-} from "discord.js";
+const { SlashCommandBuilder } = require('discord.js');
 
 const knowledgeBase = {
   "merhaba": "Merhaba! Size nasıl yardımcı olabilirim? 👋",
