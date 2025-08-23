@@ -1,12 +1,6 @@
 const fs = require('fs');
 const path = require('path');
-import {
-  SlashCommandBuilder,
-  EmbedBuilder,
-  ActionRowBuilder,
-  ButtonBuilder,
-  ButtonStyle
-} from "discord.js";
+const { SlashCommandBuilder } = require('discord.js');
 
 const banListPath = path.join(__dirname, '../data/banlist.json');
 
