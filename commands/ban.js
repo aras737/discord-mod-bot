@@ -1,6 +1,12 @@
 const fs = require('fs');
 const path = require('path');
-const { SlashCommandBuilder, PermissionFlagsBits } = require('discord.js');
+import {
+  SlashCommandBuilder,
+  EmbedBuilder,
+  ActionRowBuilder,
+  ButtonBuilder,
+  ButtonStyle
+} from "discord.js";
 
 // Ban kayıtlarının tutulduğu JSON dosyası
 const banListPath = path.join(__dirname, '../data/banlist.json');
