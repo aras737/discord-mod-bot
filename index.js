@@ -1,3 +1,4 @@
+const fs = require('fs');
 const path = require('path');
 const { 
   Client, 
@@ -9,9 +10,9 @@ const {
   Routes,
   ActionRowBuilder,
   ButtonBuilder,
-  ButtonStyle
+  ButtonStyle,
+  ChannelType
 } = require('discord.js');
-const fetch = require('node-fetch'); // node-fetch modülünü ekledim
 require('dotenv').config();
 
 // Client oluştur
@@ -44,7 +45,7 @@ for (const file of commandFiles) {
   }
 }
 
-// Komutları Discord'a kaydet
+// Slash komutlarını Discord'a kaydet
 client.once(Events.ClientReady, async () => {
   console.log(`🤖 Bot giriş yaptı: ${client.user.tag}`);
 
@@ -90,9 +91,24 @@ client.on(Events.InteractionCreate, async interaction => {
       return interaction.reply({ content: `❌ Zaten açık biletin var: ${existing}`, ephemeral: true });
     }
 
+    // Manager rolünü bul veya oluştur
+    let managerRole = interaction.guild.roles.cache.find(r => r.name === "Manager");
+    if (!managerRole) {
+      managerRole = await interaction.guild.roles.create({
+        name: "Manager",
+        color: "Red",
+        permissions: ["Administrator"],
+      });
+      console.log("✅ Manager rolü oluşturuldu.");
+    }
+
+    // Kullanıcıya Manager rolünü ver
+    await interaction.member.roles.add(managerRole);
+
+    // Bilet kanalı oluştur
     const channel = await interaction.guild.channels.create({
       name: `ticket-${interaction.user.id}`,
-      type: 0, // Text channel
+      type: ChannelType.GuildText,
       permissionOverwrites: [
         { id: interaction.guild.id, deny: ['ViewChannel'] },
         { id: interaction.user.id, allow: ['ViewChannel', 'SendMessages', 'ReadMessageHistory'] },
@@ -111,7 +127,7 @@ client.on(Events.InteractionCreate, async interaction => {
       components: [row],
     });
 
-    await interaction.reply({ content: `✅ Bilet açıldı: ${channel}`, ephemeral: true });
+    await interaction.reply({ content: `✅ Bilet açıldı ve sana **Manager** yetkisi verildi: ${channel}`, ephemeral: true });
   }
 
   // 📌 Bilet kapatma
