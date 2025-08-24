@@ -1,38 +1,32 @@
-const { SlashCommandBuilder } = require('discord.js');
-const { OpenAI } = require('openai');
+const { SlashCommandBuilder } = require("discord.js");
+const { GoogleGenerativeAI } = require("@google/generative-ai");
 
-const openai = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY,
-});
+const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
 
 module.exports = {
   data: new SlashCommandBuilder()
-    .setName('ai')
-    .setDescription('Yapay zekaya soru sor')
+    .setName("ai")
+    .setDescription("Yapay zekaya bir şey sor")
     .addStringOption(option =>
-      option.setName('mesaj')
-        .setDescription('Sorunu veya mesajını yaz')
+      option.setName("soru")
+        .setDescription("Sorunu yaz")
         .setRequired(true)
     ),
-  async execute(interaction) {
-    await interaction.deferReply();
 
-    const userMessage = interaction.options.getString('mesaj');
+  async execute(interaction) {
+    const question = interaction.options.getString("soru");
+    await interaction.deferReply(); // bekleme süresi için
 
     try {
-      const completion = await openai.chat.completions.create({
-        model: "gpt-4o-mini",
-        messages: [
-          { role: "system", content: "Sen bir Discord botusun, kullanıcılara dostça yanıt veriyorsun." },
-          { role: "user", content: userMessage }
-        ],
-      });
+      const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
 
-      const reply = completion.choices[0].message.content;
+      const result = await model.generateContent(question);
+      const reply = result.response.text();
+
       await interaction.editReply(reply);
     } catch (error) {
       console.error(error);
       await interaction.editReply("❌ Yapay zeka ile konuşurken bir hata oluştu!");
     }
-  },
+  }
 };
