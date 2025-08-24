@@ -1,13 +1,14 @@
 const fs = require('fs');
 const path = require('path');
-const { SlashCommandBuilder } = require('discord.js');
+const { SlashCommandBuilder, PermissionFlagsBits } = require('discord.js');
+
 // Ban kayıtlarının tutulduğu JSON dosyası
 const banListPath = path.join(__dirname, '../data/banlist.json');
 
 module.exports = {
   data: new SlashCommandBuilder()
     .setName('ban')
-    .setDescription('Bir kullanıcıyı sunucudan banlar ve listeye ekler.')
+    .setDescription('Bir kullanıcıyı sunucudan banlar, DM gönderir ve listeye ekler.')
     .addUserOption(option =>
       option.setName('kullanici')
         .setDescription('Banlanacak kullanıcıyı seçin.')
@@ -28,6 +29,12 @@ module.exports = {
     }
 
     try {
+      // Kullanıcıya DM gönder
+      await user.send(`🚫 **${interaction.guild.name}** sunucusundan banlandın.\n📌 Sebep: **${reason}**\n👮 Yetkili: ${interaction.user.tag}`).catch(() => {
+        console.log(`⚠️ ${user.tag} kişisine DM gönderilemedi (kapalı olabilir).`);
+      });
+
+      // Banla
       await member.ban({ reason: `${reason} | Yetkili: ${interaction.user.tag}` });
 
       // Ban listesine kaydet
