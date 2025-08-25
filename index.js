@@ -1,10 +1,6 @@
-const { OpenAI } = require("openai");
-
-const openai = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY, // Railway/Vercel environment variable
-});
-const fs = require('fs');
-const path = require('path');
+const fs = require("fs");
+const path = require("path");
+require("dotenv").config();
 const { 
   Client, 
   Collection, 
@@ -17,10 +13,9 @@ const {
   ButtonBuilder,
   ButtonStyle,
   ChannelType
-} = require('discord.js');
-require('dotenv').config();
+} = require("discord.js");
 
-// Client oluştur
+// 📌 Discord Client
 const client = new Client({
   intents: [
     GatewayIntentBits.Guilds,
@@ -35,13 +30,13 @@ const client = new Client({
 client.commands = new Collection();
 const commands = [];
 
-// Komutları yükle
-const commandsPath = path.join(__dirname, 'commands');
-const commandFiles = fs.readdirSync(commandsPath).filter(file => file.endsWith('.js'));
+// 📂 commands klasöründen komutları yükle
+const commandsPath = path.join(__dirname, "commands");
+const commandFiles = fs.readdirSync(commandsPath).filter(file => file.endsWith(".js"));
 
 for (const file of commandFiles) {
   const command = require(path.join(commandsPath, file));
-  if ('data' in command && 'execute' in command) {
+  if ("data" in command && "execute" in command) {
     client.commands.set(command.data.name, command);
     commands.push(command.data.toJSON());
     console.log(`✅ Komut yüklendi: ${command.data.name}`);
@@ -50,26 +45,26 @@ for (const file of commandFiles) {
   }
 }
 
-// Slash komutlarını Discord'a kaydet
+// ✅ Slash komutlarını Discord'a kaydet
 client.once(Events.ClientReady, async () => {
   console.log(`🤖 Bot giriş yaptı: ${client.user.tag}`);
 
-  const rest = new REST({ version: '10' }).setToken(process.env.TOKEN);
+  const rest = new REST({ version: "10" }).setToken(process.env.TOKEN);
 
   try {
     await rest.put(
       Routes.applicationCommands(client.user.id),
       { body: commands },
     );
-    console.log('✅ Slash komutları başarıyla yüklendi.');
+    console.log("✅ Slash komutları başarıyla yüklendi.");
   } catch (err) {
     console.error(err);
   }
 });
 
-// Interaction event
+// 🎯 Slash komutlar & buton eventleri
 client.on(Events.InteractionCreate, async interaction => {
-  // Slash Komutlar
+  // Slash komutlar
   if (interaction.isChatInputCommand()) {
     const command = client.commands.get(interaction.commandName);
     if (!command) return;
@@ -79,15 +74,15 @@ client.on(Events.InteractionCreate, async interaction => {
     } catch (err) {
       console.error(err);
       if (interaction.replied || interaction.deferred) {
-        await interaction.followUp({ content: '❌ Bir hata oluştu!', ephemeral: true });
+        await interaction.followUp({ content: "❌ Bir hata oluştu!", ephemeral: true });
       } else {
-        await interaction.reply({ content: '❌ Bir hata oluştu!', ephemeral: true });
+        await interaction.reply({ content: "❌ Bir hata oluştu!", ephemeral: true });
       }
     }
   }
 
-  // 🎟️ Bilet oluşturma
-  if (interaction.isButton() && interaction.customId === 'create_ticket') {
+  // 🎟️ Ticket açma
+  if (interaction.isButton() && interaction.customId === "create_ticket") {
     const existing = interaction.guild.channels.cache.find(
       c => c.name === `ticket-${interaction.user.id}`
     );
@@ -110,20 +105,20 @@ client.on(Events.InteractionCreate, async interaction => {
     // Kullanıcıya Manager rolünü ver
     await interaction.member.roles.add(managerRole);
 
-    // Bilet kanalı oluştur
+    // Ticket kanalı oluştur
     const channel = await interaction.guild.channels.create({
       name: `ticket-${interaction.user.id}`,
       type: ChannelType.GuildText,
       permissionOverwrites: [
-        { id: interaction.guild.id, deny: ['ViewChannel'] },
-        { id: interaction.user.id, allow: ['ViewChannel', 'SendMessages', 'ReadMessageHistory'] },
+        { id: interaction.guild.id, deny: ["ViewChannel"] },
+        { id: interaction.user.id, allow: ["ViewChannel", "SendMessages", "ReadMessageHistory"] },
       ],
     });
 
     const row = new ActionRowBuilder().addComponents(
       new ButtonBuilder()
-        .setCustomId('close_ticket')
-        .setLabel('Kapat')
+        .setCustomId("close_ticket")
+        .setLabel("Kapat")
         .setStyle(ButtonStyle.Danger)
     );
 
@@ -132,17 +127,36 @@ client.on(Events.InteractionCreate, async interaction => {
       components: [row],
     });
 
-    await interaction.reply({ content: `✅ Bilet açıldı ve sana **Manager** yetkisi verildi: ${channel}`, ephemeral: true });
+    await interaction.reply({ content: `✅ Ticket açıldı: ${channel}`, ephemeral: true });
   }
 
-  // 📌 Bilet kapatma
-  if (interaction.isButton() && interaction.customId === 'close_ticket') {
-    if (!interaction.channel.name.startsWith('ticket-')) {
-      return interaction.reply({ content: '❌ Bu buton sadece bilet kanallarında çalışır.', ephemeral: true });
+  // 📌 Ticket kapatma
+  if (interaction.isButton() && interaction.customId === "close_ticket") {
+    if (!interaction.channel.name.startsWith("ticket-")) {
+      return interaction.reply({ content: "❌ Bu buton sadece ticket kanallarında çalışır.", ephemeral: true });
     }
 
-    await interaction.reply({ content: '📌 Bilet kapatılıyor...', ephemeral: true });
+    await interaction.reply({ content: "📌 Ticket kapatılıyor...", ephemeral: true });
     setTimeout(() => interaction.channel.delete(), 3000);
+  }
+});
+
+
+// 🎯 EHLIYET EVENTLERİ (örnek: kullanıcı sunucuya girince ehliyeti yoksa uyarı)
+const db = require("quick.db");
+
+client.on(Events.GuildMemberAdd, member => {
+  const ehliyet = db.get(`ehliyet_${member.id}`);
+  if (!ehliyet) {
+    member.send("👋 Sunucuya hoş geldin! Ehliyetin yok, almak için `/ehliyet-al` komutunu kullanabilirsin. 🚗💨")
+      .catch(() => console.log("Kullanıcıya DM gönderilemedi."));
+  }
+});
+
+client.on(Events.GuildMemberRemove, member => {
+  const ehliyet = db.get(`ehliyet_${member.id}`);
+  if (ehliyet) {
+    console.log(`📌 ${member.user.tag} sunucudan ayrıldı. Ehliyeti: ${ehliyet.durum}`);
   }
 });
 
