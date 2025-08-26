@@ -1,5 +1,6 @@
 const { SlashCommandBuilder, PermissionFlagsBits } = require("discord.js");
-const db = require("quick.db");
+const { QuickDB } = require("quick.db");
+const db = new QuickDB();
 
 module.exports = {
   data: new SlashCommandBuilder()
@@ -15,7 +16,10 @@ module.exports = {
   async execute(interaction) {
     const user = interaction.options.getUser("kullanıcı");
 
-    db.set(`ehliyet_${user.id}`, { durum: "Var", tarih: new Date().toLocaleString("tr-TR") });
+    await db.set(`ehliyet_${user.id}`, { 
+      durum: "Var", 
+      tarih: new Date().toLocaleString("tr-TR") 
+    });
 
     return interaction.reply(`✅ ${user} kullanıcısına ehliyet verildi!`);
   }
