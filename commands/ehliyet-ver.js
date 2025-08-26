@@ -4,29 +4,19 @@ const db = require("quick.db");
 module.exports = {
   data: new SlashCommandBuilder()
     .setName("ehliyet-ver")
-    .setDescription("Bir kullanıcıya ehliyet ver (sadece yetkililer).")
-    .setDefaultMemberPermissions(PermissionFlagsBits.ManageRoles)
+    .setDescription("Belirtilen kişiye ehliyet ver.")
     .addUserOption(option =>
-      option.setName("kullanici")
-        .setDescription("Ehliyet verilecek kişi")
+      option.setName("kullanıcı")
+        .setDescription("Ehliyet verilecek kullanıcı")
         .setRequired(true)
-    ),
+    )
+    .setDefaultMemberPermissions(PermissionFlagsBits.Administrator),
 
   async execute(interaction) {
-    const user = interaction.options.getUser("kullanici");
+    const user = interaction.options.getUser("kullanıcı");
 
-    if (db.get(`ehliyet_${user.id}`)) {
-      return interaction.reply({ 
-        content: "❌ Bu kişinin zaten ehliyeti var.", 
-        ephemeral: true 
-      });
-    }
+    db.set(`ehliyet_${user.id}`, { durum: "Var", tarih: new Date().toLocaleString("tr-TR") });
 
-    db.set(`ehliyet_${user.id}`, { 
-      durum: "Aktif", 
-      tarih: new Date().toLocaleDateString("tr-TR") 
-    });
-
-    await interaction.reply(`✅ ${user} kullanıcısına ehliyet verildi!`);
+    return interaction.reply(`✅ ${user} kullanıcısına ehliyet verildi!`);
   }
 };
