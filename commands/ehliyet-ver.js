@@ -8,19 +8,26 @@ module.exports = {
     .setDescription("Belirtilen kişiye ehliyet ver.")
     .addUserOption(option =>
       option.setName("kullanıcı")
-        .setDescription("Ehliyet verilecek kullanıcı")
+        .setDescription("Ehliyet verilecek Discord kullanıcısı")
+        .setRequired(true)
+    )
+    .addStringOption(option =>
+      option.setName("roblox")
+        .setDescription("Kullanıcının Roblox ismi")
         .setRequired(true)
     )
     .setDefaultMemberPermissions(PermissionFlagsBits.Administrator),
 
   async execute(interaction) {
     const user = interaction.options.getUser("kullanıcı");
+    const robloxName = interaction.options.getString("roblox");
 
     await db.set(`ehliyet_${user.id}`, { 
       durum: "Var", 
-      tarih: new Date().toLocaleString("tr-TR") 
+      tarih: new Date().toLocaleString("tr-TR"),
+      roblox: robloxName
     });
 
-    return interaction.reply(`✅ ${user} kullanıcısına ehliyet verildi!`);
+    return interaction.reply(`✅ ${user} kullanıcısına Roblox hesabı **${robloxName}** ile ehliyet verildi!`);
   }
 };
