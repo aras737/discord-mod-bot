@@ -1,17 +1,29 @@
-const { SlashCommandBuilder } = require("discord.js");
+const { SlashCommandBuilder, PermissionFlagsBits } = require("discord.js");
 const db = require("quick.db");
 
 module.exports = {
   data: new SlashCommandBuilder()
     .setName("ehliyet-al")
-    .setDescription("Kendine ehliyet al."),
+    .setDescription("Birinin ehliyetini elinden al (sadece yetkililer).")
+    .setDefaultMemberPermissions(PermissionFlagsBits.ManageRoles)
+    .addUserOption(option =>
+      option.setName("kullanici")
+        .setDescription("Ehliyeti alınacak kişi")
+        .setRequired(true)
+    ),
 
   async execute(interaction) {
-    if (db.get(`ehliyet_${interaction.user.id}`)) {
-      return interaction.reply({ content: "📛 Zaten ehliyetin var!", ephemeral: true });
+    const user = interaction.options.getUser("kullanici");
+    const ehliyet = db.get(`ehliyet_${user.id}`);
+
+    if (!ehliyet) {
+      return interaction.reply({ 
+        content: "📛 Bu kişinin zaten ehliyeti yok.", 
+        ephemeral: true 
+      });
     }
 
-    db.set(`ehliyet_${interaction.user.id}`, { durum: "Aktif", ceza: 0 });
-    await interaction.reply("✅ Ehliyetin başarıyla alındı! Güvenli sürüşler 🚗💨");
+    db.delete(`ehliyet_${user.id}`);
+    await interaction.reply(`🚫 ${user} kullanıcısının ehliyeti iptal edildi!`);
   }
 };
