@@ -2,7 +2,7 @@ const { SlashCommandBuilder, PermissionFlagsBits } = require("discord.js");
 
 module.exports = {
   data: new SlashCommandBuilder()
-    .setName("askeri-template")
+    .setName("şablon oluşturucu")
     .setDescription("Askeri temalı Discord şablonunu kurar.")
     .setDefaultMemberPermissions(PermissionFlagsBits.Administrator),
 
