@@ -1,59 +1,109 @@
-const { SlashCommandBuilder, PermissionFlagsBits } = require("discord.js");
+const { SlashCommandBuilder, EmbedBuilder, PermissionFlagsBits, ChannelType } = require("discord.js");
 
 module.exports = {
   data: new SlashCommandBuilder()
-    .setName("sablon-olusturucu")
-    .setDescription("Askeri temalı Discord şablonunu kurar.")
+    .setName("sablon-askeri")
+    .setDescription("Sunucuyu sıfırlar ve askeri şablon kurar.")
     .setDefaultMemberPermissions(PermissionFlagsBits.Administrator),
 
   async execute(interaction) {
-    await interaction.reply({ content: "⚔️ Askeri şablon kuruluyor...", ephemeral: true });
+    await interaction.reply("🪖 Sunucu sıfırlanıyor ve askeri şablon kuruluyor...");
 
-    const guild = interaction.guild;
+    try {
+      // 📌 1. Mevcut tüm kanalları sil
+      interaction.guild.channels.cache.forEach(async (channel) => {
+        try {
+          await channel.delete();
+        } catch (err) {
+          console.log(`Kanal silinemedi: ${channel.name}`);
+        }
+      });
 
-    // 📌 ROLLER
-    const roles = {};
-    roles.general = await guild.roles.create({ name: "🪖 General", color: "Red" });
-    roles.captain = await guild.roles.create({ name: "🎖️ Captain", color: "Blue" });
-    roles.sergeant = await guild.roles.create({ name: "🛡️ Sergeant", color: "Green" });
-    roles.soldier = await guild.roles.create({ name: "⚔️ Soldier", color: "Grey" });
-    roles.recruit = await guild.roles.create({ name: "🎯 Recruit", color: "White" });
+      // 📌 2. Mevcut rolleri sil (Discord'un default @everyone rolü hariç!)
+      interaction.guild.roles.cache.forEach(async (role) => {
+        if (role.name !== "@everyone") {
+          try {
+            await role.delete();
+          } catch (err) {
+            console.log(`Rol silinemedi: ${role.name}`);
+          }
+        }
+      });
 
-    // 📌 KATEGORİLER & KANALLAR
-    const infoCat = await guild.channels.create({
-      name: "📜 Bilgilendirme",
-      type: 4, // Category
-    });
-    await guild.channels.create({ name: "📢 Duyurular", type: 0, parent: infoCat.id });
-    await guild.channels.create({ name: "📌 Kurallar", type: 0, parent: infoCat.id });
-    await guild.channels.create({ name: "🎖️ Rütbeler", type: 0, parent: infoCat.id });
+      // 📌 3. Yeni roller oluştur
+      const roles = {};
+      roles.komutan = await interaction.guild.roles.create({ name: "Komutan", color: "Red" });
+      roles.subay = await interaction.guild.roles.create({ name: "Subay", color: "Blue" });
+      roles.astsubay = await interaction.guild.roles.create({ name: "Astsubay", color: "Green" });
+      roles.er = await interaction.guild.roles.create({ name: "Er", color: "Grey" });
 
-    const generalCat = await guild.channels.create({
-      name: "💬 Genel",
-      type: 4,
-    });
-    await guild.channels.create({ name: "💂 Sohbet", type: 0, parent: generalCat.id });
-    await guild.channels.create({ name: "🎙️ Sesli Sohbet", type: 2, parent: generalCat.id });
+      // 📌 4. Yeni kategoriler ve kanallar
+      const kategoriKara = await interaction.guild.channels.create({
+        name: "🪖 Kara Kuvvetleri",
+        type: ChannelType.GuildCategory,
+      });
 
-    const militaryCat = await guild.channels.create({
-      name: "⚔️ Askeri Alan",
-      type: 4,
-    });
-    await guild.channels.create({ name: "🪖 Emirler", type: 0, parent: militaryCat.id });
-    await guild.channels.create({ name: "📋 Eğitimler", type: 0, parent: militaryCat.id });
-    await guild.channels.create({ name: "🗺️ Operasyonlar", type: 0, parent: militaryCat.id });
-    await guild.channels.create({ name: "🎧 Karargah", type: 2, parent: militaryCat.id });
+      await interaction.guild.channels.create({
+        name: "genel-sohbet",
+        type: ChannelType.GuildText,
+        parent: kategoriKara.id,
+      });
 
-    const branchesCat = await guild.channels.create({
-      name: "🏅 Branşlar",
-      type: 4,
-    });
-    await guild.channels.create({ name: "✈️ Hava Kuvvetleri", type: 0, parent: branchesCat.id });
-    await guild.channels.create({ name: "🚢 Deniz Kuvvetleri", type: 0, parent: branchesCat.id });
-    await guild.channels.create({ name: "🪖 Kara Kuvvetleri", type: 0, parent: branchesCat.id });
-    await guild.channels.create({ name: "🎯 Özel Kuvvetler", type: 0, parent: branchesCat.id });
+      await interaction.guild.channels.create({
+        name: "emir-komuta",
+        type: ChannelType.GuildText,
+        parent: kategoriKara.id,
+      });
 
-    // 📌 BİTİR
-    await interaction.followUp({ content: "✅ Askeri Discord şablonu başarıyla kuruldu!" });
-  }
+      const kategoriHava = await interaction.guild.channels.create({
+        name: "✈️ Hava Kuvvetleri",
+        type: ChannelType.GuildCategory,
+      });
+
+      await interaction.guild.channels.create({
+        name: "hava-sohbet",
+        type: ChannelType.GuildText,
+        parent: kategoriHava.id,
+      });
+
+      await interaction.guild.channels.create({
+        name: "pilot-talimatlari",
+        type: ChannelType.GuildText,
+        parent: kategoriHava.id,
+      });
+
+      const kategoriDeniz = await interaction.guild.channels.create({
+        name: "⚓ Deniz Kuvvetleri",
+        type: ChannelType.GuildCategory,
+      });
+
+      await interaction.guild.channels.create({
+        name: "deniz-sohbet",
+        type: ChannelType.GuildText,
+        parent: kategoriDeniz.id,
+      });
+
+      await interaction.guild.channels.create({
+        name: "gorev-merkezi",
+        type: ChannelType.GuildText,
+        parent: kategoriDeniz.id,
+      });
+
+      // 📌 5. Embed ile bildirim
+      const embed = new EmbedBuilder()
+        .setTitle("🪖 Askeri Sunucu Şablonu Kuruldu")
+        .setDescription("Tüm eski kanallar & roller silindi ve yeni askeri sistem kuruldu.")
+        .addFields(
+          { name: "🎖️ Roller", value: "Komutan, Subay, Astsubay, Er" },
+          { name: "📂 Kategoriler", value: "Kara Kuvvetleri, Hava Kuvvetleri, Deniz Kuvvetleri" }
+        )
+        .setColor("DarkGreen")
+        .setTimestamp();
+
+      await interaction.followUp({ embeds: [embed] });
+    } catch (err) {
+      console.error(err);
+      await interaction.followUp("❌ Bir hata oluştu, şablon kurulamadı.");
+    }
+  },
 };
