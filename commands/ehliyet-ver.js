@@ -1,60 +1,60 @@
-const { SlashCommandBuilder, EmbedBuilder } = require("discord.js");
-const { QuickDB } = require("quick.db");
-const db = new QuickDB();
+const { SlashCommandBuilder, EmbedBuilder, PermissionFlagsBits } = require("discord.js");
+const db = require("quick.db");
 
 module.exports = {
   data: new SlashCommandBuilder()
-    .setName("ehliyetim")
-    .setDescription("Ehliyet bilgilerini detaylı kart şeklinde gösterir."),
+    .setName("ehliyet-ver")
+    .setDescription("Bir kullanıcıya dijital ehliyet verir.")
+    .setDefaultMemberPermissions(PermissionFlagsBits.ManageRoles)
+    .addUserOption(option =>
+      option.setName("kullanici")
+        .setDescription("Ehliyet verilecek kullanıcı")
+        .setRequired(true)
+    )
+    .addStringOption(option =>
+      option.setName("roblox-ismi")
+        .setDescription("Kullanıcının Roblox ismi")
+        .setRequired(true)
+    ),
 
   async execute(interaction) {
-    const user = interaction.user;
-    const ehliyet = await db.get(`ehliyet_${user.id}`);
+    const target = interaction.options.getUser("kullanici");
+    const robloxName = interaction.options.getString("roblox-ismi");
 
-    if (!ehliyet) {
-      return interaction.reply({ content: "❌ Ehliyetin yok. Bir yönetici vermeli.", flags: 64 });
-    }
+    // DB'ye kaydet
+    db.set(`ehliyet_${target.id}`, {
+      durum: "Var",
+      veren: interaction.user.id,
+      roblox: robloxName,
+      discord: target.tag,
+      tarih: Date.now()
+    });
 
-    const robloxName = ehliyet.roblox || "Belirtilmemiş";
-    const durum = ehliyet.durum || "Yok";
-    const tarih = ehliyet.tarih || "Bilinmiyor";
+    // Tarih formatı
+    const date = new Date();
+    const tarihStr = date.toLocaleString("tr-TR", { 
+      day: "2-digit", month: "2-digit", year: "numeric", 
+      hour: "2-digit", minute: "2-digit", second: "2-digit" 
+    });
 
-    // Roblox avatar (headshot) URL
-    let avatarUrl = user.displayAvatarURL();
-    try {
-      const res = await fetch("https://users.roblox.com/v1/usernames/users", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ usernames: [robloxName] })
-      });
-      const data = await res.json();
-      if (data?.data?.length) {
-        const robloxId = data.data[0].id;
-        const thumbRes = await fetch(
-          `https://thumbnails.roblox.com/v1/users/avatar-headshot?userIds=${robloxId}&size=150x150&format=Png`
-        );
-        const thumbData = await thumbRes.json();
-        if (thumbData?.data?.length) {
-          avatarUrl = thumbData.data[0].imageUrl;
-        }
-      }
-    } catch (e) {
-      console.log("Roblox avatar alınamadı, Discord avatarı kullanılıyor.");
-    }
-
+    // Embed
     const embed = new EmbedBuilder()
-      .setAuthor({ name: "🚗 Dijital Ehliyet", iconURL: avatarUrl })
-      .setColor("#2ecc71")
-      .setThumbnail(avatarUrl)
+      .setColor("#00ff80")
+      .setAuthor({
+        name: "🚗 Dijital Ehliyet",
+        iconURL: interaction.user.displayAvatarURL({ dynamic: true })
+      })
+      .setThumbnail(target.displayAvatarURL({ dynamic: true, size: 256 }))
       .addFields(
-        { name: "👤 Roblox İsmi", value: `\`${robloxName}\``, inline: true },
-        { name: "📌 Durum", value: `\`${durum}\``, inline: true },
-        { name: "📅 Veriliş Tarihi", value: `\`${tarih}\``, inline: false }
+        { name: "👤 Roblox İsmi", value: `${robloxName}`, inline: false },
+        { name: "📌 Durum", value: `Var`, inline: false },
+        { name: "📅 Veriliş Tarihi", value: `${tarihStr}`, inline: false }
       )
-      .setImage("https://i.ibb.co/0j5mh5w/license-banner.png") // dekoratif arka plan (sen değiştirebilirsin)
-      .setFooter({ text: "Resmî Dijital Ehliyet", iconURL: interaction.client.user.displayAvatarURL() })
-      .setTimestamp();
+      .setFooter({
+        text: `Resmî Dijital Ehliyet | bugün saat ${date.getHours()}:${date.getMinutes().toString().padStart(2, "0")}`,
+        iconURL: interaction.client.user.displayAvatarURL()
+      });
 
-    return interaction.reply({ embeds: [embed] });
+    await interaction.reply({ embeds: [embed] });
   }
 };
