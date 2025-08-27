@@ -1,60 +1,59 @@
 const { SlashCommandBuilder, EmbedBuilder, PermissionFlagsBits } = require("discord.js");
-const db = require("quick.db");
+const { QuickDB } = require("quick.db");
+
+const db = new QuickDB();
 
 module.exports = {
   data: new SlashCommandBuilder()
     .setName("ehliyet-ver")
-    .setDescription("Bir kullanıcıya dijital ehliyet verir.")
-    .setDefaultMemberPermissions(PermissionFlagsBits.ManageRoles)
+    .setDescription("Belirtilen kullanıcıya ehliyet verir.")
     .addUserOption(option =>
-      option.setName("kullanici")
-        .setDescription("Ehliyet verilecek kullanıcı")
-        .setRequired(true)
+      option.setName("kullanici").setDescription("Ehliyet verilecek kişi").setRequired(true)
     )
     .addStringOption(option =>
-      option.setName("roblox-ismi")
-        .setDescription("Kullanıcının Roblox ismi")
-        .setRequired(true)
-    ),
+      option.setName("roblox").setDescription("Kullanıcının Roblox ismi").setRequired(true)
+    )
+    .setDefaultMemberPermissions(PermissionFlagsBits.Administrator),
 
   async execute(interaction) {
     const target = interaction.options.getUser("kullanici");
-    const robloxName = interaction.options.getString("roblox-ismi");
+    const robloxName = interaction.options.getString("roblox");
 
-    // DB'ye kaydet
-    db.set(`ehliyet_${target.id}`, {
-      durum: "Var",
-      veren: interaction.user.id,
+    // 📌 Ehliyeti kaydet
+    await db.set(`ehliyet_${target.id}`, {
       roblox: robloxName,
-      discord: target.tag,
-      tarih: Date.now()
+      durum: "Var",
+      tarih: new Date().toLocaleDateString("tr-TR")
     });
 
-    // Tarih formatı
-    const date = new Date();
-    const tarihStr = date.toLocaleString("tr-TR", { 
-      day: "2-digit", month: "2-digit", year: "numeric", 
-      hour: "2-digit", minute: "2-digit", second: "2-digit" 
-    });
-
-    // Embed
+    // 🎨 Embed (Havalı kart tasarımı)
     const embed = new EmbedBuilder()
-      .setColor("#00ff80")
-      .setAuthor({
-        name: "🚗 Dijital Ehliyet",
-        iconURL: interaction.user.displayAvatarURL({ dynamic: true })
-      })
-      .setThumbnail(target.displayAvatarURL({ dynamic: true, size: 256 }))
+      .setColor("#1abc9c")
+      .setTitle("🚗 Dijital Ehliyet")
+      .setThumbnail(target.displayAvatarURL({ dynamic: true, size: 512 }))
+      .setDescription("🎉 **Yeni bir ehliyet oluşturuldu!**\nAşağıda bilgilerini bulabilirsin:")
       .addFields(
-        { name: "👤 Roblox İsmi", value: `${robloxName}`, inline: false },
-        { name: "📌 Durum", value: `Var`, inline: false },
-        { name: "📅 Veriliş Tarihi", value: `${tarihStr}`, inline: false }
+        { name: "👤 Discord", value: `${target.tag}`, inline: true },
+        { name: "🕹️ Roblox", value: robloxName, inline: true },
+        { name: "📌 Durum", value: "✅ Var", inline: true },
+        { name: "📅 Veriliş Tarihi", value: new Date().toLocaleDateString("tr-TR"), inline: true }
       )
-      .setFooter({
-        text: `Resmî Dijital Ehliyet | bugün saat ${date.getHours()}:${date.getMinutes().toString().padStart(2, "0")}`,
-        iconURL: interaction.client.user.displayAvatarURL()
-      });
+      .setFooter({ text: "Dijital Ehliyet Sistemi", iconURL: interaction.client.user.displayAvatarURL() })
+      .setTimestamp();
 
-    await interaction.reply({ embeds: [embed] });
+    // Kullanıcıya DM gönder
+    try {
+      await target.send({ embeds: [embed] });
+    } catch {
+      return interaction.reply({
+        content: `⚠️ ${target} kullanıcısına DM gönderilemedi, ama ehliyeti verildi.`,
+        ephemeral: true
+      });
+    }
+
+    return interaction.reply({
+      content: `✅ ${target} kullanıcısına ehliyet verildi!`,
+      ephemeral: true
+    });
   }
 };
