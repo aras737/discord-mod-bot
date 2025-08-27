@@ -1,74 +1,60 @@
-const { SlashCommandBuilder, PermissionFlagsBits } = require("discord.js");
+const { SlashCommandBuilder, EmbedBuilder } = require("discord.js");
 const { QuickDB } = require("quick.db");
-const { createCanvas } = require("canvas");
-
 const db = new QuickDB();
 
 module.exports = {
   data: new SlashCommandBuilder()
-    .setName("ehliyet-ver")
-    .setDescription("Belirtilen kullanıcıya ehliyet verir.")
-    .addUserOption(option =>
-      option.setName("kullanici").setDescription("Ehliyet verilecek kişi").setRequired(true)
-    )
-    .addStringOption(option =>
-      option.setName("roblox").setDescription("Kullanıcının Roblox ismi").setRequired(true)
-    )
-    .setDefaultMemberPermissions(PermissionFlagsBits.Administrator), // sadece admin
+    .setName("ehliyetim")
+    .setDescription("Ehliyet bilgilerini detaylı kart şeklinde gösterir."),
 
   async execute(interaction) {
-    const target = interaction.options.getUser("kullanici");
-    const robloxName = interaction.options.getString("roblox");
+    const user = interaction.user;
+    const ehliyet = await db.get(`ehliyet_${user.id}`);
 
-    // 📌 Ehliyeti kaydet
-    await db.set(`ehliyet_${target.id}`, {
-      roblox: robloxName,
-      durum: "Var",
-      tarih: new Date().toLocaleDateString("tr-TR")
-    });
-
-    // 🎨 Ehliyet kartı oluştur
-    const width = 600;
-    const height = 300;
-    const canvas = createCanvas(width, height);
-    const ctx = canvas.getContext("2d");
-
-    // Arka plan
-    ctx.fillStyle = "#1abc9c";
-    ctx.fillRect(0, 0, width, height);
-
-    // Başlık
-    ctx.fillStyle = "#fff";
-    ctx.font = "bold 28px Sans";
-    ctx.fillText("🚗 Dijital Ehliyet", 30, 50);
-
-    // Kullanıcı bilgileri
-    ctx.font = "20px Sans";
-    ctx.fillStyle = "#2c3e50";
-    ctx.fillText(`Discord: ${target.tag}`, 30, 120);
-    ctx.fillText(`Roblox: ${robloxName}`, 30, 160);
-    ctx.fillText(`Durum: Var`, 30, 200);
-    ctx.fillText(`Veriliş: ${new Date().toLocaleDateString("tr-TR")}`, 30, 240);
-
-    // Buffer
-    const buffer = canvas.toBuffer("image/png");
-
-    // Kullanıcıya DM gönder
-    try {
-      await target.send({
-        content: "🎉 Tebrikler! Sana yeni bir ehliyet verildi.",
-        files: [{ attachment: buffer, name: "ehliyet.png" }]
-      });
-    } catch {
-      return interaction.reply({
-        content: `⚠️ ${target} kullanıcısına DM gönderilemedi, ama ehliyeti verildi.`,
-        ephemeral: true
-      });
+    if (!ehliyet) {
+      return interaction.reply({ content: "❌ Ehliyetin yok. Bir yönetici vermeli.", flags: 64 });
     }
 
-    return interaction.reply({
-      content: `✅ ${target} kullanıcısına ehliyet verildi!`,
-      ephemeral: true
-    });
+    const robloxName = ehliyet.roblox || "Belirtilmemiş";
+    const durum = ehliyet.durum || "Yok";
+    const tarih = ehliyet.tarih || "Bilinmiyor";
+
+    // Roblox avatar (headshot) URL
+    let avatarUrl = user.displayAvatarURL();
+    try {
+      const res = await fetch("https://users.roblox.com/v1/usernames/users", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ usernames: [robloxName] })
+      });
+      const data = await res.json();
+      if (data?.data?.length) {
+        const robloxId = data.data[0].id;
+        const thumbRes = await fetch(
+          `https://thumbnails.roblox.com/v1/users/avatar-headshot?userIds=${robloxId}&size=150x150&format=Png`
+        );
+        const thumbData = await thumbRes.json();
+        if (thumbData?.data?.length) {
+          avatarUrl = thumbData.data[0].imageUrl;
+        }
+      }
+    } catch (e) {
+      console.log("Roblox avatar alınamadı, Discord avatarı kullanılıyor.");
+    }
+
+    const embed = new EmbedBuilder()
+      .setAuthor({ name: "🚗 Dijital Ehliyet", iconURL: avatarUrl })
+      .setColor("#2ecc71")
+      .setThumbnail(avatarUrl)
+      .addFields(
+        { name: "👤 Roblox İsmi", value: `\`${robloxName}\``, inline: true },
+        { name: "📌 Durum", value: `\`${durum}\``, inline: true },
+        { name: "📅 Veriliş Tarihi", value: `\`${tarih}\``, inline: false }
+      )
+      .setImage("https://i.ibb.co/0j5mh5w/license-banner.png") // dekoratif arka plan (sen değiştirebilirsin)
+      .setFooter({ text: "Resmî Dijital Ehliyet", iconURL: interaction.client.user.displayAvatarURL() })
+      .setTimestamp();
+
+    return interaction.reply({ embeds: [embed] });
   }
 };
