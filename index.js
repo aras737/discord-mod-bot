@@ -8,12 +8,9 @@ const {
   Partials, 
   Events, 
   REST, 
-  Routes,
-  ActionRowBuilder,
-  ButtonBuilder,
-  ButtonStyle,
-  ChannelType
+  Routes
 } = require("discord.js");
+const db = require("quick.db");
 
 // 📌 Discord Client
 const client = new Client({
@@ -80,10 +77,9 @@ client.on(Events.InteractionCreate, async interaction => {
       }
     }
   }
+}); // 🔥 Bu kapatma eksikti!
 
-// 🎯 EHLIYET EVENTLERİ (örnek: kullanıcı sunucuya girince ehliyeti yoksa uyarı)
-const db = require("quick.db");
-
+// 🎯 EHLIYET EVENTLERİ
 client.on(Events.GuildMemberAdd, member => {
   const ehliyet = db.get(`ehliyet_${member.id}`);
   if (!ehliyet) {
