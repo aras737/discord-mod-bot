@@ -6,7 +6,7 @@ const db = new QuickDB();
 module.exports = {
   data: new SlashCommandBuilder()
     .setName("ehliyet-ver")
-    .setDescription("Belirtilen kullanıcıya ehliyet verir.")
+    .setDescription("Belirtilen kullanıcıya resmi dijital ehliyet verir.")
     .addUserOption(option =>
       option.setName("kullanici").setDescription("Ehliyet verilecek kişi").setRequired(true)
     )
@@ -22,37 +22,41 @@ module.exports = {
     // 📌 Ehliyeti kaydet
     await db.set(`ehliyet_${target.id}`, {
       roblox: robloxName,
-      durum: "Var",
+      durum: "Geçerli",
       tarih: new Date().toLocaleDateString("tr-TR")
     });
 
-    // 🎨 Embed (Havalı kart tasarımı)
+    // 🎨 Daha profesyonel embed
     const embed = new EmbedBuilder()
-      .setColor("#1abc9c")
-      .setTitle("🚗 Dijital Ehliyet")
+      .setColor("#0a74da")
+      .setTitle("🛂 RESMİ DİJİTAL EHLİYET")
       .setThumbnail(target.displayAvatarURL({ dynamic: true, size: 512 }))
-      .setDescription("🎉 **Yeni bir ehliyet oluşturuldu!**\nAşağıda bilgilerini bulabilirsin:")
+      .setDescription("Bu belge **dijital sürücü ehliyeti** olarak onaylanmıştır.\nAşağıdaki bilgiler kayıt altına alınmıştır:")
       .addFields(
-        { name: "👤 Discord", value: `${target.tag}`, inline: true },
-        { name: "🕹️ Roblox", value: robloxName, inline: true },
-        { name: "📌 Durum", value: "✅ Var", inline: true },
+        { name: "👤 Ad Soyad (Discord)", value: `${target.tag}`, inline: true },
+        { name: "🕹️ Roblox Kullanıcı Adı", value: robloxName, inline: true },
+        { name: "📌 Ehliyet Durumu", value: "✅ Geçerli", inline: true },
         { name: "📅 Veriliş Tarihi", value: new Date().toLocaleDateString("tr-TR"), inline: true }
       )
-      .setFooter({ text: "Dijital Ehliyet Sistemi", iconURL: interaction.client.user.displayAvatarURL() })
+      .setFooter({
+        text: "📜 Dijital Ehliyetler Kurumu • Yetkili Onay",
+        iconURL: interaction.client.user.displayAvatarURL()
+      })
       .setTimestamp();
 
     // Kullanıcıya DM gönder
     try {
       await target.send({ embeds: [embed] });
     } catch {
-      return interaction.reply({
-        content: `⚠️ ${target} kullanıcısına DM gönderilemedi, ama ehliyeti verildi.`,
+      await interaction.reply({
+        content: `⚠️ ${target} kullanıcısına DM gönderilemedi, ama ehliyeti başarıyla verildi.`,
         ephemeral: true
       });
+      return;
     }
 
     return interaction.reply({
-      content: `✅ ${target} kullanıcısına ehliyet verildi!`,
+      content: `✅ ${target} kullanıcısına **resmi dijital ehliyet** verildi!`,
       ephemeral: true
     });
   }
