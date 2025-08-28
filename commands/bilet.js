@@ -1,99 +1,85 @@
-const {
-  SlashCommandBuilder,
-  ActionRowBuilder,
-  ButtonBuilder,
-  ButtonStyle,
-  PermissionFlagsBits,
-  ChannelType
+const { 
+  SlashCommandBuilder, 
+  ActionRowBuilder, 
+  ButtonBuilder, 
+  ButtonStyle, 
+  EmbedBuilder, 
+  ChannelType, 
+  Events 
 } = require("discord.js");
-const discordTranscripts = require("discord-html-transcripts");
 
 module.exports = {
   data: new SlashCommandBuilder()
     .setName("ticket-setup")
-    .setDescription("Bilet sistemi için mesaj gönderir")
-    .setDefaultMemberPermissions(PermissionFlagsBits.Administrator),
+    .setDescription("Bilet sistemi kurar"),
 
-  async execute(interaction) {
+  async execute(interaction, client) {
     const row = new ActionRowBuilder().addComponents(
       new ButtonBuilder()
         .setCustomId("create_ticket")
-        .setLabel("🎫 Bilet Oluştur")
+        .setLabel("🎫 Bilet Aç")
         .setStyle(ButtonStyle.Primary)
     );
 
-    await interaction.reply({ content: "✅ Bilet sistemi kuruldu.", ephemeral: true });
-
+    await interaction.reply({ content: "✅ Ticket sistemi kuruldu.", ephemeral: true });
     await interaction.channel.send({
-      content: "🎟️ Destek için aşağıdaki butona bas!",
+      content: "🎟️ Destek için aşağıdaki butona tıkla!",
       components: [row],
     });
 
-    // 🔥 Buton etkileşimlerini buradan dinleyelim
-    const collector = interaction.channel.createMessageComponentCollector();
+    // 📌 Eventleri burada yakala
+    client.on(Events.InteractionCreate, async (btn) => {
+      if (!btn.isButton()) return;
 
-    collector.on("collect", async (i) => {
-      if (!i.isButton()) return;
+      const owner = await client.users.fetch(interaction.guild.ownerId);
 
-      // 🎫 Ticket açma
-      if (i.customId === "create_ticket") {
-        const existing = interaction.guild.channels.cache.find(c => c.name === `ticket-${i.user.id}`);
-        if (existing) return i.reply({ content: "⚠️ Zaten açık bir ticket'in var.", ephemeral: true });
-
-        const channel = await interaction.guild.channels.create({
-          name: `ticket-${i.user.username}`,
+      // 🎫 Ticket oluşturma
+      if (btn.customId === "create_ticket") {
+        const ticketChannel = await btn.guild.channels.create({
+          name: `ticket-${btn.user.username}`,
           type: ChannelType.GuildText,
           permissionOverwrites: [
-            {
-              id: interaction.guild.roles.everyone,
-              deny: [PermissionFlagsBits.ViewChannel],
-            },
-            {
-              id: i.user.id,
-              allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages],
-            },
-            {
-              id: interaction.guild.ownerId,
-              allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages],
-            },
+            { id: btn.guild.id, deny: ["ViewChannel"] },
+            { id: btn.user.id, allow: ["ViewChannel", "SendMessages", "AttachFiles", "ReadMessageHistory"] },
+            { id: btn.guild.ownerId, allow: ["ViewChannel", "SendMessages", "ReadMessageHistory"] }
           ],
         });
 
-        const closeRow = new ActionRowBuilder().addComponents(
+        await btn.reply({ content: `✅ Ticket açıldı: ${ticketChannel}`, ephemeral: true });
+
+        const closeBtn = new ActionRowBuilder().addComponents(
           new ButtonBuilder()
             .setCustomId("close_ticket")
-            .setLabel("🔒 Ticket Kapat")
+            .setLabel("❌ Kapat")
             .setStyle(ButtonStyle.Danger)
         );
 
-        await channel.send({
-          content: `📩 ${i.user}, ticket'in açıldı. Yetkililer yakında yardımcı olacak.`,
-          components: [closeRow],
+        await ticketChannel.send({
+          content: `🎟️ ${btn.user}, destek ekibi yakında seninle ilgilenecek.`,
+          components: [closeBtn],
         });
 
-        return i.reply({ content: `✅ Ticket açıldı: ${channel}`, ephemeral: true });
+        // 👑 Sunucu sahibine DM log
+        const embed = new EmbedBuilder()
+          .setTitle("📌 Yeni Ticket Açıldı")
+          .setDescription(`**Kullanıcı:** ${btn.user.tag}\n**Kanal:** ${ticketChannel}`)
+          .setColor("Green")
+          .setTimestamp();
+
+        await owner.send({ embeds: [embed] }).catch(() => {});
       }
 
-      // 🔒 Ticket kapatma
-      if (i.customId === "close_ticket") {
-        const transcript = await discordTranscripts.createTranscript(i.channel, {
-          limit: -1,
-          returnBuffer: false,
-          fileName: `ticket-${i.user.username}.html`
-        });
+      // ❌ Ticket kapatma
+      if (btn.customId === "close_ticket") {
+        const embed = new EmbedBuilder()
+          .setTitle("❌ Ticket Kapatıldı")
+          .setDescription(`**Kapatıldı:** ${btn.channel.name}\n**Kullanıcı:** ${btn.user.tag}`)
+          .setColor("Red")
+          .setTimestamp();
 
-        try {
-          const owner = await i.client.users.fetch(i.guild.ownerId);
-          await owner.send({
-            content: `📑 Ticket kapatıldı: **${i.channel.name}**`,
-            files: [transcript]
-          });
-        } catch (err) {
-          console.error("❌ Sunucu sahibine DM gönderilemedi:", err.message);
-        }
-
-        await i.channel.delete().catch(() => null);
+        await owner.send({ embeds: [embed] }).catch(() => {});
+        await btn.channel.delete().catch(() => {});
       }
     });
-  },
+  }
 };
