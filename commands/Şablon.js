@@ -1,155 +1,121 @@
-const { SlashCommandBuilder, PermissionFlagsBits, ChannelType, EmbedBuilder } = require("discord.js");
+const { SlashCommandBuilder, PermissionFlagsBits, EmbedBuilder } = require("discord.js");
 
 module.exports = {
   data: new SlashCommandBuilder()
     .setName("kurulum")
-    .setDescription("Askeri sunucu şablonunu kurar (mevcut her şeyi siler!)")
+    .setDescription("Askeri sunucu şablonu kurar")
+    .addStringOption(option =>
+      option
+        .setName("brans")
+        .setDescription("Kurulacak branşı seç")
+        .setRequired(true)
+        .addChoices(
+          { name: "Kara Kuvvetleri", value: "kara" },
+          { name: "Deniz Kuvvetleri", value: "deniz" },
+          { name: "Hava Kuvvetleri", value: "hava" },
+          { name: "Jandarma", value: "jandarma" },
+          { name: "Özel Kuvvetler", value: "ozel" },
+        )
+    )
     .setDefaultMemberPermissions(PermissionFlagsBits.Administrator),
 
   async execute(interaction) {
     const guild = interaction.guild;
-    const owner = await guild.fetchOwner();
+    const brans = interaction.options.getString("brans");
 
-    await interaction.reply({ content: "🚨 Kurulum başlatılıyor... Tüm eski roller ve kanallar silinecek.", ephemeral: true });
+    // 🔴 Tüm eski roller ve kanalları sil
+    await interaction.reply({ content: "🛠️ Kurulum başlatıldı, mevcut roller ve kanallar temizleniyor...", ephemeral: true });
 
-    // 1. Tüm kanalları sil
-    for (const [id, channel] of guild.channels.cache) {
+    for (const role of guild.roles.cache.filter(r => r.id !== guild.id).values()) {
+      await role.delete().catch(() => {});
+    }
+    for (const channel of guild.channels.cache.values()) {
       await channel.delete().catch(() => {});
     }
 
-    // 2. Tüm rolleri sil (botun rolünden yukarıdakiler hariç)
-    for (const [id, role] of guild.roles.cache) {
-      if (role.managed || role.id === guild.id) continue;
-      if (role.position >= guild.members.me.roles.highest.position) continue;
-      await role.delete().catch(() => {});
+    // Branşlara göre roller
+    let roller = [];
+
+    if (brans === "kara") {
+      roller = [
+        "Mareşal","Orgeneral","Korgeneral","Tümgeneral","Tuğgeneral",
+        "Albay","Yarbay","Binbaşı","Yüzbaşı","Üsteğmen","Teğmen","Asteğmen",
+        "Astsubay Kıdemli Başçavuş","Astsubay Başçavuş","Astsubay Kıdemli Çavuş",
+        "Astsubay Çavuş","Uzman Çavuş","Uzman Onbaşı","Sözleşmeli Er",
+        "Er","Acemi Er","Yedek Subay Adayı"
+      ];
+    } else if (brans === "deniz") {
+      roller = [
+        "Büyükamiral","Oramiral","Koramiral","Tümamiral","Tuğamiral",
+        "Albay","Yarbay","Binbaşı","Yüzbaşı (Kaptan)","Üsteğmen","Teğmen",
+        "Astsubay Başçavuş","Astsubay Çavuş",
+        "Deniz Er","Acemi Deniz Er"
+      ];
+    } else if (brans === "hava") {
+      roller = [
+        "Orgeneral","Korgeneral","Tümgeneral","Tuğgeneral",
+        "Hava Pilot Albay","Hava Pilot Yarbay","Hava Pilot Binbaşı","Hava Pilot Yüzbaşı",
+        "Pilot Üsteğmen","Pilot Teğmen","Astsubay","Hava Er","Yedek Subay Adayı"
+      ];
+    } else if (brans === "jandarma") {
+      roller = [
+        "Jandarma Orgeneral","Jandarma Korgeneral","Jandarma Tümgeneral","Jandarma Tuğgeneral",
+        "Jandarma Albay","Jandarma Yarbay","Jandarma Binbaşı","Jandarma Yüzbaşı",
+        "Jandarma Üsteğmen","Jandarma Teğmen","Jandarma Astsubay",
+        "Jandarma Uzman Çavuş","Jandarma Uzman Onbaşı","Jandarma Erbaş","Jandarma Er"
+      ];
+    } else if (brans === "ozel") {
+      roller = [
+        "Özel Kuvvetler Komutanı","Operasyon Timi Lideri","Kıdemli Operatör",
+        "Operatör","İstihbarat Görevlisi","Ajan","Gizli Ajan"
+      ];
     }
 
-    // ROLLERİ OLUŞTUR
-    const roles = {};
-    const roleList = [
-      // Üst Komuta
-      "Genelkurmay Başkanı",
-      "Kuvvet Komutanı (Kara)",
-      "Kuvvet Komutanı (Deniz)",
-      "Kuvvet Komutanı (Hava)",
-      "Kuvvet Komutanı (Jandarma)",
-      "Tümgeneral",
-      "Tuğgeneral",
-      // Orta Kademe
-      "Albay",
-      "Yarbay",
-      "Binbaşı",
-      "Yüzbaşı",
-      "Üsteğmen",
-      "Teğmen",
-      // Astsubay
-      "Kıdemli Başçavuş",
-      "Başçavuş",
-      "Kıdemli Çavuş",
-      "Çavuş",
-      "Onbaşı",
-      // Er
-      "Er",
-      "Acemi Er",
-      "Askeri Öğrenci",
-      // Özel
-      "İstihbarat Subayı",
-      "Özel Kuvvetler Operatörü",
-      "İnzibat",
-      "Pilot",
-      "Denizci",
-      // Destek
-      "Doktor",
-      "Mühendis",
-      "Sivil Personel",
-      "Misafir"
-    ];
-
-    for (const name of roleList) {
-      const role = await guild.roles.create({ name, reason: "Askeri kurulum" });
-      roles[name] = role;
+    // Roller oluştur
+    const createdRoles = [];
+    for (const r of roller) {
+      const role = await guild.roles.create({ name: r, reason: `Kurulum: ${brans}` }).catch(() => null);
+      if (role) createdRoles.push(role.name);
     }
 
-    // KANALLARI OLUŞTUR
-    const categories = {};
-
-    // Yönetim
-    categories.yonetim = await guild.channels.create({
-      name: "Yönetim",
-      type: ChannelType.GuildCategory
+    // Kategoriler ve kanallar
+    const kategori = await guild.channels.create({
+      name: "Genel",
+      type: 4, // Category
     });
-    await guild.channels.create({ name: "duyurular", type: ChannelType.GuildText, parent: categories.yonetim.id });
-    await guild.channels.create({ name: "kurallar", type: ChannelType.GuildText, parent: categories.yonetim.id });
-    await guild.channels.create({ name: "emirler", type: ChannelType.GuildText, parent: categories.yonetim.id });
 
-    // Askeri Bilgilendirme
-    categories.bilgi = await guild.channels.create({
-      name: "Askeri Bilgilendirme",
-      type: ChannelType.GuildCategory
+    await guild.channels.create({
+      name: "genel-sohbet",
+      type: 0,
+      parent: kategori.id
     });
-    await guild.channels.create({ name: "rütbeler", type: ChannelType.GuildText, parent: categories.bilgi.id });
-    await guild.channels.create({ name: "eğitim-notları", type: ChannelType.GuildText, parent: categories.bilgi.id });
-    await guild.channels.create({ name: "arşiv", type: ChannelType.GuildText, parent: categories.bilgi.id });
 
-    // Branşlar
-    categories.brans = await guild.channels.create({
-      name: "Branşlar",
-      type: ChannelType.GuildCategory
+    await guild.channels.create({
+      name: "duyurular",
+      type: 0,
+      parent: kategori.id
     });
-    const bransKanallari = ["kara-kuvvetleri", "deniz-kuvvetleri", "hava-kuvvetleri", "jandarma", "özel-kuvvetler", "istihbarat"];
-    for (const b of bransKanallari) {
-      await guild.channels.create({ name: b, type: ChannelType.GuildText, parent: categories.brans.id });
-    }
 
-    // Eğitim
-    categories.egitim = await guild.channels.create({
-      name: "Eğitim",
-      type: ChannelType.GuildCategory
+    await guild.channels.create({
+      name: "emir-komuta",
+      type: 0,
+      parent: kategori.id
     });
-    const egitimKanallari = ["acemi-egitim", "taktik-dersleri", "silah-bilgisi", "harita-ve-strateji"];
-    for (const e of egitimKanallari) {
-      await guild.channels.create({ name: e, type: ChannelType.GuildText, parent: categories.egitim.id });
-    }
 
-    // Disiplin
-    categories.disiplin = await guild.channels.create({
-      name: "Disiplin",
-      type: ChannelType.GuildCategory
-    });
-    const disiplinKanallari = ["yoklama", "disiplin-kaydi", "ceza-duyurulari", "raporlar"];
-    for (const d of disiplinKanallari) {
-      await guild.channels.create({ name: d, type: ChannelType.GuildText, parent: categories.disiplin.id });
-    }
-
-    // Sosyal
-    categories.sosyal = await guild.channels.create({
-      name: "Sosyal Alan",
-      type: ChannelType.GuildCategory
-    });
-    const sosyalKanallari = ["sohbet", "kantin", "izinli-sohbet", "oyun"];
-    for (const s of sosyalKanallari) {
-      await guild.channels.create({ name: s, type: ChannelType.GuildText, parent: categories.sosyal.id });
-    }
-
-    // Ses kanalları
-    categories.ses = await guild.channels.create({
-      name: "Sesli Alan",
-      type: ChannelType.GuildCategory
-    });
-    const sesKanallari = ["Komuta Merkezi", "Kara Kuvvetleri", "Deniz Kuvvetleri", "Hava Kuvvetleri", "Jandarma", "Özel Kuvvetler", "Eğitim Alanı", "Sosyal Ses"];
-    for (const ses of sesKanallari) {
-      await guild.channels.create({ name: ses, type: ChannelType.GuildVoice, parent: categories.ses.id });
-    }
-
-    // DM Rapor
+    // 📩 DM üzerinden rapor
     const embed = new EmbedBuilder()
-      .setTitle("✅ Askeri Sunucu Kurulumu Tamamlandı")
-      .setDescription("Tüm roller ve kanallar başarıyla oluşturuldu.")
-      .setColor("DarkRed")
-      .setTimestamp();
+      .setTitle("✅ Kurulum Tamamlandı")
+      .setDescription(`Sunucu için **${brans.toUpperCase()}** şablonu kuruldu.`)
+      .addFields(
+        { name: "Oluşturulan Roller", value: createdRoles.join(", ") || "Yok" },
+        { name: "Kanallar", value: "genel-sohbet, duyurular, emir-komuta" }
+      )
+      .setColor("DarkRed");
 
-    owner.send({ embeds: [embed] }).catch(() => {});
+    await interaction.user.send({ embeds: [embed] }).catch(() => {
+      interaction.followUp({ content: "⚠️ DM gönderilemedi, şablon tamamlandı.", ephemeral: true });
+    });
 
-    await interaction.editReply("✅ Kurulum tamamlandı. Sunucu sahibi DM üzerinden bilgilendirildi.");
+    await interaction.followUp({ content: "✅ Kurulum başarıyla tamamlandı!", ephemeral: true });
   }
 };
