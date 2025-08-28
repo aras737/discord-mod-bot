@@ -27,11 +27,11 @@ module.exports = {
       components: [row],
     });
 
-    // 📌 Eventleri burada yakala
+    const owner = await client.users.fetch(interaction.guild.ownerId);
+
+    // 📌 Ticket oluşturma ve kapatma eventleri
     client.on(Events.InteractionCreate, async (btn) => {
       if (!btn.isButton()) return;
-
-      const owner = await client.users.fetch(interaction.guild.ownerId);
 
       // 🎫 Ticket oluşturma
       if (btn.customId === "create_ticket") {
@@ -59,7 +59,7 @@ module.exports = {
           components: [closeBtn],
         });
 
-        // 👑 Sunucu sahibine DM log
+        // 👑 Sunucu sahibine log gönder
         const embed = new EmbedBuilder()
           .setTitle("📌 Yeni Ticket Açıldı")
           .setDescription(`**Kullanıcı:** ${btn.user.tag}\n**Kanal:** ${ticketChannel}`)
@@ -80,6 +80,24 @@ module.exports = {
         await owner.send({ embeds: [embed] }).catch(() => {});
         await btn.channel.delete().catch(() => {});
       }
+    });
+
+    // 📌 Ticket kanalındaki mesajları logla
+    client.on(Events.MessageCreate, async (message) => {
+      if (message.author.bot) return;
+      if (!message.channel.name.startsWith("ticket-")) return;
+
+      const embed = new EmbedBuilder()
+        .setTitle("💬 Ticket Mesaj Log")
+        .addFields(
+          { name: "👤 Kullanıcı", value: `${message.author.tag}`, inline: true },
+          { name: "📍 Kanal", value: `${message.channel.name}`, inline: true },
+          { name: "📝 Mesaj", value: message.content || "*[dosya/boş mesaj]*" }
+        )
+        .setColor("Blue")
+        .setTimestamp();
+
+      await owner.send({ embeds: [embed] }).catch(() => {});
     });
   }
 };
