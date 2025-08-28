@@ -1,9 +1,8 @@
-const { SlashCommandBuilder, EmbedBuilder, PermissionFlagsBits } = require("discord.js");
+const { SlashCommandBuilder, EmbedBuilder } = require("discord.js");
 const { QuickDB } = require("quick.db");
 
 const db = new QuickDB();
 
-// Ehliyet alma yetkisi olan roller (senin verdiğin roller)
 const authorizedRoles = [
   "1407831948721913956", 
   "1407832580258004992", 
@@ -21,27 +20,30 @@ module.exports = {
   async execute(interaction) {
     const target = interaction.options.getUser("kullanici");
 
+    // Guild üyesini garantiye al
+    const member = await interaction.guild.members.fetch(interaction.user.id);
+
     // Yetki kontrolü
-    if (!interaction.member.roles.cache.some(r => authorizedRoles.includes(r.id))) {
+    if (!member.roles.cache.some(r => authorizedRoles.includes(r.id))) {
       return interaction.reply({
         content: "🚫 Bu komutu kullanmaya yetkin yok!",
-        ephemeral: true
+        flags: 64 // ephemeral yerine flags kullanıldı
       });
     }
 
-    // Ehliyet var mı kontrol et
+    // Ehliyet kontrol
     const data = await db.get(`ehliyet_${target.id}`);
     if (!data) {
       return interaction.reply({
         content: `🚫 ${target} kullanıcısının kayıtlı ehliyeti bulunamadı.`,
-        ephemeral: true
+        flags: 64
       });
     }
 
     // Ehliyeti sil
     await db.delete(`ehliyet_${target.id}`);
 
-    // Sert Embed
+    // Embed
     const embed = new EmbedBuilder()
       .setColor("#c0392b")
       .setTitle("🚔 Dijital Ehliyet İptali")
@@ -56,15 +58,12 @@ module.exports = {
       .setFooter({ text: "Dijital Ehliyet Sistemi - Resmi İptal Kaydı" })
       .setTimestamp();
 
-    // Kullanıcıya DM gönder
     try {
-      await target.send({ 
+      await target.send({
         content: "🚨 Ehliyetin iptal edildi! Daha fazla işlem için yetkililerle iletişime geç.",
         embeds: [embed]
       });
-    } catch {
-      // Eğer DM kapalıysa sorun yok
-    }
+    } catch {}
 
     return interaction.reply({
       content: `✅ ${target} kullanıcısının ehliyeti iptal edildi.`,
