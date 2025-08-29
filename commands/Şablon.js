@@ -197,6 +197,45 @@ const ROL_SETS = {
     { name: "Gizli Ajan", color: COLORS.YONETIM },
     { name: "Özel Kuvvetler", color: COLORS.BRANS },
   ],
+
+  inzibat: [
+    // Subaylar
+    { name: "İnzibat Komutanı", color: COLORS.GENEL },
+    { name: "İnzibat Albay", color: COLORS.SUBAY },
+    { name: "İnzibat Yarbay", color: COLORS.SUBAY },
+    { name: "İnzibat Binbaşı", color: COLORS.SUBAY },
+    { name: "İnzibat Yüzbaşı", color: COLORS.SUBAY },
+    { name: "İnzibat Üsteğmen", color: COLORS.SUBAY },
+    { name: "İnzibat Teğmen", color: COLORS.SUBAY },
+    // Astsubaylar
+    { name: "İnzibat Başçavuş", color: COLORS.ASTSUBAY },
+    { name: "İnzibat Üstçavuş", color: COLORS.ASTSUBAY },
+    { name: "İnzibat Çavuş", color: COLORS.ASTSUBAY },
+    // Uzman ve Erler
+    { name: "İnzibat Uzman Çavuş", color: COLORS.UZMAN_ERBAS },
+    { name: "İnzibat Onbaşı", color: COLORS.ER_ERBAS },
+    { name: "İnzibat Eri", color: COLORS.ER_ERBAS },
+    { name: "Askeri İnzibat", color: COLORS.BRANS },
+  ],
+
+  sinir: [
+    // Subaylar
+    { name: "Sınır Kontrol Komutanı", color: COLORS.GENEL },
+    { name: "Sınır Albay", color: COLORS.SUBAY },
+    { name: "Sınır Yarbay", color: COLORS.SUBAY },
+    { name: "Sınır Binbaşı", color: COLORS.SUBAY },
+    { name: "Sınır Yüzbaşı", color: COLORS.SUBAY },
+    { name: "Sınır Üsteğmen", color: COLORS.SUBAY },
+    { name: "Sınır Teğmen", color: COLORS.SUBAY },
+    // Astsubaylar
+    { name: "Sınır Başçavuş", color: COLORS.ASTSUBAY },
+    { name: "Sınır Üstçavuş", color: COLORS.ASTSUBAY },
+    { name: "Sınır Çavuş", color: COLORS.ASTSUBAY },
+    // Uzman ve Erler
+    { name: "Sınır Uzman Çavuş", color: COLORS.UZMAN_ERBAS },
+    { name: "Sınır Gözetleme Eri", color: COLORS.ER_ERBAS },
+    { name: "Sınır Müfettişleri", color: COLORS.BRANS },
+  ],
 };
 
 // ====== Branş kanal planları ======
@@ -218,6 +257,8 @@ function plan(brans, seviye, guildId, roles) {
     hava: "Hava Kuvvetleri",
     jandarma: "Jandarma",
     ozel: "Özel Kuvvetler",
+    inzibat: "Askeri İnzibat",
+    sinir: "Sınır Müfettişleri",
   })[brans];
 
   const branşRol = roles[branchName];
@@ -283,6 +324,16 @@ function plan(brans, seviye, guildId, roles) {
       { cat: "Tim", ow: OW_RESTRICT, texts: ["operasyon", "keskin-nisanci", "patlayici", "tıbbi-destek"], voices: ["Brifing"] },
       { cat: "Özel Eğitim", ow: OW_RESTRICT, texts: ["yakın-muharebe", "şehir-tatbikatı", "dağ-kırsal"], voices: ["Eğitim Parkuru"] },
     ],
+    inzibat: [
+      { cat: "Disiplin ve Güvenlik", ow: OW_RESTRICT, texts: ["genel-güvenlik", "disiplin-raporları", "asayiş-kayıtları"], voices: ["Devriye Kanalı"] },
+      { cat: "Denetleme", ow: OW_RESTRICT, texts: ["kimlik-kontrolü", "araç-kontrolü", "kışla-denetimi"], voices: ["Denetim Noktası"] },
+      { cat: "İnzibat Komuta", ow: OW_COMMAND, texts: ["emirler", "devriye-planı", "ceza-kayıtları"], voices: ["İnzibat Merkez"] },
+    ],
+    sinir: [
+      { cat: "Sınır Komuta", ow: OW_COMMAND, texts: ["sınır-talimatları", "nokta-raporları"], voices: ["Komuta Merkezi"] },
+      { cat: "Sınır Devriye", ow: OW_RESTRICT, texts: ["devriye-raporları", "gözlem-kayıtları", "kaçakçılık-müdahale"], voices: ["Devriye Hattı"] },
+      { cat: "Gümrük ve Pasaport", ow: OW_RESTRICT, texts: ["pasaport-kontrol", "gümrük-islemleri", "vize-duyuruları"], voices: ["Gümrük Hattı"] },
+    ],
   };
 
   return [...ortak, ...(spesifik[brans] || [])];
@@ -304,6 +355,8 @@ module.exports = {
           { name: "Hava", value: "hava" },
           { name: "Jandarma", value: "jandarma" },
           { name: "Özel Kuvvetler", value: "ozel" },
+          { name: "Askeri İnzibat", value: "inzibat" },
+          { name: "Sınır Müfettişleri", value: "sinir" },
         )
     )
     .addStringOption(o =>
@@ -379,7 +432,7 @@ module.exports = {
     }
 
     // Seçilen branş(lar)
-    const targets = brans === "hepsi" ? ["kara","deniz","hava","jandarma","ozel"] : [brans];
+    const targets = brans === "hepsi" ? ["kara","deniz","hava","jandarma","ozel","inzibat","sinir"] : [brans];
     for (const key of targets) {
       for (const r of ROL_SETS[key]) {
         if (roles[r.name]) continue;
@@ -402,6 +455,8 @@ module.exports = {
           hava: "Hava",
           jandarma: "Jandarma",
           ozel: "Özel",
+          inzibat: "Askeri İnzibat",
+          sinir: "Sınır Müfettişleri",
         })[key]} - ${set.cat}`, set.ow).catch(() => null);
         if (!cat) continue;
         createdCats++;
