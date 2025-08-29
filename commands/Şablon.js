@@ -65,7 +65,7 @@ async function dm(user, title, desc) {
     .setTitle(title)
     .setDescription(desc)
     .setTimestamp();
-  try { await user.send({ embeds: [embed] }); } catch {}
+  try { await user.send({ embeds: [embed] }); } catch (error) { console.error(`DM gönderilirken bir hata oluştu: ${error.message}`); }
 }
 
 // ====== Rütbeler (gerçeğe uygun ayrıntılı) ======
@@ -78,6 +78,35 @@ const COLORS = {
   ER_ERBAS: "#455a64",
   YONETIM: "#37474f",
   BRANS: "#1565c0",
+  OZEL_BIRIM: "#2e7d32",
+};
+
+// Özel branş rolleri
+const BRANS_OZELLER = {
+  komando: [
+    { name: "Komando Tugay Komutanı", color: COLORS.SUBAY },
+    { name: "Komando Tabur Komutanı", color: COLORS.SUBAY },
+    { name: "Komando Bölük Komutanı", color: COLORS.SUBAY },
+    { name: "Komando Tim Lideri", color: COLORS.ASTSUBAY },
+    { name: "Komando Uzman Erbaş", color: COLORS.UZMAN_ERBAS },
+    { name: "Komando Er", color: COLORS.ER_ERBAS },
+    { name: "Jandarma Komando", color: COLORS.OZEL_BIRIM },
+  ],
+  mak: [
+    { name: "MAK Tim Komutanı", color: COLORS.SUBAY },
+    { name: "MAK Personel Subayı", color: COLORS.SUBAY },
+    { name: "MAK Astsubayı", color: COLORS.ASTSUBAY },
+    { name: "MAK Personeli", color: COLORS.UZMAN_ERBAS },
+    { name: "Hava Kuvvetleri MAK", color: COLORS.OZEL_BIRIM },
+  ],
+  satas: [
+    { name: "SAT Grup Komutanı", color: COLORS.SUBAY },
+    { name: "SAT Grup Lideri", color: COLORS.ASTSUBAY },
+    { name: "SAT Operatörü", color: COLORS.UZMAN_ERBAS },
+    { name: "SAS Tim Lideri", color: COLORS.ASTSUBAY },
+    { name: "SAS Operatörü", color: COLORS.UZMAN_ERBAS },
+    { name: "Deniz Kuvvetleri SAT/SAS", color: COLORS.OZEL_BIRIM },
+  ],
 };
 
 const ROL_SETS = {
@@ -85,7 +114,7 @@ const ROL_SETS = {
   _omurga: [
     { name: "Genelkurmay Başkanı", color: COLORS.GENEL },
     { name: "Kuvvet Komutanı", color: COLORS.GENEL },
-    { name: "Kurmay Başkan", color: COLORS.YONETIM },
+    { name: "Kurmay Başkanı", color: COLORS.YONETIM },
     { name: "Disiplin Kurulu", color: COLORS.YONETIM },
     { name: "Eğitim Başkanlığı", color: COLORS.YONETIM },
     { name: "Lojistik Başkanlığı", color: COLORS.YONETIM },
@@ -98,25 +127,30 @@ const ROL_SETS = {
     { name: "Korgeneral", color: COLORS.GENEL },
     { name: "Tümgeneral", color: COLORS.SUBAY },
     { name: "Tuğgeneral", color: COLORS.SUBAY },
+    { name: "Kurmay Albay", color: COLORS.SUBAY },
     { name: "Albay", color: COLORS.SUBAY },
+    { name: "Kurmay Yarbay", color: COLORS.SUBAY },
     { name: "Yarbay", color: COLORS.SUBAY },
+    { name: "Kurmay Binbaşı", color: COLORS.SUBAY },
     { name: "Binbaşı", color: COLORS.SUBAY },
     { name: "Yüzbaşı", color: COLORS.SUBAY },
     { name: "Üsteğmen", color: COLORS.SUBAY },
     { name: "Teğmen", color: COLORS.SUBAY },
     { name: "Asteğmen", color: COLORS.SUBAY },
     // Astsubay
-    { name: "Kıdemli Başçavuş", color: COLORS.ASTSUBAY },
-    { name: "Başçavuş", color: COLORS.ASTSUBAY },
-    { name: "Kıdemli Üstçavuş", color: COLORS.ASTSUBAY },
-    { name: "Üstçavuş", color: COLORS.ASTSUBAY },
-    { name: "Kıdemli Çavuş", color: COLORS.ASTSUBAY },
-    { name: "Çavuş", color: COLORS.ASTSUBAY },
-    { name: "Onbaşı", color: COLORS.ASTSUBAY },
+    { name: "Astsubay Kıdemli Başçavuş", color: COLORS.ASTSUBAY },
+    { name: "Astsubay Başçavuş", color: COLORS.ASTSUBAY },
+    { name: "Astsubay Kıdemli Üstçavuş", color: COLORS.ASTSUBAY },
+    { name: "Astsubay Üstçavuş", color: COLORS.ASTSUBAY },
+    { name: "Astsubay Kıdemli Çavuş", color: COLORS.ASTSUBAY },
+    { name: "Astsubay Çavuş", color: COLORS.ASTSUBAY },
+    { name: "Astsubay Onbaşı", color: COLORS.ASTSUBAY },
     // Uzman/Erbaş/Er
-    { name: "Uzman Çavuş", color: COLORS.UZMAN_ERBAS },
-    { name: "Uzman Onbaşı", color: COLORS.UZMAN_ERBAS },
+    { name: "Sözleşmeli Uzman Çavuş", color: COLORS.UZMAN_ERBAS },
+    { name: "Sözleşmeli Uzman Onbaşı", color: COLORS.UZMAN_ERBAS },
+    { name: "Uzman Erbaş", color: COLORS.UZMAN_ERBAS },
     { name: "Sözleşmeli Erbaş", color: COLORS.UZMAN_ERBAS },
+    { name: "Sözleşmeli Er", color: COLORS.ER_ERBAS },
     { name: "Er", color: COLORS.ER_ERBAS },
     { name: "Acemi Er", color: COLORS.ER_ERBAS },
     { name: "Yedek Subay Adayı", color: COLORS.ER_ERBAS },
@@ -126,62 +160,87 @@ const ROL_SETS = {
   ],
 
   deniz: [
+    // Amiraller
     { name: "Büyükamiral", color: COLORS.GENEL },
     { name: "Oramiral", color: COLORS.GENEL },
     { name: "Koramiral", color: COLORS.GENEL },
     { name: "Tümamiral", color: COLORS.SUBAY },
     { name: "Tuğamiral", color: COLORS.SUBAY },
-    { name: "Albay", color: COLORS.SUBAY },
-    { name: "Yarbay", color: COLORS.SUBAY },
-    { name: "Binbaşı", color: COLORS.SUBAY },
-    { name: "Yüzbaşı (Kaptan)", color: COLORS.SUBAY },
-    { name: "Üsteğmen", color: COLORS.SUBAY },
-    { name: "Teğmen", color: COLORS.SUBAY },
-    { name: "Kıdemli Başçavuş", color: COLORS.ASTSUBAY },
-    { name: "Başçavuş", color: COLORS.ASTSUBAY },
-    { name: "Üstçavuş", color: COLORS.ASTSUBAY },
-    { name: "Çavuş", color: COLORS.ASTSUBAY },
-    { name: "Onbaşı", color: COLORS.ASTSUBAY },
+    // Subay
+    { name: "Deniz Kurmay Albay", color: COLORS.SUBAY },
+    { name: "Deniz Albay", color: COLORS.SUBAY },
+    { name: "Deniz Yarbay", color: COLORS.SUBAY },
+    { name: "Deniz Binbaşı", color: COLORS.SUBAY },
+    { name: "Deniz Yüzbaşı", color: COLORS.SUBAY },
+    { name: "Deniz Üsteğmen", color: COLORS.SUBAY },
+    { name: "Deniz Teğmen", color: COLORS.SUBAY },
+    { name: "Deniz Asteğmen", color: COLORS.SUBAY },
+    // Astsubay
+    { name: "Astsubay Kıdemli Başçavuş", color: COLORS.ASTSUBAY },
+    { name: "Astsubay Başçavuş", color: COLORS.ASTSUBAY },
+    { name: "Astsubay Kıdemli Üstçavuş", color: COLORS.ASTSUBAY },
+    { name: "Astsubay Üstçavuş", color: COLORS.ASTSUBAY },
+    { name: "Astsubay Kıdemli Çavuş", color: COLORS.ASTSUBAY },
+    { name: "Astsubay Çavuş", color: COLORS.ASTSUBAY },
+    // Erbaş/Er
+    { name: "Uzman Çavuş", color: COLORS.UZMAN_ERBAS },
+    { name: "Uzman Erbaş", color: COLORS.UZMAN_ERBAS },
+    { name: "Deniz Piyadesi", color: COLORS.ER_ERBAS },
     { name: "Deniz Er", color: COLORS.ER_ERBAS },
     { name: "Acemi Deniz Er", color: COLORS.ER_ERBAS },
     { name: "Deniz Kuvvetleri", color: COLORS.BRANS },
   ],
 
   hava: [
-    { name: "Orgeneral", color: COLORS.GENEL },
-    { name: "Korgeneral", color: COLORS.GENEL },
-    { name: "Tümgeneral", color: COLORS.SUBAY },
-    { name: "Tuğgeneral", color: COLORS.SUBAY },
+    // Generaller
+    { name: "Hava Orgeneral", color: COLORS.GENEL },
+    { name: "Hava Korgeneral", color: COLORS.GENEL },
+    { name: "Hava Tümgeneral", color: COLORS.SUBAY },
+    { name: "Hava Tuğgeneral", color: COLORS.SUBAY },
+    // Subaylar
+    { name: "Hava Kurmay Albay", color: COLORS.SUBAY },
     { name: "Hava Pilot Albay", color: COLORS.SUBAY },
-    { name: "Hava Pilot Yarbay", color: COLORS.SUBAY },
+    { name: "Hava Yarbay", color: COLORS.SUBAY },
     { name: "Hava Pilot Binbaşı", color: COLORS.SUBAY },
-    { name: "Hava Pilot Yüzbaşı", color: COLORS.SUBAY },
-    { name: "Pilot Üsteğmen", color: COLORS.SUBAY },
-    { name: "Pilot Teğmen", color: COLORS.SUBAY },
-    { name: "Kıdemli Başçavuş", color: COLORS.ASTSUBAY },
-    { name: "Başçavuş", color: COLORS.ASTSUBAY },
-    { name: "Üstçavuş", color: COLORS.ASTSUBAY },
-    { name: "Çavuş", color: COLORS.ASTSUBAY },
-    { name: "Onbaşı", color: COLORS.ASTSUBAY },
+    { name: "Hava Yüzbaşı", color: COLORS.SUBAY },
+    { name: "Hava Pilot Üsteğmen", color: COLORS.SUBAY },
+    { name: "Hava Teğmen", color: COLORS.SUBAY },
+    { name: "Hava Asteğmen", color: COLORS.SUBAY },
+    // Astsubaylar
+    { name: "Uçak Bakım Astsubayı", color: COLORS.ASTSUBAY },
+    { name: "Astsubay Kıdemli Başçavuş", color: COLORS.ASTSUBAY },
+    { name: "Astsubay Başçavuş", color: COLORS.ASTSUBAY },
+    { name: "Astsubay Kıdemli Üstçavuş", color: COLORS.ASTSUBAY },
+    { name: "Astsubay Üstçavuş", color: COLORS.ASTSUBAY },
+    { name: "Astsubay Kıdemli Çavuş", color: COLORS.ASTSUBAY },
+    { name: "Astsubay Çavuş", color: COLORS.ASTSUBAY },
+    // Erbaş/Er
+    { name: "Hava Uzman Çavuş", color: COLORS.UZMAN_ERBAS },
+    { name: "Hava Erbaş", color: COLORS.ER_ERBAS },
     { name: "Hava Er", color: COLORS.ER_ERBAS },
-    { name: "Yedek Subay Adayı", color: COLORS.ER_ERBAS },
     { name: "Hava Kuvvetleri", color: COLORS.BRANS },
   ],
 
   jandarma: [
     { name: "Jandarma Orgeneral", color: COLORS.GENEL },
     { name: "Jandarma Korgeneral", color: COLORS.GENEL },
-    { name: "Jandarma Tümgeneral", color: COLORS.SUBAY },
-    { name: "Jandarma Tuğgeneral", color: COLORS.SUBAY },
+    { name: "Jandarma Kurmay Albay", color: COLORS.SUBAY },
     { name: "Jandarma Albay", color: COLORS.SUBAY },
+    { name: "Jandarma Kurmay Yarbay", color: COLORS.SUBAY },
     { name: "Jandarma Yarbay", color: COLORS.SUBAY },
     { name: "Jandarma Binbaşı", color: COLORS.SUBAY },
     { name: "Jandarma Yüzbaşı", color: COLORS.SUBAY },
     { name: "Jandarma Üsteğmen", color: COLORS.SUBAY },
     { name: "Jandarma Teğmen", color: COLORS.SUBAY },
-    { name: "Jandarma Astsubay", color: COLORS.ASTSUBAY },
+    // Astsubay
+    { name: "Jandarma Astsubay Kıdemli Başçavuş", color: COLORS.ASTSUBAY },
+    { name: "Jandarma Astsubay Başçavuş", color: COLORS.ASTSUBAY },
+    { name: "Jandarma Astsubay Üstçavuş", color: COLORS.ASTSUBAY },
+    { name: "Jandarma Asayiş Timi", color: COLORS.ASTSUBAY },
+    { name: "Jandarma Astsubay Çavuş", color: COLORS.ASTSUBAY },
+    { name: "Jandarma Devriye Komutanı", color: COLORS.ASTSUBAY },
+    { name: "Jandarma Uzman Jandarma", color: COLORS.UZMAN_ERBAS },
     { name: "Jandarma Uzman Çavuş", color: COLORS.UZMAN_ERBAS },
-    { name: "Jandarma Uzman Onbaşı", color: COLORS.UZMAN_ERBAS },
     { name: "Jandarma Erbaş", color: COLORS.ER_ERBAS },
     { name: "Jandarma Er", color: COLORS.ER_ERBAS },
     { name: "Jandarma", color: COLORS.BRANS },
@@ -189,37 +248,37 @@ const ROL_SETS = {
 
   ozel: [
     { name: "Özel Kuvvetler Komutanı", color: COLORS.GENEL },
-    { name: "Operasyon Timi Lideri", color: COLORS.SUBAY },
-    { name: "Kıdemli Operatör", color: COLORS.UZMAN_ERBAS },
-    { name: "Operatör", color: COLORS.UZMAN_ERBAS },
-    { name: "İstihbarat Görevlisi", color: COLORS.YONETIM },
-    { name: "Ajan", color: COLORS.YONETIM },
-    { name: "Gizli Ajan", color: COLORS.YONETIM },
+    { name: "ÖKK Kurmay Başkanı", color: COLORS.SUBAY },
+    { name: "ÖKK Operasyon Şefi", color: COLORS.SUBAY },
+    { name: "Özel Harekat Komutanı", color: COLORS.SUBAY },
+    { name: "Özel Harekat Başçavuşu", color: COLORS.ASTSUBAY },
+    { name: "Özel Harekat Uzmanı", color: COLORS.UZMAN_ERBAS },
+    ...BRANS_OZELLER.komando,
+    ...BRANS_OZELLER.mak,
+    ...BRANS_OZELLER.satas,
     { name: "Özel Kuvvetler", color: COLORS.BRANS },
   ],
 
   inzibat: [
-    // Subaylar
-    { name: "İnzibat Komutanı", color: COLORS.GENEL },
+    { name: "İnzibat Orgeneral", color: COLORS.GENEL },
+    { name: "İnzibat Korgeneral", color: COLORS.GENEL },
+    { name: "İnzibat Tümgeneral", color: COLORS.SUBAY },
     { name: "İnzibat Albay", color: COLORS.SUBAY },
     { name: "İnzibat Yarbay", color: COLORS.SUBAY },
     { name: "İnzibat Binbaşı", color: COLORS.SUBAY },
     { name: "İnzibat Yüzbaşı", color: COLORS.SUBAY },
     { name: "İnzibat Üsteğmen", color: COLORS.SUBAY },
     { name: "İnzibat Teğmen", color: COLORS.SUBAY },
-    // Astsubaylar
-    { name: "İnzibat Başçavuş", color: COLORS.ASTSUBAY },
-    { name: "İnzibat Üstçavuş", color: COLORS.ASTSUBAY },
-    { name: "İnzibat Çavuş", color: COLORS.ASTSUBAY },
-    // Uzman ve Erler
+    { name: "İnzibat Astsubay Başçavuş", color: COLORS.ASTSUBAY },
+    { name: "İnzibat Astsubay Üstçavuş", color: COLORS.ASTSUBAY },
+    { name: "İnzibat Astsubay Çavuş", color: COLORS.ASTSUBAY },
+    { name: "İnzibat Ekip Lideri", color: COLORS.ASTSUBAY },
     { name: "İnzibat Uzman Çavuş", color: COLORS.UZMAN_ERBAS },
-    { name: "İnzibat Onbaşı", color: COLORS.ER_ERBAS },
     { name: "İnzibat Eri", color: COLORS.ER_ERBAS },
     { name: "Askeri İnzibat", color: COLORS.BRANS },
   ],
 
   sinir: [
-    // Subaylar
     { name: "Sınır Kontrol Komutanı", color: COLORS.GENEL },
     { name: "Sınır Albay", color: COLORS.SUBAY },
     { name: "Sınır Yarbay", color: COLORS.SUBAY },
@@ -227,13 +286,12 @@ const ROL_SETS = {
     { name: "Sınır Yüzbaşı", color: COLORS.SUBAY },
     { name: "Sınır Üsteğmen", color: COLORS.SUBAY },
     { name: "Sınır Teğmen", color: COLORS.SUBAY },
-    // Astsubaylar
-    { name: "Sınır Başçavuş", color: COLORS.ASTSUBAY },
-    { name: "Sınır Üstçavuş", color: COLORS.ASTSUBAY },
-    { name: "Sınır Çavuş", color: COLORS.ASTSUBAY },
-    // Uzman ve Erler
+    { name: "Sınır Astsubay Kıdemli Başçavuş", color: COLORS.ASTSUBAY },
+    { name: "Sınır Astsubay Başçavuş", color: COLORS.ASTSUBAY },
+    { name: "Sınır Gözetleme Astsubayı", color: COLORS.ASTSUBAY },
+    { name: "Sınır Devriye Eri", color: COLORS.ER_ERBAS },
     { name: "Sınır Uzman Çavuş", color: COLORS.UZMAN_ERBAS },
-    { name: "Sınır Gözetleme Eri", color: COLORS.ER_ERBAS },
+    { name: "Sınır Eri", color: COLORS.ER_ERBAS },
     { name: "Sınır Müfettişleri", color: COLORS.BRANS },
   ],
 };
@@ -247,7 +305,7 @@ function plan(brans, seviye, guildId, roles) {
   const ustKomuta = [
     roles["Genelkurmay Başkanı"],
     roles["Kuvvet Komutanı"],
-    roles["Kurmay Başkan"],
+    roles["Kurmay Başkanı"],
   ].filter(Boolean);
 
   // Branş ana rol adı:
@@ -262,11 +320,16 @@ function plan(brans, seviye, guildId, roles) {
   })[brans];
 
   const branşRol = roles[branchName];
+  const ozelRoller = {
+    komando: roles["Jandarma Komando"],
+    mak: roles["Hava Kuvvetleri MAK"],
+    satas: roles["Deniz Kuvvetleri SAT/SAS"],
+  };
 
   // Overwrite setleri
   const OW_PUBLIC   = []; // herkese açık (sadece okuma değil; burada genel alanı açık bırakacağız)
   const OW_RESTRICT = [...owDenyAll(guildId), ...owReadWrite(branşRol), ...owReadWrite(roles["Disiplin Kurulu"]), ...owReadWrite(roles["Eğitim Başkanlığı"]), ...ustKomuta.map(r=>({ id:r.id, allow:[PermissionFlagsBits.ViewChannel, PermissionFlagsBits.ReadMessageHistory, PermissionFlagsBits.SendMessages]}))];
-  const OW_COMMAND  = [...owDenyAll(guildId), ...owReadWrite(roles["Kuvvet Komutanı"]), ...owReadWrite(roles["Kurmay Başkan"]), ...ustKomuta.map(r=>({ id:r.id, allow:[PermissionFlagsBits.ViewChannel, PermissionFlagsBits.ReadMessageHistory, PermissionFlagsBits.SendMessages]}))];
+  const OW_COMMAND  = [...owDenyAll(guildId), ...owReadWrite(roles["Kuvvet Komutanı"]), ...owReadWrite(roles["Kurmay Başkanı"]), ...ustKomuta.map(r=>({ id:r.id, allow:[PermissionFlagsBits.ViewChannel, PermissionFlagsBits.ReadMessageHistory, PermissionFlagsBits.SendMessages]}))];
   const OW_LOGS     = [...owDenyAll(guildId), ...owReadOnly(roles["Disiplin Kurulu"]), ...ustKomuta.map(r=>({ id:r.id, allow:[PermissionFlagsBits.ViewChannel, PermissionFlagsBits.ReadMessageHistory]}))];
 
   // Ortak kategoriler (her branşta)
@@ -321,8 +384,9 @@ function plan(brans, seviye, guildId, roles) {
     ],
     ozel: [
       { cat: "ÖKK Komuta", ow: OW_COMMAND, texts: ["operasyon-emirleri", "hedef-dosyaları", ...(full ? ["gizli-arsiv"] : [])], voices: ["Operasyon Odası"] },
-      { cat: "Tim", ow: OW_RESTRICT, texts: ["operasyon", "keskin-nisanci", "patlayici", "tıbbi-destek"], voices: ["Brifing"] },
-      { cat: "Özel Eğitim", ow: OW_RESTRICT, texts: ["yakın-muharebe", "şehir-tatbikatı", "dağ-kırsal"], voices: ["Eğitim Parkuru"] },
+      { cat: "Komando Birliği", ow: [...owDenyAll(guildId), ...owReadWrite(ozelRoller.komando)], texts: ["komando-raporları", "saha-gözlem"], voices: ["Komando Telsiz"] },
+      { cat: "MAK Timleri", ow: [...owDenyAll(guildId), ...owReadWrite(ozelRoller.mak)], texts: ["mak-harekat", "mak-raporları"], voices: ["Hava Operasyon"] },
+      { cat: "SAT/SAS", ow: [...owDenyAll(guildId), ...owReadWrite(ozelRoller.satas)], texts: ["sat-raporları", "su-altı-görev"], voices: ["Su Altı Operasyon"] },
     ],
     inzibat: [
       { cat: "Disiplin ve Güvenlik", ow: OW_RESTRICT, texts: ["genel-güvenlik", "disiplin-raporları", "asayiş-kayıtları"], voices: ["Devriye Kanalı"] },
@@ -350,9 +414,9 @@ module.exports = {
         .setRequired(true)
         .addChoices(
           { name: "Hepsi", value: "hepsi" },
-          { name: "Kara", value: "kara" },
-          { name: "Deniz", value: "deniz" },
-          { name: "Hava", value: "hava" },
+          { name: "Kara Kuvvetleri", value: "kara" },
+          { name: "Deniz Kuvvetleri", value: "deniz" },
+          { name: "Hava Kuvvetleri", value: "hava" },
           { name: "Jandarma", value: "jandarma" },
           { name: "Özel Kuvvetler", value: "ozel" },
           { name: "Askeri İnzibat", value: "inzibat" },
@@ -403,7 +467,7 @@ module.exports = {
     if (sifirla) {
       await dm(owner.user, "Kurulum Raporu", "Sıfırlama başlatıldı: Kanallar temizleniyor.");
       for (const ch of [...guild.channels.cache.values()]) {
-        try { await ch.delete("Askeri kurulum: sıfırla"); } catch {}
+        try { await ch.delete("Askeri kurulum: sıfırla"); } catch (error) { console.error(`Kanal silinirken bir hata oluştu: ${error.message}`); }
         await wait(30);
       }
       await dm(owner.user, "Kurulum Raporu", "Roller temizleniyor.");
@@ -412,7 +476,7 @@ module.exports = {
         if (role.id === guild.id) continue;         // @everyone
         if (role.managed) continue;                 // entegrasyon rolleri
         if (role.position >= myTop) continue;       // botun üstündeki roller silinemez
-        try { await role.delete("Askeri kurulum: sıfırla"); } catch {}
+        try { await role.delete("Askeri kurulum: sıfırla"); } catch (error) { console.error(`Rol silinirken bir hata oluştu: ${error.message}`); }
         await wait(30);
       }
       await dm(owner.user, "Kurulum Raporu", "Sıfırlama tamamlandı.");
@@ -426,7 +490,7 @@ module.exports = {
 
     // Omurga rolleri
     for (const r of ROL_SETS._omurga) {
-      const created = await guild.roles.create({ name: r.name, color: r.color, reason: "Askeri kurulum" }).catch(() => null);
+      const created = await guild.roles.create({ name: r.name, color: r.color, reason: "Askeri kurulum" }).catch(error => { console.error(`Rol oluşturulurken bir hata oluştu: ${error.message}`); return null; });
       if (created) roles[r.name] = created;
       await wait(25);
     }
@@ -434,11 +498,23 @@ module.exports = {
     // Seçilen branş(lar)
     const targets = brans === "hepsi" ? ["kara","deniz","hava","jandarma","ozel","inzibat","sinir"] : [brans];
     for (const key of targets) {
+      // Önce ana branş rolleri, sonra alt birim rolleri
       for (const r of ROL_SETS[key]) {
         if (roles[r.name]) continue;
-        const created = await guild.roles.create({ name: r.name, color: r.color, reason: `Askeri kurulum: ${key}` }).catch(() => null);
+        const created = await guild.roles.create({ name: r.name, color: r.color, reason: `Askeri kurulum: ${key}` }).catch(error => { console.error(`Rol oluşturulurken bir hata oluştu: ${error.message}`); return null; });
         if (created) roles[r.name] = created;
         await wait(25);
+      }
+      // Özel kuvvetler için alt birim rolleri de oluşturulur
+      if (key === 'ozel') {
+          for (const subKey in BRANS_OZELLER) {
+              for (const r of BRANS_OZELLER[subKey]) {
+                  if (roles[r.name]) continue;
+                  const created = await guild.roles.create({ name: r.name, color: r.color, reason: `Askeri kurulum: ${subKey}` }).catch(error => { console.error(`Alt birim rolü oluşturulurken bir hata oluştu: ${error.message}`); return null; });
+                  if (created) roles[r.name] = created;
+                  await wait(25);
+              }
+          }
       }
     }
 
@@ -457,17 +533,17 @@ module.exports = {
           ozel: "Özel",
           inzibat: "Askeri İnzibat",
           sinir: "Sınır Müfettişleri",
-        })[key]} - ${set.cat}`, set.ow).catch(() => null);
+        })[key]} - ${set.cat}`, set.ow).catch(error => { console.error(`Kategori oluşturulurken bir hata oluştu: ${error.message}`); return null; });
         if (!cat) continue;
         createdCats++;
 
         for (const t of set.texts || []) {
-          const ch = await createText(guild, cat.id, t, set.ow).catch(() => null);
+          const ch = await createText(guild, cat.id, t, set.ow).catch(error => { console.error(`Kanal oluşturulurken bir hata oluştu: ${error.message}`); return null; });
           if (ch) createdChannels++;
           await wait(20);
         }
         for (const v of set.voices || []) {
-          const ch = await createVoice(guild, cat.id, v, set.ow).catch(() => null);
+          const ch = await createVoice(guild, cat.id, v, set.ow).catch(error => { console.error(`Ses kanalı oluşturulurken bir hata oluştu: ${error.message}`); return null; });
           if (ch) createdChannels++;
           await wait(20);
         }
@@ -475,7 +551,7 @@ module.exports = {
     }
 
     // Son olarak herkese açık "Sosyal" kategori (okunur-yazılır)
-    const social = await createCategory(guild, "Sosyal", []).catch(()=>null);
+    const social = await createCategory(guild, "Sosyal", []).catch(error => { console.error(`Sosyal kategori oluşturulurken bir hata oluştu: ${error.message}`); return null; });
     if (social) {
       await createText(guild, social.id, "sohbet", []);
       await createText(guild, social.id, "komutlar", []);
