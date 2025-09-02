@@ -7,6 +7,15 @@ const {
 } = require("discord.js");
 const { QuickDB } = require("quick.db");
 
+// 📌 Botu başlat
+const client = new Client({
+  intents: [
+    GatewayIntentBits.Guilds,
+    GatewayIntentBits.GuildMembers,
+    GatewayIntentBits.GuildMessages
+  ]
+});
+
 // Veritabanı örneğini oluştur
 const db = new QuickDB();
 
