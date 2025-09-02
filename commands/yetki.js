@@ -3,7 +3,8 @@ const {
   PermissionFlagsBits, 
   Client, 
   GatewayIntentBits, 
-  Events 
+  Events,
+  MessageFlags // <-- Bu eklendi
 } = require("discord.js");
 const { QuickDB } = require("quick.db");
 
@@ -48,12 +49,14 @@ client.on(Events.InteractionCreate, async interaction => {
   if (requiredRoleId) {
     const requiredRole = interaction.guild.roles.cache.get(requiredRoleId);
     if (!requiredRole) {
-      return interaction.reply({ content: "❌ Bu komut için ayarlanan rol bulunamadı.", ephemeral: true });
+      // ephemeral yerine flags kullanıldı
+      return interaction.reply({ content: "❌ Bu komut için ayarlanan rol bulunamadı.", flags: MessageFlags.Ephemeral });
     }
 
     const memberHighest = interaction.member.roles.highest.position;
     if (memberHighest < requiredRole.position) {
-      return interaction.reply({ content: `❌ Bu komutu kullanmak için en az **${requiredRole.name}** rolüne sahip olmalısın.`, ephemeral: true });
+      // ephemeral yerine flags kullanıldı
+      return interaction.reply({ content: `❌ Bu komutu kullanmak için en az **${requiredRole.name}** rolüne sahip olmalısın.`, flags: MessageFlags.Ephemeral });
     }
   }
 
@@ -61,7 +64,8 @@ client.on(Events.InteractionCreate, async interaction => {
   if (komut === "yetki") {
     // Sadece sunucu yetkililerinin bu komutu kullanabilmesi için kontrol
     if (!interaction.member.permissions.has(PermissionFlagsBits.ManageRoles)) {
-        return interaction.reply({ content: "❌ Bu komutu kullanmak için `Rolleri Yönet` yetkin olmalı.", ephemeral: true });
+        // ephemeral yerine flags kullanıldı
+        return interaction.reply({ content: "❌ Bu komutu kullanmak için `Rolleri Yönet` yetkin olmalı.", flags: MessageFlags.Ephemeral });
     }
 
     const sub = interaction.options.getSubcommand();
@@ -70,7 +74,11 @@ client.on(Events.InteractionCreate, async interaction => {
       const role = interaction.options.getRole("rol");
 
       await db.set(`yetki_${targetCommand}`, role.id);
-      return interaction.reply({ content: `✅ \`${targetCommand}\` komutu için en az **${role.name}** rolü ayarlandı.`, ephemeral: true });
+      // ephemeral yerine flags kullanıldı
+      return interaction.reply({ content: `✅ \`${targetCommand}\` komutu için en az **${role.name}** rolü ayarlandı.`, flags: MessageFlags.Ephemeral });
     }
   }
 });
+
+// 📌 Botu çalıştır
+client.login(process.env.TOKEN);
