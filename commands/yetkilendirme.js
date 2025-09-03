@@ -4,7 +4,7 @@ module.exports = {
   data: new SlashCommandBuilder()
     .setName('yetki')
     .setDescription('Sunucudaki tüm rolleri ve sahip oldukları temel yetkileri listeler.')
-    .setDefaultMemberPermissions(PermissionFlagsBits.ManageRoles), // Bu komutu sadece rol yönetme yetkisi olanlar kullanabilir
+    .setDefaultMemberPermissions(PermissionFlagsBits.ManageRoles),
 
   async execute(interaction) {
     const roles = interaction.guild.roles.cache.sort((a, b) => b.position - a.position);
@@ -24,8 +24,10 @@ module.exports = {
 
       const isAdmin = role.permissions.has(PermissionFlagsBits.Administrator);
       const canKickMembers = role.permissions.has(PermissionFlagsBits.KickMembers);
-      const canBanMembers = role.permissions.has(PermissionFlagsBits.Flags.BanMembers);
-      const canManageChannels = role.permissions.has(PermissionFlagsBits.Flags.ManageChannels);
+      // Hatanın düzeltildiği satır
+      const canBanMembers = role.permissions.has(PermissionFlagsBits.BanMembers);
+      // Hatanın düzeltildiği satır
+      const canManageChannels = role.permissions.has(PermissionFlagsBits.ManageChannels);
       
       descriptionText += `**Rol:** ${role.name}\n`;
       descriptionText += `**Yönetici Yetkisi:** ${isAdmin ? '✅ Evet' : '❌ Hayır'}\n`;
@@ -35,13 +37,13 @@ module.exports = {
       descriptionText += "--------------------------------------\n";
     });
 
-    // Mesajın karakter limitini kontrol ediyoruz
     if (descriptionText.length > 4096) {
       descriptionText = descriptionText.substring(0, 4093) + '...';
     }
 
     embed.setDescription(descriptionText);
 
-    await interaction.reply({ embeds: [embed], ephemeral: false });
+    // ephemeral uyarısının düzeltildiği satır
+    await interaction.reply({ embeds: [embed], flags: 64 });
   }
 };
