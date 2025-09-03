@@ -15,11 +15,31 @@ module.exports = {
       option.setName("komut")
         .setDescription("Yetki verilecek komut (ör: ban, kick, mute)")
         .setRequired(true)
+        .setAutocomplete(true) // <-- Burası eklendi
     ),
+  
+  // 📌 Otomatik tamamlama için
+  async autocomplete(interaction) {
+    const focusedValue = interaction.options.getFocused();
+    const commandNames = interaction.client.commands.map(cmd => cmd.data.name); // Botun yüklü tüm komutlarını al
+    const filtered = commandNames.filter(choice => choice.startsWith(focusedValue));
+
+    await interaction.respond(
+        filtered.map(choice => ({ name: choice, value: choice })),
+    );
+  },
 
   async execute(interaction) {
     const rol = interaction.options.getRole("rol");
     const komut = interaction.options.getString("komut").toLowerCase();
+
+    // 📌 Komutun var olup olmadığını kontrol et
+    if (!interaction.client.commands.has(komut)) {
+      return interaction.reply({
+        content: `❌ \`${komut}\` adında bir komut bulunamadı. Lütfen var olan bir komut adı girin.`,
+        ephemeral: true
+      });
+    }
 
     // 📌 Rolü o komuta kaydet
     await db.set(`yetki_${komut}`, rol.id);
