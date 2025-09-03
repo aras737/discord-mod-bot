@@ -1,110 +1,118 @@
-const { 
-  SlashCommandBuilder, 
-  PermissionFlagsBits, 
-  Client, 
-  GatewayIntentBits, 
-  Events,
-  MessageFlags 
-} = require("discord.js");
-const { QuickDB } = require("quick.db");
+const { Client, GatewayIntentBits, PermissionsBitField } = require('discord.js');
+const { token } = require('./config.json');
 
-const db = new QuickDB();
-
-const client = new Client({
-  intents: [
-    GatewayIntentBits.Guilds,
-    GatewayIntentBits.GuildMembers,
-    GatewayIntentBits.GuildMessages
-  ]
+const client = new Client({ 
+    intents: [
+        GatewayIntentBits.Guilds 
+    ] 
 });
 
-// 📌 Slash Komutları
-const yetkiKomutu = new SlashCommandBuilder()
-  .setName("yetki")
-  .setDescription("Komutlara özel rol yetkisi ayarlar.")
-  .setDefaultMemberPermissions(PermissionFlagsBits.ManageRoles)
-  .addSubcommand(sub =>
-    sub.setName("ekle")
-      .setDescription("Bir komut için gerekli rolü ayarlar.")
-      .addStringOption(opt =>
-        opt.setName("komut")
-          .setDescription("Hangi komuta yetki ayarlanacak?")
-          .setRequired(true))
-      .addRoleOption(opt =>
-        opt.setName("rol")
-          .setDescription("En az hangi rol bu komutu kullanabilir?")
-          .setRequired(true)
-      )
-  );
-
-const commands = [yetkiKomutu];
-
-// 📌 Bot Giriş Yaptı Olayı
-client.once(Events.ClientReady, async () => {
-  console.log(`🤖 Bot giriş yaptı: ${client.user.tag}`);
-  await client.application.commands.set(commands);
-  console.log("✅ Tüm komutlar yüklendi.");
+// Bot hazır olduğunda çalışacak kısım
+client.once('ready', () => {
+    console.log(`Botunuz hazır! Giriş yapıldı: ${client.user.tag}`);
+    
+    // Slash komutlarını kaydetme (bot her açıldığında kontrol eder)
+    const commands = [
+        {
+            name: 'yetki',
+            description: 'Sunucudaki tüm rolleri ve yetkilerini listeler.',
+        },
+        {
+            name: 'ping',
+            description: 'Botun gecikme süresini gösterir.',
+        },
+    ];
+    
+    // Global veya sunucuya özel komutları kaydedebilirsiniz.
+    // Şimdilik sadece "yetki" komutunu kaydedelim, diğerleri sizin eklemeniz için.
+    
+    // Sadece /yetki komutunu kaydeden örnek
+    const rest = new (require('@discordjs/rest').REST)({ version: '10' }).setToken(token);
+    (async () => {
+        try {
+            console.log('(/) Komutlar yenileniyor...');
+            await rest.put(
+                require('discord-api-types/v9').Routes.applicationCommands(client.user.id),
+                { body: commands },
+            );
+            console.log('(/) Komutlar başarıyla yüklendi.');
+        } catch (error) {
+            console.error(error);
+        }
+    })();
 });
 
-// 📌 Etkileşim (Interaction) Olayı
-client.on(Events.InteractionCreate, async interaction => {
-  if (!interaction.isChatInputCommand()) return;
+// Kullanıcı bir komut kullandığında çalışacak kısım
+client.on('interactionCreate', async interaction => {
+    if (!interaction.isChatInputCommand()) return;
 
-  const { commandName, options, member } = interaction;
+    const { commandName } = interaction;
+    const member = interaction.member;
 
-  // 🔒 Dinamik Rol Yetki Kontrolü
-  // Eğer veritabanında komut için bir yetki rolü tanımlıysa bu kontrol çalışır.
-  const requiredRoleId = await db.get(`yetki_${commandName}`);
-  if (requiredRoleId) {
-    const requiredRole = interaction.guild.roles.cache.get(requiredRoleId);
-    if (requiredRole) { // Rol mevcutsa kontrol et
-      const memberRolePosition = interaction.member.roles.highest.position;
-      const requiredRolePosition = requiredRole.position;
+    // --- Yetki Kontrol Alanı Başlangıcı ---
+    
+    // 'yetki' komutunu sadece Yönetici yetkisi olanlar kullanabilsin.
+    if (commandName === 'yetki') {
+        if (!member.permissions.has(PermissionsBitField.Flags.Administrator)) {
+            return interaction.reply({ 
+                content: "Bu komutu kullanmak için **Yönetici** yetkisine sahip olmalısınız!", 
+                ephemeral: true 
+            });
+        }
+    }
 
-      if (memberRolePosition < requiredRolePosition) {
-        return interaction.reply({ 
-          content: `❌ Bu komutu kullanmak için en az **${requiredRole.name}** rolüne sahip olmalısın.`, 
-          flags: MessageFlags.Ephemeral 
+    // 'ping' komutunu sadece belirli bir rolü olanlar kullanabilsin.
+    // Örnek: 'Bot Komutları' adında bir rolünüz varsa, bu rolü kontrol edebilirsiniz.
+    // Bu kontrol için rol ID'sini veya adını kullanabilirsiniz.
+    if (commandName === 'ping') {
+        const requiredRoleName = 'Bot Komutları'; // Rol adını buraya girin
+        const hasRequiredRole = member.roles.cache.some(role => role.name === requiredRoleName);
+
+        if (!hasRequiredRole) {
+            return interaction.reply({
+                content: `Bu komutu kullanmak için **${requiredRoleName}** rolüne sahip olmalısınız!`,
+                ephemeral: true
+            });
+        }
+    }
+    
+    // --- Yetki Kontrol Alanı Sonu ---
+
+
+    // --- Komut İşleme Alanı ---
+
+    if (commandName === 'yetki') {
+        await interaction.deferReply({ ephemeral: true });
+
+        const guild = interaction.guild;
+        const roles = guild.roles.cache.sort((a, b) => b.position - a.position);
+
+        let replyMessage = "### Sunucudaki Tüm Roller ve Yetki Bilgileri\n\n";
+
+        roles.forEach(role => {
+            if (role.name === '@everyone') return;
+
+            const isAdmin = role.permissions.has(PermissionsBitField.Flags.Administrator);
+            const canKickMembers = role.permissions.has(PermissionsBitField.Flags.KickMembers);
+            const canBanMembers = role.permissions.has(PermissionsBitField.Flags.BanMembers);
+            
+            replyMessage += `**Rol:** ${role.name}\n`;
+            replyMessage += `**Yönetici Yetkisi:** ${isAdmin ? '✅ Evet' : '❌ Hayır'}\n`;
+            replyMessage += `**Üyeleri Atma Yetkisi:** ${canKickMembers ? '✅ Evet' : '❌ Hayır'}\n`;
+            replyMessage += `**Üyeleri Yasaklama Yetkisi:** ${canBanMembers ? '✅ Evet' : '❌ Hayır'}\n`;
+            replyMessage += "--------------------------------------\n";
         });
-      }
-    }
-  }
 
-  // 🔒 `/yetki` Komutu İçin Standart Yetki Kontrolü
-  if (commandName === "yetki") {
-    if (!member.permissions.has(PermissionFlagsBits.ManageRoles)) {
-        return interaction.reply({ 
-          content: "❌ Bu komutu kullanmak için `Rolleri Yönet` yetkisine sahip olmalısın.", 
-          flags: MessageFlags.Ephemeral 
-        });
-    }
-  }
+        if (replyMessage.length > 2000) {
+            replyMessage = replyMessage.substring(0, 1997) + '...'; 
+        }
 
-  // 📌 Bot ve Kullanıcı Rol Pozisyonu Kontrolü
-  if (member.roles.highest.position >= interaction.guild.members.me.roles.highest.position) {
-    if (commandName !== 'yetki') {
-      return interaction.reply({ 
-        content: "❌ Bu işlemi benden daha yetkili bir kullanıcı üzerinde yapamam.", 
-        flags: MessageFlags.Ephemeral 
-      });
+        await interaction.editReply({ content: replyMessage });
     }
-  }
-
-  // 📌 /yetki komutu çalıştırma
-  if (commandName === "yetki") {
-    const sub = options.getSubcommand();
-    if (sub === "ekle") {
-      const targetCommand = options.getString("komut");
-      const role = options.getRole("rol");
-
-      await db.set(`yetki_${targetCommand}`, role.id);
-      return interaction.reply({ 
-        content: `✅ \`${targetCommand}\` komutu için en az **${role.name}** rolü ayarlandı.`, 
-        flags: MessageFlags.Ephemeral 
-      });
+    
+    if (commandName === 'ping') {
+        await interaction.reply({ content: `Pong! Gecikme süresi: **${client.ws.ping}ms**` });
     }
-  }
 });
 
-// 📌 Botu çalıştır
-client.login(process.env.TOKEN);
+client.login(token);
