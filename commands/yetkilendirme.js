@@ -1,77 +1,68 @@
-const { SlashCommandBuilder, PermissionFlagsBits } = require("discord.js");
+const { 
+  SlashCommandBuilder, 
+  PermissionFlagsBits, 
+  Client, 
+  GatewayIntentBits, 
+  Events,
+  MessageFlags 
+} = require("discord.js");
 const { QuickDB } = require("quick.db");
+
+// Veritabanı örneğini oluştur
 const db = new QuickDB();
 
-module.exports = {
-  data: new SlashCommandBuilder()
-    .setName("yetki")
-    .setDescription("Bir komutu belirli bir rol ve üstüne tanımlar.")
-    .addRoleOption(option =>
-      option.setName("rol")
-        .setDescription("Yetki verilecek rol")
-        .setRequired(true)
-    )
-    .addStringOption(option =>
-      option.setName("komut")
-        .setDescription("Yetki verilecek komut (ör: ban, kick, mute)")
-        .setRequired(true)
-        .setAutocomplete(true) // <-- Burası eklendi
-    ),
-  
-  // 📌 Otomatik tamamlama için
-  async autocomplete(interaction) {
-    const focusedValue = interaction.options.getFocused();
-    const commandNames = interaction.client.commands.map(cmd => cmd.data.name); // Botun yüklü tüm komutlarını al
-    const filtered = commandNames.filter(choice => choice.startsWith(focusedValue));
+// 📌 Slash Komutu
+const commandData = new SlashCommandBuilder()
+  .setName("yetki")
+  .setDescription("Komutlara özel rol yetkisi ayarlarsın")
+  .setDefaultMemberPermissions(PermissionFlagsBits.ManageRoles)
+  .addSubcommand(sub =>
+    sub.setName("ekle")
+      .setDescription("Bir komut için gerekli rolü ayarla")
+      .addStringOption(opt =>
+        opt.setName("komut")
+          .setDescription("Hangi komuta yetki ayarlanacak?")
+          .setRequired(true))
+      .addRoleOption(opt =>
+        opt.setName("rol")
+          .setDescription("En az hangi rol bu komutu kullanabilir?")
+          .setRequired(true)
+      )
+  );
 
-    await interaction.respond(
-        filtered.map(choice => ({ name: choice, value: choice })),
-    );
-  },
+// 📌 Event – Slash Command ve Kontrol
+client.on(Events.InteractionCreate, async interaction => {
+  if (!interaction.isChatInputCommand()) return;
 
-  async execute(interaction) {
-    const rol = interaction.options.getRole("rol");
-    const komut = interaction.options.getString("komut").toLowerCase();
+  const komut = interaction.commandName;
 
-    // 📌 Komutun var olup olmadığını kontrol et
-    if (!interaction.client.commands.has(komut)) {
-      return interaction.reply({
-        content: `❌ \`${komut}\` adında bir komut bulunamadı. Lütfen var olan bir komut adı girin.`,
-        ephemeral: true
-      });
+  // 🔒 Yetki kontrol sistemi
+  const requiredRoleId = await db.get(`yetki_${komut}`);
+  if (requiredRoleId) {
+    const requiredRole = interaction.guild.roles.cache.get(requiredRoleId);
+    if (!requiredRole) {
+      return interaction.reply({ content: "❌ Bu komut için ayarlanan rol bulunamadı.", flags: MessageFlags.Ephemeral });
     }
 
-    // 📌 Rolü o komuta kaydet
-    await db.set(`yetki_${komut}`, rol.id);
-
-    await interaction.reply({
-      content: `✅ ${komut} komutunu kullanmak için gerekli rol **${rol.name}** ve üstü olarak ayarlandı.`,
-      ephemeral: true
-    });
-  },
-
-  // 📌 Event kontrol (komut kendi içinde)
-  async checkPermission(interaction) {
-    const requiredRoleId = await db.get(`yetki_${interaction.commandName}`);
-    if (!requiredRoleId) return true; // Ayarlanmamışsa serbest
-
-    const member = interaction.member;
-    const guildRoles = interaction.guild.roles.cache;
-
-    const requiredRole = guildRoles.get(requiredRoleId);
-    if (!requiredRole) return true; // Rol silinmişse serbest
-
-    // Kullanıcının rolünü kontrol et
-    const hasPermission = member.roles.cache.some(r => r.position >= requiredRole.position);
-
-    if (!hasPermission) {
-      await interaction.reply({
-        content: `⛔ Bu komutu kullanabilmek için **${requiredRole.name}** veya üstü olmalısın.`,
-        ephemeral: true
-      });
-      return false;
+    const memberHighest = interaction.member.roles.highest.position;
+    if (memberHighest < requiredRole.position) {
+      return interaction.reply({ content: `❌ Bu komutu kullanmak için en az **${requiredRole.name}** rolüne sahip olmalısın.`, flags: MessageFlags.Ephemeral });
     }
-
-    return true;
   }
-};
+
+  // 📌 /yetki komutu çalıştırma
+  if (komut === "yetki") {
+    if (!interaction.member.permissions.has(PermissionFlagsBits.ManageRoles)) {
+        return interaction.reply({ content: "❌ Bu komutu kullanmak için `Rolleri Yönet` yetkin olmalı.", flags: MessageFlags.Ephemeral });
+    }
+
+    const sub = interaction.options.getSubcommand();
+    if (sub === "ekle") {
+      const targetCommand = interaction.options.getString("komut");
+      const role = interaction.options.getRole("rol");
+
+      await db.set(`yetki_${targetCommand}`, role.id);
+      return interaction.reply({ content: `✅ \`${targetCommand}\` komutu için en az **${role.name}** rolü ayarlandı.`, flags: MessageFlags.Ephemeral });
+    }
+  }
+});
