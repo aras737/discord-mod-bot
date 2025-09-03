@@ -1,49 +1,57 @@
-const { SlashCommandBuilder, PermissionFlagsBits, EmbedBuilder } = require('discord.js');
+const { SlashCommandBuilder, EmbedBuilder, PermissionFlagsBits } = require('discord.js');
 
 module.exports = {
-  data: new SlashCommandBuilder()
-    .setName('yetki')
-    .setDescription('Sunucudaki tüm rolleri ve sahip oldukları temel yetkileri listeler.')
-    .setDefaultMemberPermissions(PermissionFlagsBits.ManageRoles),
+    data: new SlashCommandBuilder()
+        .setName('yetki')
+        .setDescription('Sunucudaki tüm rolleri ve yetkilerini listeler.'),
 
-  async execute(interaction) {
-    const roles = interaction.guild.roles.cache.sort((a, b) => b.position - a.position);
+    async execute(interaction) {
+        // Sadece yöneticilerin bu komutu kullanmasına izin verin.
+        if (!interaction.member.permissions.has(PermissionFlagsBits.Administrator)) {
+            return interaction.reply({ content: 'Bu komutu kullanmak için yönetici yetkisine sahip olmalısınız.', ephemeral: true });
+        }
 
-    const embed = new EmbedBuilder()
-      .setColor('#0099ff')
-      .setTitle('Sunucudaki Rollerin Yetki Bilgileri')
-      .setDescription('Bu listede, her rolün temel yetkileri gösterilmektedir.')
-      .setTimestamp()
-      .setFooter({ text: `Komutu kullanan: ${interaction.user.tag}` });
+        const roles = interaction.guild.roles.cache.sort((a, b) => b.position - a.position);
 
-    let descriptionText = '';
+        const embed = new EmbedBuilder()
+            .setColor('#0099ff')
+            .setTitle('Sunucudaki Rollerin Yetki Bilgileri')
+            .setTimestamp()
+            .setFooter({ text: `Komutu kullanan: ${interaction.user.tag}` });
 
-    roles.forEach(role => {
-      // @everyone rolünü atlıyoruz
-      if (role.name === '@everyone') return;
+        roles.forEach(role => {
+            if (role.name === '@everyone') return;
 
-      const isAdmin = role.permissions.has(PermissionFlagsBits.Administrator);
-      const canKickMembers = role.permissions.has(PermissionFlagsBits.KickMembers);
-      // Hatanın düzeltildiği satır
-      const canBanMembers = role.permissions.has(PermissionFlagsBits.BanMembers);
-      // Hatanın düzeltildiği satır
-      const canManageChannels = role.permissions.has(PermissionFlagsBits.ManageChannels);
-      
-      descriptionText += `**Rol:** ${role.name}\n`;
-      descriptionText += `**Yönetici Yetkisi:** ${isAdmin ? '✅ Evet' : '❌ Hayır'}\n`;
-      descriptionText += `**Üyeleri Atma Yetkisi:** ${canKickMembers ? '✅ Evet' : '❌ Hayır'}\n`;
-      descriptionText += `**Üyeleri Yasaklama Yetkisi:** ${canBanMembers ? '✅ Evet' : '❌ Hayır'}\n`;
-      descriptionText += `**Kanalları Yönetme Yetkisi:** ${canManageChannels ? '✅ Evet' : '❌ Hayır'}\n`;
-      descriptionText += "--------------------------------------\n";
-    });
+            const permissions = role.permissions;
+            const permissionList = [];
 
-    if (descriptionText.length > 4096) {
-      descriptionText = descriptionText.substring(0, 4093) + '...';
+            if (permissions.has(PermissionFlagsBits.Administrator)) {
+                permissionList.push('Yönetici (Tüm Yetkiler)');
+            } else {
+                if (permissions.has(PermissionFlagsBits.KickMembers)) permissionList.push('Üyeleri Atma');
+                if (permissions.has(PermissionFlagsBits.BanMembers)) permissionList.push('Üyeleri Yasaklama');
+                if (permissions.has(PermissionFlagsBits.ManageChannels)) permissionList.push('Kanalları Yönetme');
+            }
+
+            const formattedPermissions = permissionList.length > 0
+                ? permissionList.join(', ')
+                : 'Belirtilen yetkilere sahip değil.';
+
+            // Her rol için ayrı bir alan (field) ekleyin.
+            embed.addFields({
+                name: role.name,
+                value: `**Yetkiler:** ${formattedPermissions}\n**Üye Sayısı:** ${role.members.size}`,
+                inline: false
+            });
+        });
+
+        // 25'ten fazla alan (field) varsa, birden fazla gömülü mesaj (embed) göndermeyi düşünmelisiniz.
+        if (embed.data.fields && embed.data.fields.length > 25) {
+             embed.setDescription('Çok fazla rol olduğu için ilk 25 rol listelenmiştir.');
+             embed.data.fields = embed.data.fields.slice(0, 25);
+        }
+
+        await interaction.reply({ embeds: [embed] });
     }
-
-    embed.setDescription(descriptionText);
-
-    // ephemeral uyarısının düzeltildiği satır
-    await interaction.reply({ embeds: [embed], flags: 64 });
-  }
 };
+
