@@ -1,76 +1,50 @@
-const { SlashCommandBuilder, EmbedBuilder, PermissionFlagsBits } = require('discord.js');
+const { SlashCommandBuilder, PermissionFlagsBits, REST, Routes } = require("discord.js");
+
+// Railway environment değişkenleri
+const TOKEN = process.env.TOKEN;
+const CLIENT_ID = process.env.CLIENT_ID;
+const GUILD_ID = process.env.GUILD_ID;
 
 module.exports = {
-    data: new SlashCommandBuilder()
-        .setName('yetki-listesi')
-        .setDescription('Sunucudaki tüm rolleri ve sahip oldukları temel yetkileri listeler.')
-        .setDMPermission(false), // Komutun DM'de (özel mesajlarda) kullanılmasını engeller.
+  data: new SlashCommandBuilder()
+    .setName("otoyetki")
+    .setDescription("Bottaki tüm komutlara otomatik yetki uygular")
+    .setDefaultMemberPermissions(PermissionFlagsBits.Administrator), // sadece admin kullanabilir
 
-    async execute(interaction) {
-        if (!interaction.member.permissions.has(PermissionFlagsBits.Administrator)) {
-            return interaction.reply({
-                content: 'Bu komutu kullanmak için **Yönetici** yetkisine sahip olmalısın.',
-                ephemeral: true
-            });
-        }
+  async execute(interaction, client) {
+    try {
+      await interaction.reply("⏳ Komutlar ve roller için otomatik yetki ayarlanıyor...");
 
-        await interaction.deferReply({ ephemeral: true });
+      // 1️⃣ Bottaki tüm slash komutlarını al
+      const commands = await client.application.commands.fetch({ guildId: GUILD_ID });
 
-        try {
-            const roles = interaction.guild.roles.cache
-                .filter(role => role.name !== '@everyone')
-                .sort((a, b) => b.position - a.position);
+      // 2️⃣ Her komutu tek tek işle
+      const updatedCommands = [];
+      commands.forEach(cmd => {
+        // Eğer komutun default permission'ı yoksa veya güncellemek istiyorsak
+        const newPermissions = cmd.default_member_permissions ?? 0n; // 0 = herkes
+        updatedCommands.push({
+          id: cmd.id,
+          name: cmd.name,
+          description: cmd.description,
+          default_member_permissions: newPermissions
+        });
+      });
 
-            const roleEmbeds = [];
-            const chunkSize = 25;
+      // 3️⃣ REST API ile güncelle
+      const rest = new REST({ version: "10" }).setToken(TOKEN);
+      for (const cmd of updatedCommands) {
+        await rest.patch(
+          Routes.applicationGuildCommand(CLIENT_ID, GUILD_ID, cmd.id),
+          { body: { default_member_permissions: cmd.default_member_permissions } }
+        );
+      }
 
-            for (let i = 0; i < roles.size; i += chunkSize) {
-                const chunk = roles.slice(i, i + chunkSize);
-                const embed = new EmbedBuilder()
-                    .setColor('#0099ff')
-                    .setTitle(`Sunucudaki Rollerin Yetki Bilgileri (${i + 1}-${Math.min(i + chunkSize, roles.size)})`)
-                    .setTimestamp()
-                    .setFooter({ text: `Komutu Kullanan: ${interaction.user.tag}` });
+      await interaction.editReply("✅ Tüm slash komutlar için otoyetki başarıyla uygulandı!");
 
-                chunk.forEach(role => {
-                    const permissions = role.permissions;
-                    const permissionList = [];
-
-                    if (permissions.has(PermissionFlagsBits.Administrator)) {
-                        permissionList.push('Yönetici (Tüm Yetkiler)');
-                    } else {
-                        if (permissions.has(PermissionFlagsBits.KickMembers)) permissionList.push('Üyeleri Atma');
-                        if (permissions.has(PermissionFlagsBits.BanMembers)) permissionList.push('Üyeleri Yasaklama');
-                        if (permissions.has(PermissionFlagsBits.ManageChannels)) permissionList.push('Kanalları Yönetme');
-                        if (permissions.has(PermissionFlagsBits.ManageRoles)) permissionList.push('Rolleri Yönetme');
-                        if (permissions.has(PermissionFlagsBits.ManageGuild)) permissionList.push('Sunucuyu Yönetme');
-                        if (permissions.has(PermissionFlagsBits.ManageMessages)) permissionList.push('Mesajları Yönetme');
-                        if (permissions.has(PermissionFlagsBits.ModerateMembers)) permissionList.push('Üyeleri Engelleme/Susturma');
-                        if (permissions.has(PermissionFlagsBits.MentionEveryone)) permissionList.push('@everyone/@here Etiketleme');
-                    }
-
-                    const formattedPermissions = permissionList.length > 0
-                        ? permissionList.join(', ')
-                        : 'Belirtilen temel yetkilere sahip değil.';
-
-                    embed.addFields({
-                        name: role.name,
-                        value: `**Yetkiler:** ${formattedPermissions}\n**Üye Sayısı:** ${role.members.size}`,
-                        inline: false
-                    });
-                });
-                roleEmbeds.push(embed);
-            }
-
-            if (roleEmbeds.length > 0) {
-                await interaction.editReply({ embeds: roleEmbeds });
-            } else {
-                await interaction.editReply({ content: 'Sunucuda listelenebilecek bir rol bulunamadı.', ephemeral: true });
-            }
-
-        } catch (error) {
-            console.error(error);
-            await interaction.editReply({ content: 'Komutu çalıştırırken bir hata oluştu.', ephemeral: true });
-        }
+    } catch (err) {
+      console.error(err);
+      await interaction.editReply("❌ Otoyetki uygulanırken bir hata oluştu!");
     }
+  }
 };
