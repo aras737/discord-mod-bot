@@ -1,48 +1,50 @@
-const { SlashCommandBuilder, REST, Routes, PermissionFlagsBits } = require("discord.js");
+const { SlashCommandBuilder, PermissionFlagsBits } = require("discord.js");
 
 module.exports = {
   data: new SlashCommandBuilder()
-    .setName("otoyetki")
-    .setDescription("Bottaki tüm slash komutlara otomatik yetki uygular")
-    .setDefaultMemberPermissions(PermissionFlagsBits.Administrator), // sadece admin kullanabilir
-  async execute(interaction, client) {
+    .setName("otoyetki_roller")
+    .setDescription("Tüm slash komutlara rollere göre otomatik yetki uygular.")
+    .setDefaultMemberPermissions(PermissionFlagsBits.Administrator),
+  async execute(interaction) {
+    await interaction.reply({ content: "⏳ Komutlar için rol yetkileri ayarlanıyor...", ephemeral: true });
+
     try {
-      await interaction.reply("⏳ Komutlar ve roller için otomatik yetki ayarlanıyor...");
-
-      const guild = await client.guilds.fetch(interaction.guildId);
+      const guild = interaction.guild;
+      const commands = await guild.commands.fetch(); // Sunucuya ait komutları çek
       const roles = await guild.roles.fetch();
-      const commands = await client.application.commands.fetch({ guildId: interaction.guildId });
-      const rest = new REST({ version: "10" }).setToken(process.env.TOKEN);
 
-      // Tüm komutları kontrol et
-      for (const [id, cmd] of commands) {
+      const fullPermissions = [];
+      for (const command of commands.values()) {
+        const requiredPerms = command.defaultMemberPermissions;
 
-        // Komutun gerekli izinleri
-        const requiredPerm = BigInt(cmd.default_member_permissions ?? 0n);
+        // Komutun varsayılan bir izni yoksa yetkilendirme yapma
+        if (!requiredPerms) continue;
 
-        // İzinli roller
-        const allowedRoles = [];
+        const permissions = [];
+        // Sadece rolleri dikkate al
         roles.forEach(role => {
-          if ((BigInt(role.permissions.bitfield) & requiredPerm) === requiredPerm) {
-            allowedRoles.push(role.id);
+          // Eğer rol, komutun gerektirdiği izinlerin tamamına sahipse
+          if (requiredPerms && role.permissions.has(requiredPerms)) {
+            permissions.push({
+              id: role.id,
+              type: "ROLE",
+              permission: true,
+            });
           }
         });
 
-        // Hiç rol izinli değilse komutu tamamen gizle
-        const newPerm = allowedRoles.length > 0 ? requiredPerm : 0n;
-
-        // Komutu güncelle
-        await rest.patch(
-          Routes.applicationGuildCommand(client.user.id, interaction.guildId, id),
-          { body: { default_member_permissions: newPerm } }
-        );
+        fullPermissions.push({
+          id: command.id,
+          permissions: permissions,
+        });
       }
 
-      await interaction.editReply("✅ Tüm slash komutlar için otoyetki başarıyla uygulandı!");
+      await guild.commands.permissions.set({ fullPermissions });
 
-    } catch (err) {
-      console.error(err);
-      await interaction.editReply("❌ Otoyetki uygulanırken bir hata oluştu!");
+      await interaction.editReply({ content: "✅ Tüm slash komutlar için rol yetkileri başarıyla uygulandı!", ephemeral: true });
+    } catch (error) {
+      console.error(error);
+      await interaction.editReply({ content: "❌ Rol yetkileri ayarlanırken bir hata oluştu!", ephemeral: true });
     }
-  }
+  },
 };
