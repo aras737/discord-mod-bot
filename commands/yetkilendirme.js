@@ -2,62 +2,39 @@ const { SlashCommandBuilder, PermissionFlagsBits } = require("discord.js");
 
 module.exports = {
   data: new SlashCommandBuilder()
-    .setName("otoyetki_roller")
-    .setDescription("Tüm slash komutlara rollere göre otomatik yetki uygular.")
-    .setDefaultMemberPermissions(PermissionFlagsBits.Administrator),
-  async execute(interaction) {
-    await interaction.reply({
-      content: "⏳ Komutlar için rol yetkileri ayarlanıyor...",
-      flags: 64 // Ephemeral bayrağının sayısal değeri
-    });
+    .setName("otoyetki")
+    .setDescription("Bottaki tüm slash komutlara izin bazlı erişim uygular")
+    .setDefaultMemberPermissions(PermissionFlagsBits.Administrator), // sadece admin kullanabilir
+
+  async execute(interaction, client) {
+    await interaction.reply({ content: "⏳ Tüm komutlar için yetki kontrolü uygulanıyor...", ephemeral: true });
 
     try {
       const guild = interaction.guild;
-      const commands = await guild.commands.fetch();
-      const roles = await guild.roles.fetch();
+      const commands = await client.application.commands.fetch({ guildId: guild.id });
 
-      const fullPermissions = [];
-      for (const command of commands.values()) {
-        const requiredPerms = command.defaultMemberPermissions;
+      // Kullanıcının izinlerini al
+      const memberPerms = interaction.member.permissions;
 
-        if (!requiredPerms) continue;
+      const accessibleCommands = [];
 
-        const permissions = [];
-        roles.forEach(role => {
-          if (requiredPerms && role.permissions.has(requiredPerms)) {
-            permissions.push({
-              id: role.id,
-              type: "ROLE",
-              permission: true,
-            });
-          }
-        });
+      commands.forEach(cmd => {
+        const requiredPerms = cmd.default_member_permissions ? BigInt(cmd.default_member_permissions) : 0n;
 
-        fullPermissions.push({
-          id: command.id,
-          permissions: permissions,
-        });
-      }
-
-      await guild.commands.permissions.set({ fullPermissions });
+        // Kullanıcı gerekli izinlere sahip mi?
+        if ((memberPerms.bitfield & requiredPerms) === requiredPerms) {
+          accessibleCommands.push(cmd.name);
+        }
+      });
 
       await interaction.editReply({
-        content: "✅ Tüm slash komutlar için rol yetkileri başarıyla uygulandı!",
-        flags: 64 // Ephemeral bayrağının sayısal değeri
+        content: `✅ Bu komutları kullanabilirsin: ${accessibleCommands.join(", ")}`,
+        ephemeral: true
       });
-    } catch (error) {
-      console.error(error);
-      if (error.code === 'ApplicationCommandPermissionsTokenMissing') {
-        await interaction.editReply({
-          content: "❌ Komut yetkileri ayarlanırken bir hata oluştu: Botun yetkileri eksik olabilir. Lütfen 'Uygulamaları Yönet' iznine sahip olduğundan ve botu doğru kapsamlarla eklediğinizden emin olun.",
-          flags: 64
-        });
-      } else {
-        await interaction.editReply({
-          content: "❌ Rol yetkileri ayarlanırken bir hata oluştu!",
-          flags: 64
-        });
-      }
+
+    } catch (err) {
+      console.error(err);
+      await interaction.editReply({ content: "❌ Yetki kontrolü uygulanırken bir hata oluştu!", ephemeral: true });
     }
-  },
+  }
 };
