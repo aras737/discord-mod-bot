@@ -1,4 +1,4 @@
-const { SlashCommandBuilder, PermissionFlagsBits, InteractionFlags } = require("discord.js");
+const { SlashCommandBuilder, PermissionFlagsBits } = require("discord.js");
 
 module.exports = {
   data: new SlashCommandBuilder()
@@ -8,7 +8,7 @@ module.exports = {
   async execute(interaction) {
     await interaction.reply({
       content: "⏳ Komutlar için rol yetkileri ayarlanıyor...",
-      flags: InteractionFlags.Ephemeral // Yeni ve önerilen kullanım
+      flags: 64 // Ephemeral bayrağının sayısal değeri
     });
 
     try {
@@ -43,19 +43,19 @@ module.exports = {
 
       await interaction.editReply({
         content: "✅ Tüm slash komutlar için rol yetkileri başarıyla uygulandı!",
-        flags: InteractionFlags.Ephemeral // Yeni ve önerilen kullanım
+        flags: 64 // Ephemeral bayrağının sayısal değeri
       });
     } catch (error) {
       console.error(error);
       if (error.code === 'ApplicationCommandPermissionsTokenMissing') {
         await interaction.editReply({
           content: "❌ Komut yetkileri ayarlanırken bir hata oluştu: Botun yetkileri eksik olabilir. Lütfen 'Uygulamaları Yönet' iznine sahip olduğundan ve botu doğru kapsamlarla eklediğinizden emin olun.",
-          flags: InteractionFlags.Ephemeral
+          flags: 64
         });
       } else {
         await interaction.editReply({
           content: "❌ Rol yetkileri ayarlanırken bir hata oluştu!",
-          flags: InteractionFlags.Ephemeral
+          flags: 64
         });
       }
     }
