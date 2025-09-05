@@ -2,38 +2,44 @@ const { SlashCommandBuilder, PermissionFlagsBits } = require("discord.js");
 
 module.exports = {
   data: new SlashCommandBuilder()
-    .setName("otoyetki")
-    .setDescription("Tüm slash komutları Admin ve üstü yetkiye göre otomatik ayarlar")
-    .setDefaultMemberPermissions(PermissionFlagsBits.Administrator),
+    .setName("yetkiac")
+    .setDescription("Tüm komutlarda Admin ve üstü yetkisini aktif eder.")
+    .setDefaultMemberPermissions(PermissionFlagsBits.Administrator), // sadece Admin görebilir
 
   async execute(interaction, client) {
-    await interaction.reply({ content: "⏳ Otoyetki sistemi çalışıyor...", ephemeral: true });
+    // Yapan kişi admin değilse izin verme
+    if (!interaction.member.permissions.has(PermissionFlagsBits.Administrator)) {
+      return interaction.reply({
+        content: "❌ Bu komutu kullanmak için **Yönetici** iznin olmalı.",
+        ephemeral: true,
+      });
+    }
+
+    await interaction.reply({
+      content: "⏳ Tüm komutlara Admin yetkisi atanıyor...",
+      ephemeral: true,
+    });
 
     try {
       const guild = interaction.guild;
-      const member = interaction.member;
-      const memberPerms = member.permissions;
-
-      // Admin veya üstü değilse çık
-      if (!memberPerms.has(PermissionFlagsBits.Administrator)) {
-        return interaction.editReply({ content: "❌ Bu komutu kullanmak için Admin yetkin olmalı!", ephemeral: true });
-      }
-
-      // Sunucudaki tüm slash komutları al
       const commands = await client.application.commands.fetch({ guildId: guild.id });
 
-      // Her komut için default_member_permissions'i Admin yap
       for (const cmd of commands.values()) {
         await client.application.commands.edit(cmd.id, {
           default_member_permissions: PermissionFlagsBits.Administrator.toString(),
         });
       }
 
-      await interaction.editReply({ content: "✅ Tüm slash komutlar için Admin ve üstü yetki ayarlandı!", ephemeral: true });
-
+      await interaction.editReply({
+        content: "✅ Tüm komutlara Admin ve üstü yetkisi başarıyla atandı!",
+        ephemeral: true,
+      });
     } catch (err) {
       console.error(err);
-      await interaction.editReply({ content: "❌ Otoyetki uygulanırken bir hata oluştu!", ephemeral: true });
+      await interaction.editReply({
+        content: "❌ Komut yetkileri ayarlanırken hata oluştu!",
+        ephemeral: true,
+      });
     }
-  }
+  },
 };
