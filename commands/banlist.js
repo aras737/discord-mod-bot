@@ -1,33 +1,68 @@
-const fs = require('fs');
-const path = require('path');
-const { SlashCommandBuilder } = require('discord.js');
+const fs = require("fs");
+const path = require("path");
+const {
+  SlashCommandBuilder,
+  PermissionFlagsBits,
+  EmbedBuilder,
+} = require("discord.js");
 
-const banListPath = path.join(__dirname, '../data/banlist.json');
+const banListPath = path.join(__dirname, "../data/banlist.json");
 
 module.exports = {
   data: new SlashCommandBuilder()
-    .setName('banlist')
-    .setDescription('Banlanan kullanıcıları listeler.'),
+    .setName("banlist")
+    .setDescription("Banlanan kullanıcıların listesini gösterir.")
+    .setDefaultMemberPermissions(PermissionFlagsBits.BanMembers),
 
   async execute(interaction) {
-    if (!fs.existsSync(banListPath)) {
-      return interaction.reply({ content: '🚫 Henüz hiç kimse banlanmamış.', ephemeral: true });
+    if (!interaction.member.permissions.has(PermissionFlagsBits.BanMembers)) {
+      return interaction.reply({
+        content: "❌ Bu komutu kullanmak için `Üyeleri Yasakla` iznin olmalı.",
+        ephemeral: true,
+      });
     }
 
-    const raw = fs.readFileSync(banListPath);
-    const banList = JSON.parse(raw);
+    if (!fs.existsSync(banListPath)) {
+      return interaction.reply({
+        content: "📂 Henüz hiç ban kaydı yok.",
+        ephemeral: true,
+      });
+    }
+
+    const banList = JSON.parse(fs.readFileSync(banListPath));
 
     if (banList.length === 0) {
-      return interaction.reply({ content: '🚫 Ban listesi boş.', ephemeral: true });
+      return interaction.reply({
+        content: "✅ Ban listesi boş.",
+        ephemeral: true,
+      });
     }
 
-    const list = banList.map((entry, index) => 
-      `**${index + 1}.** ${entry.tag} (${entry.userId})\n> Sebep: ${entry.reason}\n> Yetkili: ${entry.bannedBy}\n> Tarih: <t:${Math.floor(new Date(entry.date).getTime() / 1000)}:R>`
-    ).join('\n\n');
+    const embed = new EmbedBuilder()
+      .setTitle("🚫 Ban Listesi")
+      .setColor("Red")
+      .setThumbnail(interaction.guild.iconURL({ dynamic: true }))
+      .setFooter({
+        text: `Toplam yasaklı: ${banList.length}`,
+        iconURL: interaction.client.user.displayAvatarURL(),
+      })
+      .setTimestamp();
 
-    await interaction.reply({
-      content: `🛑 **Ban Listesi:**\n\n${list}`,
-      ephemeral: true // sadece komutu kullanan görsün
-    });
-  }
+    const description = banList
+      .map(
+        (entry, index) =>
+          `**${index + 1}.** 👤 <@${entry.userId}> | \`${entry.tag}\`\n📌 Sebep: *${entry.reason}*\n👮 Yetkili: ${entry.bannedBy}\n📅 Tarih: <t:${Math.floor(
+            new Date(entry.date).getTime() / 1000
+          )}:F>\n`
+      )
+      .join("\n──────────────────────\n");
+
+    embed.setDescription(
+      description.length > 4000
+        ? description.slice(0, 4000) + "\n... (devamı var)"
+        : description
+    );
+
+    await interaction.reply({ embeds: [embed] });
+  },
 };
