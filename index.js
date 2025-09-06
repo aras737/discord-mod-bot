@@ -27,10 +27,10 @@ const client = new Client({
 client.commands = new Collection();
 const commands = [];
 
-// ⚙️ Yetkili Kullanıcı ID'leri
-// Bu listeye yetkili kişilerin ID'lerini ekleyin.
-// Örnek: ['KULLANICI_ID_1', 'KULLANICI_ID_2']
-const authorizedUserIds = ['', 'KULLANICI_ID_2'];
+// ⚙️ Yetkili Rol ID'si
+// Bu, yetkilendirme için en düşük seviyedeki rolü belirler.
+// Bu rolün ve onun üzerindeki tüm rollerin komutları kullanmasına izin verilir.
+const requiredRoleId = '1413602134980563106';
 
 // 📂 commands klasöründen komutları yükle
 const commandsPath = path.join(__dirname, "commands");
@@ -71,11 +71,23 @@ client.on(Events.InteractionCreate, async interaction => {
     const command = client.commands.get(interaction.commandName);
     if (!command) return;
 
-    // 🔑 Yetki Kontrolü
-    if (!authorizedUserIds.includes(interaction.user.id)) {
+    // 🔑 Rol Hiyerarşisi Kontrolü
+    const requiredRole = interaction.guild.roles.cache.get(requiredRoleId);
+    if (!requiredRole) {
+        console.error(`⚠️ Yetkili rol bulunamadı. Lütfen yetkili rol ID'sini kontrol edin.`);
+        return interaction.reply({
+            content: "❌ Komut yetki ayarları eksik. Lütfen bot yöneticisi ile iletişime geçin.",
+            ephemeral: true
+        });
+    }
+
+    const member = interaction.member;
+    const isAuthorized = member.roles.highest.position >= requiredRole.position;
+
+    if (!isAuthorized) {
         console.log(`❌ Yetkisiz Komut Kullanımı: ${interaction.user.tag} (${interaction.user.id}) /${interaction.commandName} komutunu kullanmaya çalıştı.`);
         return interaction.reply({
-            content: "❌ Bu komutu kullanmaya yetkiniz yok.",
+            content: `❌ Bu komutu kullanmak için **${requiredRole.name}** rolünden veya daha yüksek bir rolden olmalısın.`,
             ephemeral: true
         });
     }
