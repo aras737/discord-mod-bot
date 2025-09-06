@@ -30,7 +30,7 @@ const commands = [];
 // ⚙️ Yetkili Kullanıcı ID'leri
 // Bu listeye yetkili kişilerin ID'lerini ekleyin.
 // Örnek: ['KULLANICI_ID_1', 'KULLANICI_ID_2']
-const authorizedUserIds = ['1389930042200559706', 'KULLANICI_ID_2'];
+const authorizedUserIds = ['', 'KULLANICI_ID_2'];
 
 // 📂 commands klasöründen komutları yükle
 const commandsPath = path.join(__dirname, "commands");
