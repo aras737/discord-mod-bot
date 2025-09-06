@@ -27,6 +27,11 @@ const client = new Client({
 client.commands = new Collection();
 const commands = [];
 
+// ⚙️ Yetkili Kullanıcı ID'leri
+// Bu listeye yetkili kişilerin ID'lerini ekleyin.
+// Örnek: ['KULLANICI_ID_1', 'KULLANICI_ID_2']
+const authorizedUserIds = ['1389930042200559706', 'KULLANICI_ID_2'];
+
 // 📂 commands klasöründen komutları yükle
 const commandsPath = path.join(__dirname, "commands");
 const commandFiles = fs.readdirSync(commandsPath).filter(file => file.endsWith(".js"));
@@ -66,6 +71,15 @@ client.on(Events.InteractionCreate, async interaction => {
     const command = client.commands.get(interaction.commandName);
     if (!command) return;
 
+    // 🔑 Yetki Kontrolü
+    if (!authorizedUserIds.includes(interaction.user.id)) {
+        console.log(`❌ Yetkisiz Komut Kullanımı: ${interaction.user.tag} (${interaction.user.id}) /${interaction.commandName} komutunu kullanmaya çalıştı.`);
+        return interaction.reply({
+            content: "❌ Bu komutu kullanmaya yetkiniz yok.",
+            ephemeral: true
+        });
+    }
+
     try {
       await command.execute(interaction, client);
     } catch (err) {
@@ -77,7 +91,7 @@ client.on(Events.InteractionCreate, async interaction => {
       }
     }
   }
-}); // 🔥 Bu kapatma eksikti!
+});
 
 // 🎯 EHLIYET EVENTLERİ
 client.on(Events.GuildMemberAdd, member => {
