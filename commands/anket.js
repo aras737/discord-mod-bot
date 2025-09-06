@@ -1,28 +1,34 @@
-const { SlashCommandBuilder } = require('discord.js');
+const { SlashCommandBuilder, PermissionFlagsBits } = require('discord.js');
+const fs = require('fs');
 
 module.exports = {
     data: new SlashCommandBuilder()
-        .setName('yetki')
-        .setDescription('Bu komutu sadece belirli bir role sahip olanlar kullanabilir.')
-        .setDMPermission(false), // Komutun DM'de (özel mesajlarda) kullanılmasını engeller.
+        .setName('yetki-ata')
+        .setDescription('Tüm bot komutlarını kullanabilecek yetkili rolü belirler.')
+        .addRoleOption(option =>
+            option.setName('rol')
+                .setDescription('Yetkiyi atamak istediğiniz rol.')
+                .setRequired(true)
+        )
+        // Bu komutu sadece Yönetici yetkisine sahip kullanıcılar kullanabilir.
+        .setDefaultMemberPermissions(PermissionFlagsBits.Administrator),
 
     async execute(interaction) {
-        // Kontrol edilecek rolün adını buraya yazın
-        const requiredRoleName = 'Yönetim Kurulu'; 
-        
-        // Kullanıcının gerekli role sahip olup olmadığını kontrol edin
-        const hasRequiredRole = interaction.member.roles.cache.some(role => role.name === requiredRoleName);
+        const selectedRole = interaction.options.getRole('rol');
+        const configPath = './yetkili_rol.json';
 
-        if (hasRequiredRole) {
-            // Eğer kullanıcı gerekli role sahipse
+        try {
+            // Rol ID'sini bir JSON dosyasına kaydedin
+            fs.writeFileSync(configPath, JSON.stringify({ authorizedRoleId: selectedRole.id }));
+            
             await interaction.reply({
-                content: `Başarılı! **${requiredRoleName}** rolüne sahip olduğunuz için bu komutu kullanabilirsiniz.`,
-                ephemeral: true // Sadece komutu kullanan kişiye görünür.
+                content: `✅ Başarılı! Artık **${selectedRole.name}** rolüne sahip olanlar tüm bot komutlarını kullanabilir.`,
+                ephemeral: true
             });
-        } else {
-            // Eğer kullanıcı gerekli role sahip değilse
+        } catch (error) {
+            console.error('Yetkili rolü kaydederken hata oluştu:', error);
             await interaction.reply({
-                content: `Bu komutu kullanmak için **${requiredRoleName}** rolüne sahip olmalısın.`,
+                content: 'Rolü kaydederken bir hata oluştu.',
                 ephemeral: true
             });
         }
