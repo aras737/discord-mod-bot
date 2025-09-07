@@ -1,36 +1,39 @@
 const { SlashCommandBuilder, PermissionFlagsBits } = require('discord.js');
-const fs = require('fs');
+const db = require('quick.db');
 
 module.exports = {
     data: new SlashCommandBuilder()
-        .setName('yetki-ata')
-        .setDescription('Tüm bot komutlarını kullanabilecek yetkili rolü belirler.')
+        .setName('yetki-ver')
+        .setDescription('Bir role bot komutlarını kullanma yetki seviyesi verir.')
         .addRoleOption(option =>
             option.setName('rol')
-                .setDescription('Yetkiyi atamak istediğiniz rol.')
+                .setDescription('Yetki vermek istediğiniz rol.')
                 .setRequired(true)
         )
-        // Bu komutu sadece Yönetici yetkisine sahip kullanıcılar kullanabilir.
-        .setDefaultMemberPermissions(PermissionFlagsBits.Administrator),
+        .addStringOption(option =>
+            option.setName('seviye')
+                .setDescription('Verilecek yetki seviyesi (0: Herkes, 1: Admin, 2: Yönetici, 3: Kurucu)')
+                .setRequired(true)
+                .addChoices(
+                    { name: 'Üye', value: '0' },
+                    { name: 'Admin', value: '1' },
+                    { name: 'Yönetici', value: '2' },
+                    { name: 'Kurucu', value: '3' },
+                )
+        )
+        .setDefaultMemberPermissions(PermissionFlagsBits.Administrator) // Bu komutu sadece yöneticiler kullanabilir
+        .setDMPermission(false),
 
     async execute(interaction) {
-        const selectedRole = interaction.options.getRole('rol');
-        const configPath = './yetkili_rol.json';
+        const role = interaction.options.getRole('rol');
+        const level = interaction.options.getString('seviye');
 
-        try {
-            // Rol ID'sini bir JSON dosyasına kaydedin
-            fs.writeFileSync(configPath, JSON.stringify({ authorizedRoleId: selectedRole.id }));
-            
-            await interaction.reply({
-                content: `✅ Başarılı! Artık **${selectedRole.name}** rolüne sahip olanlar tüm bot komutlarını kullanabilir.`,
-                ephemeral: true
-            });
-        } catch (error) {
-            console.error('Yetkili rolü kaydederken hata oluştu:', error);
-            await interaction.reply({
-                content: 'Rolü kaydederken bir hata oluştu.',
-                ephemeral: true
-            });
-        }
-    }
+        // quick.db kullanarak rol ID'sini ve yetki seviyesini kaydet
+        db.set(`role_permission_${role.id}`, parseInt(level));
+
+        await interaction.reply({
+            content: `✅ **${role.name}** rolüne **${level}. seviye** yetkisi başarıyla atandı.`,
+            ephemeral: true
+        });
+    },
 };
