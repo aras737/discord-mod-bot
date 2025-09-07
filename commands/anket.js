@@ -12,13 +12,13 @@ module.exports = {
         )
         .addStringOption(option =>
             option.setName('seviye')
-                .setDescription('Verilecek yetki seviyesi (0: Herkes, 1: Admin, 2: Yönetici, 3: Kurucu)')
+                .setDescription('Verilecek yetki seviyesi')
                 .setRequired(true)
                 .addChoices(
-                    { name: 'Üye', value: '0' },
-                    { name: 'Admin', value: '1' },
-                    { name: 'Yönetici', value: '2' },
-                    { name: 'Kurucu', value: '3' },
+                    { name: 'Üye (0)', value: '0' },
+                    { name: 'Admin (1)', value: '1' },
+                    { name: 'Yönetici (2)', value: '2' },
+                    { name: 'Kurucu (3)', value: '3' },
                 )
         )
         .setDefaultMemberPermissions(PermissionFlagsBits.Administrator)
@@ -29,9 +29,8 @@ module.exports = {
         const level = interaction.options.getString('seviye');
 
         try {
-            // Hata veren db.set() fonksiyonu düzeltildi.
-            // İşlemin asenkron olduğunu belirtmek için 'await' kullanıldı.
-            await db.set(`role_permission_${role.id}`, parseInt(level));
+            // quick.db senkron çalıştığı için await gerekmez
+            db.set(`role_permission_${role.id}`, Number(level));
 
             await interaction.reply({
                 content: `✅ **${role.name}** rolüne **${level}. seviye** yetkisi başarıyla atandı.`,
