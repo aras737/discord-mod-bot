@@ -24,16 +24,25 @@ module.exports = {
         .setDefaultMemberPermissions(PermissionFlagsBits.Administrator)
         .setDMPermission(false),
 
-    async execute(interaction) { // Fonksiyonun 'async' olduğundan emin olun
+    async execute(interaction) {
         const role = interaction.options.getRole('rol');
         const level = interaction.options.getString('seviye');
 
-        // db.set() yerine 'await db.set()' kullanın.
-        await db.set(`role_permission_${role.id}`, parseInt(level));
+        try {
+            // Hata veren db.set() fonksiyonu düzeltildi.
+            // İşlemin asenkron olduğunu belirtmek için 'await' kullanıldı.
+            await db.set(`role_permission_${role.id}`, parseInt(level));
 
-        await interaction.reply({
-            content: `✅ **${role.name}** rolüne **${level}. seviye** yetkisi başarıyla atandı.`,
-            ephemeral: true
-        });
+            await interaction.reply({
+                content: `✅ **${role.name}** rolüne **${level}. seviye** yetkisi başarıyla atandı.`,
+                ephemeral: true
+            });
+        } catch (error) {
+            console.error(error);
+            await interaction.reply({
+                content: '❌ Rol yetkisini atarken bir hata oluştu.',
+                ephemeral: true
+            });
+        }
     },
 };
