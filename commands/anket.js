@@ -1,6 +1,6 @@
 const { SlashCommandBuilder, PermissionFlagsBits } = require('discord.js');
-const { QuickDB } = require("@devsnowflake/quick.db");
-const db = new QuickDB();
+const { QuickDB } = require("quick.db");
+const db = new QuickDB(); // Veritabanı başlatılır
 
 module.exports = {
     data: new SlashCommandBuilder()
@@ -30,14 +30,17 @@ module.exports = {
         const level = interaction.options.getString('seviye');
 
         try {
+            // Rolün yetki seviyesini veritabanına kaydet
             await db.set(`role_permission_${role.id}`, Number(level));
 
+            // Başarılı mesaj
             await interaction.reply({
                 content: `✅ **${role.name}** rolüne **${level}. seviye** yetkisi başarıyla atandı.`,
-                flags: 64 // 64 = ephemeral (sadece komutu kullanan görür)
+                flags: 64 // ephemeral (sadece komutu kullanan görür)
             });
         } catch (error) {
             console.error(error);
+
             await interaction.reply({
                 content: '❌ Rol yetkisini atarken bir hata oluştu.',
                 flags: 64
