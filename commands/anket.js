@@ -1,5 +1,6 @@
 const { SlashCommandBuilder, PermissionFlagsBits } = require('discord.js');
-const db = require('quick.db');
+const { QuickDB } = require("quickdb");
+const db = new QuickDB();
 
 module.exports = {
     data: new SlashCommandBuilder()
@@ -29,18 +30,17 @@ module.exports = {
         const level = interaction.options.getString('seviye');
 
         try {
-            // quick.db senkron çalıştığı için await gerekmez
-            db.set(`role_permission_${role.id}`, Number(level));
+            await db.set(`role_permission_${role.id}`, Number(level));
 
             await interaction.reply({
                 content: `✅ **${role.name}** rolüne **${level}. seviye** yetkisi başarıyla atandı.`,
-                ephemeral: true
+                flags: 64 // ephemeral
             });
         } catch (error) {
             console.error(error);
             await interaction.reply({
                 content: '❌ Rol yetkisini atarken bir hata oluştu.',
-                ephemeral: true
+                flags: 64
             });
         }
     },
