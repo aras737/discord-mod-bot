@@ -1,5 +1,5 @@
 const { SlashCommandBuilder, PermissionFlagsBits } = require('discord.js');
-const { QuickDB } = require("quickdb");
+const { QuickDB } = require("@devsnowflake/quick.db");
 const db = new QuickDB();
 
 module.exports = {
@@ -34,7 +34,7 @@ module.exports = {
 
             await interaction.reply({
                 content: `✅ **${role.name}** rolüne **${level}. seviye** yetkisi başarıyla atandı.`,
-                flags: 64 // ephemeral
+                flags: 64 // 64 = ephemeral (sadece komutu kullanan görür)
             });
         } catch (error) {
             console.error(error);
