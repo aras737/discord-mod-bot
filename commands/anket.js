@@ -21,15 +21,15 @@ module.exports = {
                     { name: 'Kurucu', value: '3' },
                 )
         )
-        .setDefaultMemberPermissions(PermissionFlagsBits.Administrator) // Bu komutu sadece yöneticiler kullanabilir
+        .setDefaultMemberPermissions(PermissionFlagsBits.Administrator)
         .setDMPermission(false),
 
-    async execute(interaction) {
+    async execute(interaction) { // Fonksiyonun 'async' olduğundan emin olun
         const role = interaction.options.getRole('rol');
         const level = interaction.options.getString('seviye');
 
-        // quick.db kullanarak rol ID'sini ve yetki seviyesini kaydet
-        db.set(`role_permission_${role.id}`, parseInt(level));
+        // db.set() yerine 'await db.set()' kullanın.
+        await db.set(`role_permission_${role.id}`, parseInt(level));
 
         await interaction.reply({
             content: `✅ **${role.name}** rolüne **${level}. seviye** yetkisi başarıyla atandı.`,
