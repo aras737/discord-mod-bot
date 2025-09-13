@@ -21,7 +21,7 @@ module.exports = {
             "[Jandarma Genel Komutanlığı](https://discord.gg/xxx)\n" +
             "[Kara Kuvvetleri Komutanlığı](https://discord.gg/xxx)\n" +
             "[Hava Kuvvetleri Komutanlığı](https://discord.gg/xxx)\n" +
-            "[Sınır Müfettişleri](https://discord.gg/xxx)\n" + 
+            "[Sınır Müfettişleri](https://discord.gg/xxx)\n",
         },
         {
           name: "Departman Sunucuları",
