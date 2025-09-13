@@ -7,7 +7,7 @@ module.exports = {
     
   async execute(interaction) {
     const embed = new EmbedBuilder()
-      .setTitle("📕 Sunucu Rehberi")
+      .setTitle("Sunucu Rehberi")
       .setDescription(
         "Aşağıda branşlarımızın ve departmanlarımızın Discord sunucuları yer almaktadır. " +
         "Linklere tıklayarak katılım sağlayabilirsiniz."
@@ -22,7 +22,7 @@ module.exports = {
             "[Kara Kuvvetleri Komutanlığı](https://discord.gg/xxx)\n" +
             "[Hava Kuvvetleri Komutanlığı](https://discord.gg/xxx)\n" +
             "[Sınır Müfettişleri](https://discord.gg/xxx)\n" + 
-        },
+        }, // <-- Düzeltme burada!
         {
           name: "Departman Sunucuları",
           value:
