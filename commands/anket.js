@@ -1,50 +1,48 @@
-const { SlashCommandBuilder, PermissionFlagsBits } = require('discord.js');
-const { QuickDB } = require("quick.db");
-const db = new QuickDB(); // Veritabanı başlatılır
+const { SlashCommandBuilder, EmbedBuilder } = require("discord.js");
 
 module.exports = {
-    data: new SlashCommandBuilder()
-        .setName('yetki-ver')
-        .setDescription('Bir role bot komutlarını kullanma yetki seviyesi verir.')
-        .addRoleOption(option =>
-            option.setName('rol')
-                .setDescription('Yetki vermek istediğiniz rol.')
-                .setRequired(true)
-        )
-        .addStringOption(option =>
-            option.setName('seviye')
-                .setDescription('Verilecek yetki seviyesi')
-                .setRequired(true)
-                .addChoices(
-                    { name: 'Üye (0)', value: '0' },
-                    { name: 'Admin (1)', value: '1' },
-                    { name: 'Yönetici (2)', value: '2' },
-                    { name: 'Kurucu (3)', value: '3' },
-                )
-        )
-        .setDefaultMemberPermissions(PermissionFlagsBits.Administrator)
-        .setDMPermission(false),
-
-    async execute(interaction) {
-        const role = interaction.options.getRole('rol');
-        const level = interaction.options.getString('seviye');
-
-        try {
-            // Rolün yetki seviyesini veritabanına kaydet
-            await db.set(`role_permission_${role.id}`, Number(level));
-
-            // Başarılı mesaj
-            await interaction.reply({
-                content: `✅ **${role.name}** rolüne **${level}. seviye** yetkisi başarıyla atandı.`,
-                flags: 64 // ephemeral (sadece komutu kullanan görür)
-            });
-        } catch (error) {
-            console.error(error);
-
-            await interaction.reply({
-                content: '❌ Rol yetkisini atarken bir hata oluştu.',
-                flags: 64
-            });
+  data: new SlashCommandBuilder()
+    .setName("rehber")
+    .setDescription("Sunucu rehberini gösterir."),
+    
+  async execute(interaction) {
+    const embed = new EmbedBuilder()
+      .setTitle("📕 Sunucu Rehberi")
+      .setDescription(
+        "Aşağıda branşlarımızın ve departmanlarımızın Discord sunucuları yer almaktadır. " +
+        "Linklere tıklayarak katılım sağlayabilirsiniz."
+      )
+      .addFields(
+        {
+          name: "Branş Sunucuları",
+          value:
+            "[Askeri İnzibat](https://discord.gg/xxx)\n" +
+            "[Özel Harekat Komutanlığı](https://discord.gg/xxx)\n" +
+            "[Jandarma Genel Komutanlığı](https://discord.gg/xxx)\n" +
+            "[Kara Kuvvetleri Komutanlığı](https://discord.gg/xxx)\n" +
+            "[Hava Kuvvetleri Komutanlığı](https://discord.gg/xxx)\n" +
+            "[Sınır Müfettişleri](https://discord.gg/xxx)\n" + 
+        },
+        {
+          name: "Departman Sunucuları",
+          value:
+            "[Moderatör Ekibi](https://discord.gg/xxx)\n" +
+            "[Ordu Yönetimi](https://discord.gg/xxx)\n" +
+            "[Subay Akademisi](https://discord.gg/xxx)\n" +
+            "[Dışişleri](https://discord.gg/xxx)\n" +
+            "[Sürücü Okulu](https://discord.gg/xxx)\n" +
+            "[Yetkili Akademisi](https://discord.gg/xxx)"
+        },
+        {
+          name: "Bilgilendirme",
+          value:
+            "Sunucularımız bu şekildedir. Eğer Roblox gruplarına ulaşmak isterseniz [Buraya Tıklayın](https://roblox.com/groups/xxx) ve ardından müttefikler kısmına basın. Roblox gruplarına bu şekilde ulaşabilirsiniz. İyi eğlenceler!"
         }
-    },
+      )
+      .setColor("Red")
+      .setFooter({ text: "Sentanel", iconURL: "https://i.imgur.com/xxx.png" })
+      .setTimestamp();
+
+    await interaction.reply({ embeds: [embed], ephemeral: false });
+  }
 };
