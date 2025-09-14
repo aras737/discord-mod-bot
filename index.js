@@ -83,8 +83,7 @@ client.on(Events.InteractionCreate, async interaction => {
   if (!isAuthorized) {
     console.log(`❌ Yetkisiz Komut Kullanımı: ${interaction.user.tag} /${interaction.commandName}`);
     return interaction.reply({
-      content: "❌ Bu komutu kullanmak için yeterli role sahip değilsin.",
-      ephemeral: true
+      content: "❌ Bu komutu kullanmak için yeterli role sahip değilsin."
     });
   }
 
@@ -94,9 +93,9 @@ client.on(Events.InteractionCreate, async interaction => {
   } catch (err) {
     console.error(err);
     if (interaction.replied || interaction.deferred) {
-      await interaction.followUp({ content: "❌ Komut çalıştırılamadı!", ephemeral: true });
+      await interaction.followUp({ content: "❌ Komut çalıştırılamadı!" });
     } else {
-      await interaction.reply({ content: "❌ Komut çalıştırılamadı!", ephemeral: true });
+      await interaction.reply({ content: "❌ Komut çalıştırılamadı!" });
     }
   }
 });
