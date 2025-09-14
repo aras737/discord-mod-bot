@@ -10,7 +10,7 @@ const {
 
 module.exports = {
   data: new SlashCommandBuilder()
-    .setName("Bilet sistemi")
+    .setName("bilet-sistemi")
     .setDescription("Bilet sistemi yaratır"),
 
   async execute(interaction, client) {
