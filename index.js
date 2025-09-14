@@ -59,35 +59,26 @@ client.once(Events.ClientReady, async () => {
   }
 });
 
-// 🎯 Slash komutlar & rol tabanlı otomatik yetki
+// 🎯 Slash komutlar (herkes görür ama yetkisiz çalıştıramaz)
 client.on(Events.InteractionCreate, async interaction => {
   if (!interaction.isChatInputCommand()) return;
 
   const command = client.commands.get(interaction.commandName);
   if (!command) return;
 
-  const member = interaction.member;
-  const memberHighestRole = member.roles.highest;
+  // Eğer komut dosyasında özel izin belirtilmişse kontrol et
+  const requiredPerms = command.data.default_member_permissions 
+    ? BigInt(command.data.default_member_permissions) 
+    : null;
 
-  // Komutun default izinleri (PermissionFlagsBits)
-  const requiredPerms = command.data.default_member_permissions || 0n;
-
-  // Sunucudaki tüm rolleri kontrol et
-  const roles = interaction.guild.roles.cache
-    .sort((a, b) => b.position - a.position)
-    .filter(r => r.permissions.has(requiredPerms));
-
-  // Kullanıcının rolü yeterli mi?
-  const isAuthorized = roles.some(role => memberHighestRole.position >= role.position);
-
-  if (!isAuthorized) {
-    console.log(`❌ Yetkisiz Komut Kullanımı: ${interaction.user.tag} /${interaction.commandName}`);
+  if (requiredPerms && !interaction.member.permissions.has(requiredPerms)) {
+    console.log(`❌ Yetkisiz deneme: ${interaction.user.tag} /${interaction.commandName}`);
     return interaction.reply({
-      content: "❌ Bu komutu kullanmak için yeterli role sahip değilsin."
+      content: "❌ Bu komutu kullanmak için yeterli iznin yok.",
+      ephemeral: true
     });
   }
 
-  // Komutu çalıştır
   try {
     await command.execute(interaction, client);
   } catch (err) {
