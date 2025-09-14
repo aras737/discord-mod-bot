@@ -10,20 +10,21 @@ const {
 
 module.exports = {
   data: new SlashCommandBuilder()
-    .setName("ticket-setup")
-    .setDescription("Bilet sistemi kurar"),
+    .setName("Bilet sistemi")
+    .setDescription("Bilet sistemi yaratır"),
 
   async execute(interaction, client) {
     const row = new ActionRowBuilder().addComponents(
       new ButtonBuilder()
         .setCustomId("create_ticket")
-        .setLabel("🎫 Bilet Aç")
+        .setLabel("Bilet Aç")
         .setStyle(ButtonStyle.Primary)
+        .setColor("Green")
     );
 
-    await interaction.reply({ content: "✅ Ticket sistemi kuruldu.", ephemeral: true });
+    await interaction.reply({ content: "Bilet sistemi kuruldu.", ephemeral: true });
     await interaction.channel.send({
-      content: "🎟️ Destek için aşağıdaki butona tıkla!",
+      content: "Merhaba sayın LAO kullanıcısı burada eğer LAO'da sorunun olursa bu bilet sisteminden bilet açabilirsin.",
       components: [row],
     });
 
@@ -45,17 +46,17 @@ module.exports = {
           ],
         });
 
-        await btn.reply({ content: `✅ Ticket açıldı: ${ticketChannel}`, ephemeral: true });
+        await btn.reply({ content: `Bilet açıldı: ${ticketChannel}`, ephemeral: true });
 
         const closeBtn = new ActionRowBuilder().addComponents(
           new ButtonBuilder()
             .setCustomId("close_ticket")
-            .setLabel("❌ Kapat")
+            .setLabel("Kapat")
             .setStyle(ButtonStyle.Danger)
         );
 
         await ticketChannel.send({
-          content: `🎟️ ${btn.user}, destek ekibi yakında seninle ilgilenecek.`,
+          content: `${btn.user}, Destek ekibimiz hemen sizle ilgilenecek.`,
           components: [closeBtn],
         });
 
