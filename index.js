@@ -59,23 +59,20 @@ client.once(Events.ClientReady, async () => {
   }
 });
 
-// 🎯 Slash komutlar (herkes görür ama yetkisiz çalıştıramaz)
+// 🎯 Slash komutlar (sadece Yönetici kullanabilir)
 client.on(Events.InteractionCreate, async interaction => {
   if (!interaction.isChatInputCommand()) return;
 
   const command = client.commands.get(interaction.commandName);
   if (!command) return;
 
-  // Eğer komut dosyasında özel izin belirtilmişse kontrol et
-  const requiredPerms = command.data.default_member_permissions 
-    ? BigInt(command.data.default_member_permissions) 
-    : null;
+  // 🔹 Kullanıcının rolü yeterli mi? (sadece Admin)
+  const isAuthorized = interaction.member.permissions.has("Administrator");
 
-  if (requiredPerms && !interaction.member.permissions.has(requiredPerms)) {
-    console.log(`❌ Yetkisiz deneme: ${interaction.user.tag} /${interaction.commandName}`);
+  if (!isAuthorized) {
+    console.log(`❌ Yetkisiz Komut Kullanımı: ${interaction.user.tag} /${interaction.commandName}`);
     return interaction.reply({
-      content: "❌ Bu komutu kullanmak için yeterli iznin yok.",
-      ephemeral: true
+      content: "❌ Bu komutu kullanmak için `Yönetici` iznine sahip olman gerekiyor."
     });
   }
 
