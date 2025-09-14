@@ -19,7 +19,6 @@ module.exports = {
         .setCustomId("create_ticket")
         .setLabel("Bilet Aç")
         .setStyle(ButtonStyle.Primary)
-        .setColor("Green")
     );
 
     await interaction.reply({ content: "Bilet sistemi kuruldu.", ephemeral: true });
