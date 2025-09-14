@@ -8,7 +8,7 @@ const {
   Partials, 
   Events, 
   REST, 
-  Routes
+  Routes 
 } = require("discord.js");
 const db = require("quick.db");
 
@@ -26,11 +26,6 @@ const client = new Client({
 
 client.commands = new Collection();
 const commands = [];
-
-// ⚙️ Yetkili Rol ID'si
-// Bu, yetkilendirme için en düşük seviyedeki rolü belirler.
-// Bu rolün ve onun üzerindeki tüm rollerin komutları kullanmasına izin verilir.
-const requiredRoleId = '1413602134980563106';
 
 // 📂 commands klasöründen komutları yükle
 const commandsPath = path.join(__dirname, "commands");
@@ -64,43 +59,44 @@ client.once(Events.ClientReady, async () => {
   }
 });
 
-// 🎯 Slash komutlar & buton eventleri
+// 🎯 Slash komutlar & rol tabanlı otomatik yetki
 client.on(Events.InteractionCreate, async interaction => {
-  // Slash komutlar
-  if (interaction.isChatInputCommand()) {
-    const command = client.commands.get(interaction.commandName);
-    if (!command) return;
+  if (!interaction.isChatInputCommand()) return;
 
-    // 🔑 Rol Hiyerarşisi Kontrolü
-    const requiredRole = interaction.guild.roles.cache.get(requiredRoleId);
-    if (!requiredRole) {
-        console.error(`⚠️ Yetkili rol bulunamadı. Lütfen yetkili rol ID'sini kontrol edin.`);
-        return interaction.reply({
-            content: "❌ Komut yetki ayarları eksik. Lütfen bot yöneticisi ile iletişime geçin.",
-            ephemeral: true
-        });
-    }
+  const command = client.commands.get(interaction.commandName);
+  if (!command) return;
 
-    const member = interaction.member;
-    const isAuthorized = member.roles.highest.position >= requiredRole.position;
+  const member = interaction.member;
+  const memberHighestRole = member.roles.highest;
 
-    if (!isAuthorized) {
-        console.log(`❌ Yetkisiz Komut Kullanımı: ${interaction.user.tag} (${interaction.user.id}) /${interaction.commandName} komutunu kullanmaya çalıştı.`);
-        return interaction.reply({
-            content: `❌ Bu komutu kullanmak için **${requiredRole.name}** rolünden veya daha yüksek bir rolden olmalısın.`,
-            ephemeral: true
-        });
-    }
+  // Komutun default izinleri (PermissionFlagsBits)
+  const requiredPerms = command.data.default_member_permissions || 0n;
 
-    try {
-      await command.execute(interaction, client);
-    } catch (err) {
-      console.error(err);
-      if (interaction.replied || interaction.deferred) {
-        await interaction.followUp({ content: "❌ Bir hata oluştu!", ephemeral: true });
-      } else {
-        await interaction.reply({ content: "❌ Bir hata oluştu!", ephemeral: true });
-      }
+  // Sunucudaki tüm rolleri kontrol et
+  const roles = interaction.guild.roles.cache
+    .sort((a, b) => b.position - a.position)
+    .filter(r => r.permissions.has(requiredPerms));
+
+  // Kullanıcının rolü yeterli mi?
+  const isAuthorized = roles.some(role => memberHighestRole.position >= role.position);
+
+  if (!isAuthorized) {
+    console.log(`❌ Yetkisiz Komut Kullanımı: ${interaction.user.tag} /${interaction.commandName}`);
+    return interaction.reply({
+      content: "❌ Bu komutu kullanmak için yeterli role sahip değilsin.",
+      ephemeral: true
+    });
+  }
+
+  // Komutu çalıştır
+  try {
+    await command.execute(interaction, client);
+  } catch (err) {
+    console.error(err);
+    if (interaction.replied || interaction.deferred) {
+      await interaction.followUp({ content: "❌ Komut çalıştırılamadı!", ephemeral: true });
+    } else {
+      await interaction.reply({ content: "❌ Komut çalıştırılamadı!", ephemeral: true });
     }
   }
 });
