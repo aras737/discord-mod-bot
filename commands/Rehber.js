@@ -36,11 +36,11 @@ module.exports = {
         {
           name: "Bilgilendirme",
           value:
-            "Sunucularımız bu şekildedir. Eğer Roblox gruplarına ulaşmak isterseniz [Buraya Tıklayın](https://roblox.com/groups/xxx) ve ardından müttefikler kısmına basın. Roblox gruplarına bu şekilde ulaşabilirsiniz. İyi eğlenceler!"
+            "Sunucularımız bu şekildedir. Eğer Roblox gruplarına ulaşmak isterseniz [Buraya Tıklayın](https://roblox.com/groups/17167324) ve ardından müttefikler kısmına basın. Roblox gruplarına bu şekilde ulaşabilirsiniz. İyi eğlenceler!"
         }
       )
       .setColor("Red")
-      .setFooter({ text: "Sentanel", iconURL: "https://i.imgur.com/xxx.png" })
+      .setFooter({ text: "LOA Yönetim Kurulu Botu", iconURL: "https://i.imgur.com/file-2NMqhhvDaZuAgwjbGwEo1M.png" })
       .setTimestamp();
 
     await interaction.reply({ embeds: [embed], ephemeral: false });
