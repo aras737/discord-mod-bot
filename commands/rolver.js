@@ -1,38 +1,45 @@
-const { SlashCommandBuilder, PermissionFlagsBits } = require('discord.js');
+const { SlashCommandBuilder, PermissionFlagsBits } = require("discord.js");
+const noblox = require("noblox.js");
 
 module.exports = {
   data: new SlashCommandBuilder()
-    .setName('rolver')
-    .setDescription('Bir kullanıcıya rol verir.')
-    .setDefaultMemberPermissions(PermissionFlagsBits.ManageRoles)
-    .addUserOption(option =>
-      option.setName('kullanıcı')
-        .setDescription('Rol verilecek kullanıcı')
-        .setRequired(true))
-    .addRoleOption(option =>
-      option.setName('rol')
-        .setDescription('Verilecek rol')
-        .setRequired(true)),
+    .setName("robloxrol")
+    .setDescription("Roblox grubunda bir üyeye rol ver/al")
+    .setDefaultMemberPermissions(PermissionFlagsBits.Administrator) // sadece admin kullanır
+    .addSubcommand(sub =>
+      sub.setName("ver")
+        .setDescription("Bir Roblox kullanıcısına rol ver")
+        .addStringOption(opt => opt.setName("kullanici").setDescription("Roblox kullanıcı adı").setRequired(true))
+        .addIntegerOption(opt => opt.setName("rolid").setDescription("Grup içindeki rol ID’si").setRequired(true))
+    )
+    .addSubcommand(sub =>
+      sub.setName("al")
+        .setDescription("Bir Roblox kullanıcısından rol al (en düşük role düşür)")
+        .addStringOption(opt => opt.setName("kullanici").setDescription("Roblox kullanıcı adı").setRequired(true))
+    ),
 
   async execute(interaction) {
-    const targetUser = interaction.options.getMember('kullanıcı');
-    const role = interaction.options.getRole('rol');
-
-    // Hata kontrolleri
-    if (!interaction.guild.members.me.permissions.has(PermissionFlagsBits.ManageRoles)) {
-      return interaction.reply({ content: '❌ Benim rol verme iznim yok.', ephemeral: true });
-    }
-
-    if (role.position >= interaction.guild.members.me.roles.highest.position) {
-      return interaction.reply({ content: '❌ Bu rolü veremem çünkü rol sıramdan yukarıda.', ephemeral: true });
-    }
+    const sub = interaction.options.getSubcommand();
+    const username = interaction.options.getString("kullanici");
+    const groupId = 17167324; // senin grubun ID'si
+    const roleId = interaction.options.getInteger("rolid");
 
     try {
-      await targetUser.roles.add(role);
-      await interaction.reply({ content: `✅ ${targetUser} adlı kullanıcıya ${role} rolü verildi.` });
-    } catch (error) {
-      console.error(error);
-      await interaction.reply({ content: '❌ Rol verilirken bir hata oluştu.', ephemeral: true });
+      const userId = await noblox.getIdFromUsername(username);
+
+      if (sub === "ver") {
+        await noblox.setRank(groupId, userId, roleId);
+        return interaction.reply(`✅ **${username}** adlı kullanıcıya grup içinde rol verildi (Role ID: ${roleId}).`);
+      }
+
+      if (sub === "al") {
+        await noblox.setRank(groupId, userId, 1); // 1 = Guest
+        return interaction.reply(`🗑️ **${username}** adlı kullanıcı en düşük role (Guest) düşürüldü.`);
+      }
+
+    } catch (err) {
+      console.error(err);
+      return interaction.reply(`❌ İşlem başarısız oldu: ${err.message}`);
     }
   }
 };
