@@ -11,6 +11,7 @@ const {
   Routes 
 } = require("discord.js");
 const db = require("quick.db");
+const noblox = require("noblox.js"); // 📌 Roblox bağlantısı için
 
 // 📌 Discord Client
 const client = new Client({
@@ -42,9 +43,9 @@ for (const file of commandFiles) {
   }
 }
 
-// ✅ Slash komutlarını Discord'a kaydet
+// ✅ Slash komutlarını Discord'a kaydet + Roblox giriş
 client.once(Events.ClientReady, async () => {
-  console.log(`🤖 Bot giriş yaptı: ${client.user.tag}`);
+  console.log(`🤖 Discord bot giriş yaptı: ${client.user.tag}`);
 
   const rest = new REST({ version: "10" }).setToken(process.env.TOKEN);
 
@@ -55,7 +56,15 @@ client.once(Events.ClientReady, async () => {
     );
     console.log("✅ Slash komutları başarıyla yüklendi.");
   } catch (err) {
-    console.error(err);
+    console.error("❌ Komut yükleme hatası:", err);
+  }
+
+  // 📌 Roblox giriş kontrolü
+  try {
+    const currentUser = await noblox.setCookie(process.env.ROBLOX_COOKIE);
+    console.log(`✅ Roblox giriş başarılı! Kullanıcı: ${currentUser.UserName} (ID: ${currentUser.UserID})`);
+  } catch (err) {
+    console.error("❌ Roblox giriş başarısız:", err.message);
   }
 });
 
@@ -66,9 +75,7 @@ client.on(Events.InteractionCreate, async interaction => {
   const command = client.commands.get(interaction.commandName);
   if (!command) return;
 
-  // 🔹 Kullanıcının rolü yeterli mi? (sadece Admin)
   const isAuthorized = interaction.member.permissions.has("Administrator");
-
   if (!isAuthorized) {
     console.log(`❌ Yetkisiz Komut Kullanımı: ${interaction.user.tag} /${interaction.commandName}`);
     return interaction.reply({
