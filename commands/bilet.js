@@ -23,7 +23,7 @@ module.exports = {
 
     await interaction.reply({ content: "Bilet sistemi kuruldu.", ephemeral: true });
     await interaction.channel.send({
-      content: "Merhaba sayın LAO kullanıcısı burada eğer LAO'da sorunun olursa bu bilet sisteminden bilet açabilirsin.",
+      content: "Eğer sunucuda bir sorun yaşarsan buradan bilet açabilirsin.",
       components: [row],
     });
 
@@ -33,7 +33,7 @@ module.exports = {
     client.on(Events.InteractionCreate, async (btn) => {
       if (!btn.isButton()) return;
 
-      // 🎫 Ticket oluşturma
+      // Ticket oluşturma
       if (btn.customId === "create_ticket") {
         const ticketChannel = await btn.guild.channels.create({
           name: `ticket-${btn.user.username}`,
@@ -54,26 +54,29 @@ module.exports = {
             .setStyle(ButtonStyle.Danger)
         );
 
+        // ✅ Yetkili rolü ID'si
+        const yetkiliRolID = "1416534602113220779";
+
         await ticketChannel.send({
-          content: `${btn.user}, Destek ekibimiz hemen sizle ilgilenecek.`,
+          content: `${btn.user}, destek ekibi sizinle ilgilenecek. <@&${yetkiliRolID}>`,
           components: [closeBtn],
         });
 
-        // 👑 Sunucu sahibine log gönder
+        // Sunucu sahibine log gönder
         const embed = new EmbedBuilder()
-          .setTitle("📌 Yeni Ticket Açıldı")
-          .setDescription(`**Kullanıcı:** ${btn.user.tag}\n**Kanal:** ${ticketChannel}`)
+          .setTitle("Yeni Ticket Açıldı")
+          .setDescription(`Kullanıcı: ${btn.user.tag}\nKanal: ${ticketChannel}`)
           .setColor("Green")
           .setTimestamp();
 
         await owner.send({ embeds: [embed] }).catch(() => {});
       }
 
-      // ❌ Ticket kapatma
+      // Ticket kapatma
       if (btn.customId === "close_ticket") {
         const embed = new EmbedBuilder()
-          .setTitle("❌ Ticket Kapatıldı")
-          .setDescription(`**Kapatıldı:** ${btn.channel.name}\n**Kullanıcı:** ${btn.user.tag}`)
+          .setTitle("Ticket Kapatıldı")
+          .setDescription(`Kapatılan Kanal: ${btn.channel.name}\nKapatma Yetkilisi: ${btn.user.tag}`)
           .setColor("Red")
           .setTimestamp();
 
@@ -88,11 +91,11 @@ module.exports = {
       if (!message.channel.name.startsWith("ticket-")) return;
 
       const embed = new EmbedBuilder()
-        .setTitle("💬 Ticket Mesaj Log")
+        .setTitle("Ticket Mesaj Log")
         .addFields(
-          { name: "👤 Kullanıcı", value: `${message.author.tag}`, inline: true },
-          { name: "📍 Kanal", value: `${message.channel.name}`, inline: true },
-          { name: "📝 Mesaj", value: message.content || "*[dosya/boş mesaj]*" }
+          { name: "Kullanıcı", value: `${message.author.tag}`, inline: true },
+          { name: "Kanal", value: `${message.channel.name}`, inline: true },
+          { name: "Mesaj", value: message.content || "[dosya/boş mesaj]" }
         )
         .setColor("Blue")
         .setTimestamp();
