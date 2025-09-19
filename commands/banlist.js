@@ -1,68 +1,33 @@
-const fs = require("fs");
-const path = require("path");
-const {
-  SlashCommandBuilder,
-  PermissionFlagsBits,
-  EmbedBuilder,
-} = require("discord.js");
-
-const banListPath = path.join(__dirname, "../data/banlist.json");
+const { SlashCommandBuilder, EmbedBuilder, PermissionFlagsBits } = require("discord.js");
+const { QuickDB } = require("quick.db");
+const db = new QuickDB();
 
 module.exports = {
   data: new SlashCommandBuilder()
     .setName("banlist")
-    .setDescription("Banlanan kullanıcıların listesini gösterir.")
+    .setDescription("Sunucudaki tüm yasaklı kullanıcıları gösterir.")
     .setDefaultMemberPermissions(PermissionFlagsBits.BanMembers),
 
   async execute(interaction) {
-    if (!interaction.member.permissions.has(PermissionFlagsBits.BanMembers)) {
-      return interaction.reply({
-        content: "❌ Bu komutu kullanmak için `Üyeleri Yasakla` iznin olmalı.",
-        ephemeral: true,
-      });
-    }
+    const banlist = await db.get(`banlist_${interaction.guild.id}`) || [];
 
-    if (!fs.existsSync(banListPath)) {
-      return interaction.reply({
-        content: "📂 Henüz hiç ban kaydı yok.",
-        ephemeral: true,
-      });
-    }
-
-    const banList = JSON.parse(fs.readFileSync(banListPath));
-
-    if (banList.length === 0) {
-      return interaction.reply({
-        content: "✅ Ban listesi boş.",
-        ephemeral: true,
-      });
+    if (banlist.length === 0) {
+      return interaction.reply({ content: "Sunucuda yasaklı kullanıcı bulunmuyor.", ephemeral: true });
     }
 
     const embed = new EmbedBuilder()
-      .setTitle("🚫 Ban Listesi")
-      .setColor("Red")
-      .setThumbnail(interaction.guild.iconURL({ dynamic: true }))
-      .setFooter({
-        text: `Toplam yasaklı: ${banList.length}`,
-        iconURL: interaction.client.user.displayAvatarURL(),
-      })
+      .setTitle("Ban Listesi")
+      .setColor("DarkBlue")
       .setTimestamp();
 
-    const description = banList
-      .map(
-        (entry, index) =>
-          `**${index + 1}.** 👤 <@${entry.userId}> | \`${entry.tag}\`\n📌 Sebep: *${entry.reason}*\n👮 Yetkili: ${entry.bannedBy}\n📅 Tarih: <t:${Math.floor(
-            new Date(entry.date).getTime() / 1000
-          )}:F>\n`
-      )
-      .join("\n──────────────────────\n");
-
-    embed.setDescription(
-      description.length > 4000
-        ? description.slice(0, 4000) + "\n... (devamı var)"
-        : description
-    );
+    banlist.forEach(entry => {
+      embed.addFields({
+        name: entry.tag,
+        value: `ID: ${entry.id}\nSebep: ${entry.reason}\nYetkili: ${entry.by}\nTarih: ${entry.date}`,
+        inline: false
+      });
+    });
 
     await interaction.reply({ embeds: [embed] });
-  },
+  }
 };
