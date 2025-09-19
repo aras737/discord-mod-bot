@@ -1,40 +1,39 @@
-const fs = require('fs');
-const path = require('path');
-const { SlashCommandBuilder, PermissionFlagsBits } = require('discord.js');
-
-const banListPath = path.join(__dirname, '../data/banlist.json');
+const { SlashCommandBuilder, PermissionFlagsBits, EmbedBuilder } = require("discord.js");
+const { QuickDB } = require("quick.db");
+const db = new QuickDB();
 
 module.exports = {
   data: new SlashCommandBuilder()
-    .setName('unban')
-    .setDescription('Bir kullanıcının banını kaldırır.')
+    .setName("unban")
+    .setDescription("Bir kullanıcının yasağını kaldırır.")
     .addStringOption(option =>
-      option.setName('userid')
-        .setDescription('Banı kaldırılacak kullanıcının ID’si')
-        .setRequired(true))
+      option.setName("id")
+        .setDescription("Yasağı kaldırılacak kullanıcının ID'si")
+        .setRequired(true)
+    )
     .setDefaultMemberPermissions(PermissionFlagsBits.BanMembers),
 
   async execute(interaction) {
-    if (!interaction.member.permissions.has(PermissionFlagsBits.BanMembers)) {
-      return interaction.reply({ content: '❌ Bu komutu kullanmak için `Üyeleri Yasakla` iznin olmalı.', ephemeral: true });
-    }
-
-    const userId = interaction.options.getString('userid');
+    const userId = interaction.options.getString("id");
 
     try {
-      await interaction.guild.bans.remove(userId, `Unban | Yetkili: ${interaction.user.tag}`);
+      await interaction.guild.bans.remove(userId);
 
-      // JSON'dan sil
-      if (fs.existsSync(banListPath)) {
-        let banList = JSON.parse(fs.readFileSync(banListPath));
-        banList = banList.filter(entry => entry.userId !== userId);
-        fs.writeFileSync(banListPath, JSON.stringify(banList, null, 2));
-      }
+      // 📌 Banlist’ten sil
+      let banlist = await db.get(`banlist_${interaction.guild.id}`) || [];
+      banlist = banlist.filter(entry => entry.id !== userId);
+      await db.set(`banlist_${interaction.guild.id}`, banlist);
 
-      await interaction.reply(`✅ <@${userId}> kullanıcısının banı kaldırıldı.`);
+      const embed = new EmbedBuilder()
+        .setTitle("Yasaklama Kaldırıldı")
+        .setDescription(`Kullanıcı ID: ${userId}\nYasağı kaldırıldı.`)
+        .setColor("Green")
+        .setTimestamp();
+
+      await interaction.reply({ embeds: [embed] });
     } catch (err) {
       console.error(err);
-      await interaction.reply({ content: '❌ Unban işlemi başarısız.', ephemeral: true });
+      await interaction.reply({ content: "Yasak kaldırılırken hata oluştu.", ephemeral: true });
     }
-  },
+  }
 };
