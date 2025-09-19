@@ -22,26 +22,29 @@ module.exports = {
     const target = interaction.options.getUser("kullanıcı");
     const reason = interaction.options.getString("sebep") || "Sebep belirtilmedi";
 
-    const member = await interaction.guild.members.fetch(target.id).catch(() => null);
-    if (!member) return interaction.reply({ content: "Bu kullanıcı sunucuda bulunamadı.", ephemeral: true });
-
-    if (!member.bannable) return interaction.reply({ content: "Bu kullanıcıyı yasaklayamıyorum.", ephemeral: true });
-
     try {
-      await member.send(`Kalıcı olarak yasaklandınız. Sebep: ${reason}`).catch(() => {});
-      await member.ban({ reason });
+      // 📌 DM gönder (başarısız olursa sorun olmaz)
+      await target.send(`Kalıcı olarak ${interaction.guild.name} sunucusundan yasaklandınız.\nSebep: ${reason}`).catch(() => {});
 
-      // 📌 Banlist veritabanına ekle
-      await db.push(`banlist_${interaction.guild.id}`, {
+      // 📌 Kullanıcıyı banla
+      await interaction.guild.members.ban(target.id, { reason });
+
+      // 📌 Banlist veritabanına kaydet
+      const entry = {
         id: target.id,
         tag: target.tag,
         reason,
         by: interaction.user.tag,
         date: new Date().toLocaleString("tr-TR")
-      });
+      };
 
+      let banlist = await db.get(`banlist_${interaction.guild.id}`) || [];
+      banlist.push(entry);
+      await db.set(`banlist_${interaction.guild.id}`, banlist);
+
+      // 📌 Embed yanıtı
       const embed = new EmbedBuilder()
-        .setTitle("Kalıcı Yasaklama")
+        .setTitle("Kalıcı Yasaklama Uygulandı")
         .addFields(
           { name: "Yasaklanan", value: `${target.tag} (${target.id})` },
           { name: "Sebep", value: reason },
@@ -52,9 +55,10 @@ module.exports = {
         .setTimestamp();
 
       await interaction.reply({ embeds: [embed] });
+
     } catch (err) {
-      console.error(err);
-      await interaction.reply({ content: "Yasaklama başarısız oldu.", ephemeral: true });
+      console.error("Ban komutunda hata:", err);
+      return interaction.reply({ content: "❌ Kullanıcıyı yasaklayamadım. Yetkim veya sıralamam yetersiz olabilir.", ephemeral: true });
     }
   }
 };
