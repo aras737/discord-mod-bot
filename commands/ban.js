@@ -1,64 +1,60 @@
-const fs = require('fs');
-const path = require('path');
-const { SlashCommandBuilder, PermissionFlagsBits } = require('discord.js');
-
-const banListPath = path.join(__dirname, '../data/banlist.json');
+const { SlashCommandBuilder, PermissionFlagsBits, EmbedBuilder } = require("discord.js");
+const { QuickDB } = require("quick.db");
+const db = new QuickDB();
 
 module.exports = {
   data: new SlashCommandBuilder()
-    .setName('ban')
-    .setDescription('Bir kullanıcıyı kalıcı olarak sunucudan yasaklar.')
+    .setName("ban")
+    .setDescription("Bir kullanıcıyı kalıcı olarak yasaklar.")
     .addUserOption(option =>
-      option.setName('kullanici')
-        .setDescription('Banlanacak kullanıcıyı seçin.')
-        .setRequired(true))
+      option.setName("kullanıcı")
+        .setDescription("Yasaklanacak kullanıcı")
+        .setRequired(true)
+    )
     .addStringOption(option =>
-      option.setName('sebep')
-        .setDescription('Ban sebebi (örnek: spam, hakaret, vb.)')
-        .setRequired(true))
+      option.setName("sebep")
+        .setDescription("Yasaklama sebebi")
+        .setRequired(false)
+    )
     .setDefaultMemberPermissions(PermissionFlagsBits.BanMembers),
 
   async execute(interaction) {
-    if (!interaction.member.permissions.has(PermissionFlagsBits.BanMembers)) {
-      return interaction.reply({ content: '❌ Bu komutu kullanmak için `Üyeleri Yasakla` iznin olmalı.', ephemeral: true });
-    }
+    const target = interaction.options.getUser("kullanıcı");
+    const reason = interaction.options.getString("sebep") || "Sebep belirtilmedi";
 
-    const user = interaction.options.getUser('kullanici');
-    const reason = interaction.options.getString('sebep') || 'Sebep belirtilmedi';
+    const member = await interaction.guild.members.fetch(target.id).catch(() => null);
+    if (!member) return interaction.reply({ content: "Bu kullanıcı sunucuda bulunamadı.", ephemeral: true });
+
+    if (!member.bannable) return interaction.reply({ content: "Bu kullanıcıyı yasaklayamıyorum.", ephemeral: true });
 
     try {
-      // DM gönder
-      await user.send(
-        `🚫 **${interaction.guild.name}** sunucusundan **kalıcı olarak** yasaklandın.\n📌 Sebep: **${reason}**\n👮 Yetkili: ${interaction.user.tag}`
-      ).catch(() => {
-        console.log(`⚠️ ${user.tag} kişisine DM gönderilemedi (kapalı olabilir).`);
+      await member.send(`Kalıcı olarak yasaklandınız. Sebep: ${reason}`).catch(() => {});
+      await member.ban({ reason });
+
+      // 📌 Banlist veritabanına ekle
+      await db.push(`banlist_${interaction.guild.id}`, {
+        id: target.id,
+        tag: target.tag,
+        reason,
+        by: interaction.user.tag,
+        date: new Date().toLocaleString("tr-TR")
       });
 
-      // Kalıcı ban
-      await interaction.guild.bans.create(user.id, {
-        reason: `${reason} | Yetkili: ${interaction.user.tag}`,
-      });
+      const embed = new EmbedBuilder()
+        .setTitle("Kalıcı Yasaklama")
+        .addFields(
+          { name: "Yasaklanan", value: `${target.tag} (${target.id})` },
+          { name: "Sebep", value: reason },
+          { name: "Yetkili", value: interaction.user.tag },
+          { name: "Durum", value: "Sonsuza dek yasaklandı" }
+        )
+        .setColor("DarkRed")
+        .setTimestamp();
 
-      // JSON'a kaydet
-      let banList = [];
-      if (fs.existsSync(banListPath)) {
-        banList = JSON.parse(fs.readFileSync(banListPath));
-      }
-
-      banList.push({
-        userId: user.id,
-        tag: user.tag,
-        reason: reason,
-        bannedBy: interaction.user.tag,
-        date: new Date().toISOString(),
-      });
-
-      fs.writeFileSync(banListPath, JSON.stringify(banList, null, 2));
-
-      await interaction.reply(`✅ ${user.tag} kalıcı olarak yasaklandı. Sebep: **${reason}**`);
+      await interaction.reply({ embeds: [embed] });
     } catch (err) {
       console.error(err);
-      await interaction.reply({ content: '❌ Ban işlemi başarısız.', ephemeral: true });
+      await interaction.reply({ content: "Yasaklama başarısız oldu.", ephemeral: true });
     }
-  },
+  }
 };
