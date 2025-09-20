@@ -10,7 +10,8 @@ const {
   StringSelectMenuOptionBuilder,
   Events
 } = require("discord.js");
-const db = require("quick.db");
+const { QuickDB } = require("quick.db");
+const db = new QuickDB();
 
 module.exports = {
   data: new SlashCommandBuilder()
@@ -42,12 +43,12 @@ module.exports = {
     const logChannel = interaction.options.getChannel("log-kanal");
     const category = interaction.options.getChannel("kategori");
 
-    // Veritabanına ayarları kaydet
-    db.set(`ticket_support_role_${interaction.guild.id}`, supportRole.id);
-    if (logChannel) db.set(`ticket_log_channel_${interaction.guild.id}`, logChannel.id);
-    if (category) db.set(`ticket_category_${interaction.guild.id}`, category.id);
+    // ✅ Veritabanına ayarları kaydet (await ile)
+    await db.set(`ticket_support_role_${interaction.guild.id}`, supportRole.id);
+    if (logChannel) await db.set(`ticket_log_channel_${interaction.guild.id}`, logChannel.id);
+    if (category) await db.set(`ticket_category_${interaction.guild.id}`, category.id);
 
-    // Bilet türü seçim menüsü
+    // Menü
     const selectMenu = new StringSelectMenuBuilder()
       .setCustomId("ticket_type_select")
       .setPlaceholder("Bilet türünü seçin")
@@ -110,22 +111,21 @@ module.exports = {
   },
 
   setupEventListeners(client) {
-    // Eğer event listener zaten kurulmuşsa tekrar kurma
     if (client.ticketEventsSetup) return;
     client.ticketEventsSetup = true;
 
     client.on(Events.InteractionCreate, async (interaction) => {
       if (!interaction.isStringSelectMenu() && !interaction.isButton()) return;
 
-      // Bilet türü seçimi
+      // Bilet seçme
       if (interaction.customId === 'ticket_type_select') {
         const ticketType = interaction.values[0];
-        const supportRoleId = db.get(`ticket_support_role_${interaction.guild.id}`);
-        const categoryId = db.get(`ticket_category_${interaction.guild.id}`);
-        const logChannelId = db.get(`ticket_log_channel_${interaction.guild.id}`);
+        const supportRoleId = await db.get(`ticket_support_role_${interaction.guild.id}`);
+        const categoryId = await db.get(`ticket_category_${interaction.guild.id}`);
+        const logChannelId = await db.get(`ticket_log_channel_${interaction.guild.id}`);
 
-        // Kullanıcının açık bileti var mı kontrol et
-        const existingTicket = db.get(`user_ticket_${interaction.user.id}_${interaction.guild.id}`);
+        // Zaten açık bilet var mı kontrol et
+        const existingTicket = await db.get(`user_ticket_${interaction.user.id}_${interaction.guild.id}`);
         if (existingTicket) {
           const channel = interaction.guild.channels.cache.get(existingTicket);
           if (channel) {
@@ -134,12 +134,10 @@ module.exports = {
               ephemeral: true
             });
           } else {
-            // Kanal silinmişse veritabanından temizle
-            db.delete(`user_ticket_${interaction.user.id}_${interaction.guild.id}`);
+            await db.delete(`user_ticket_${interaction.user.id}_${interaction.guild.id}`);
           }
         }
 
-        // Bilet türüne göre isim ve açıklama
         const ticketTypes = {
           general_support: { name: "genel-destek", description: "Genel Destek" },
           technical_issue: { name: "teknik-sorun", description: "Teknik Sorun" },
@@ -151,43 +149,19 @@ module.exports = {
         const ticketNumber = Date.now().toString().slice(-6);
 
         try {
-          // Bilet kanalı oluştur
           const ticketChannel = await interaction.guild.channels.create({
             name: `${selectedType.name}-${interaction.user.username}-${ticketNumber}`,
             type: ChannelType.GuildText,
             parent: categoryId || null,
             permissionOverwrites: [
-              {
-                id: interaction.guild.id,
-                deny: [PermissionFlagsBits.ViewChannel]
-              },
-              {
-                id: interaction.user.id,
-                allow: [
-                  PermissionFlagsBits.ViewChannel,
-                  PermissionFlagsBits.SendMessages,
-                  PermissionFlagsBits.AttachFiles,
-                  PermissionFlagsBits.ReadMessageHistory,
-                  PermissionFlagsBits.EmbedLinks
-                ]
-              },
-              {
-                id: supportRoleId,
-                allow: [
-                  PermissionFlagsBits.ViewChannel,
-                  PermissionFlagsBits.SendMessages,
-                  PermissionFlagsBits.AttachFiles,
-                  PermissionFlagsBits.ReadMessageHistory,
-                  PermissionFlagsBits.EmbedLinks,
-                  PermissionFlagsBits.ManageMessages
-                ]
-              }
+              { id: interaction.guild.id, deny: [PermissionFlagsBits.ViewChannel] },
+              { id: interaction.user.id, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages] },
+              { id: supportRoleId, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages] }
             ]
           });
 
-          // Veritabanına kaydet
-          db.set(`user_ticket_${interaction.user.id}_${interaction.guild.id}`, ticketChannel.id);
-          db.set(`ticket_info_${ticketChannel.id}`, {
+          await db.set(`user_ticket_${interaction.user.id}_${interaction.guild.id}`, ticketChannel.id);
+          await db.set(`ticket_info_${ticketChannel.id}`, {
             userId: interaction.user.id,
             type: ticketType,
             createdAt: Date.now(),
@@ -195,62 +169,16 @@ module.exports = {
             claimedBy: null
           });
 
-          // Bilet kontrol butonları
           const ticketButtons = new ActionRowBuilder().addComponents(
-            new ButtonBuilder()
-              .setCustomId('close_ticket')
-              .setLabel('Bileti Kapat')
-              .setStyle(ButtonStyle.Danger),
-            new ButtonBuilder()
-              .setCustomId('claim_ticket')
-              .setLabel('Bileti Üstlen')
-              .setStyle(ButtonStyle.Success),
-            new ButtonBuilder()
-              .setCustomId('add_user_ticket')
-              .setLabel('Kullanıcı Ekle')
-              .setStyle(ButtonStyle.Secondary)
+            new ButtonBuilder().setCustomId('close_ticket').setLabel('Bileti Kapat').setStyle(ButtonStyle.Danger),
+            new ButtonBuilder().setCustomId('claim_ticket').setLabel('Bileti Üstlen').setStyle(ButtonStyle.Success)
           );
-
-          // Bilet açılış mesajı
-          const ticketOpenEmbed = new EmbedBuilder()
-            .setTitle(`${selectedType.description} Bileti`)
-            .setDescription(
-              `Merhaba ${interaction.user}, biletiniz başarıyla oluşturuldu.\n\n` +
-              `**Bilet Türü:** ${selectedType.description}\n` +
-              `**Bilet Numarası:** #${ticketNumber}\n` +
-              `**Oluşturulma Tarihi:** ${new Date().toLocaleString('tr-TR')}\n\n` +
-              `Lütfen sorununuzu detaylı bir şekilde açıklayın. Destek ekibimiz en kısa sürede size yardımcı olacaktır.\n\n` +
-              `**Not:** Bu bilet sadece size ve destek ekibine görünmektedir.`
-            )
-            .setColor('#00ff00')
-            .setFooter({ text: 'Bileti yönetmek için aşağıdaki butonları kullanın' })
-            .setTimestamp();
 
           await ticketChannel.send({
             content: `${interaction.user} <@&${supportRoleId}>`,
-            embeds: [ticketOpenEmbed],
+            embeds: [new EmbedBuilder().setTitle(`${selectedType.description} Bileti`).setDescription("Sorununuzu yazın.")],
             components: [ticketButtons]
           });
-
-          // Log gönder
-          if (logChannelId) {
-            const logChannel = interaction.guild.channels.cache.get(logChannelId);
-            if (logChannel) {
-              const logEmbed = new EmbedBuilder()
-                .setTitle('Yeni Bilet Açıldı')
-                .addFields(
-                  { name: 'Kullanıcı', value: `${interaction.user.tag} (${interaction.user.id})`, inline: true },
-                  { name: 'Bilet Türü', value: selectedType.description, inline: true },
-                  { name: 'Kanal', value: `${ticketChannel}`, inline: true },
-                  { name: 'Bilet Numarası', value: `#${ticketNumber}`, inline: true },
-                  { name: 'Oluşturulma Tarihi', value: new Date().toLocaleString('tr-TR'), inline: true }
-                )
-                .setColor('#0099ff')
-                .setTimestamp();
-
-              await logChannel.send({ embeds: [logEmbed] });
-            }
-          }
 
           await interaction.reply({
             content: `Biletiniz başarıyla oluşturuldu: ${ticketChannel}`,
@@ -259,218 +187,8 @@ module.exports = {
 
         } catch (error) {
           console.error('Bilet oluşturma hatası:', error);
-          await interaction.reply({
-            content: 'Bilet oluşturulurken bir hata oluştu. Lütfen yöneticilerle iletişime geçin.',
-            ephemeral: true
-          });
+          await interaction.reply({ content: 'Bilet oluşturulamadı.', ephemeral: true });
         }
-      }
-
-      // Bilet kapatma
-      if (interaction.customId === 'close_ticket') {
-        const ticketInfo = db.get(`ticket_info_${interaction.channel.id}`);
-        if (!ticketInfo) {
-          return interaction.reply({
-            content: 'Bu kanal için bilet bilgisi bulunamadı.',
-            ephemeral: true
-          });
-        }
-
-        const supportRoleId = db.get(`ticket_support_role_${interaction.guild.id}`);
-        const hasPermission = interaction.member.roles.cache.has(supportRoleId) || 
-                             interaction.user.id === ticketInfo.userId ||
-                             interaction.member.permissions.has(PermissionFlagsBits.Administrator);
-
-        if (!hasPermission) {
-          return interaction.reply({
-            content: 'Bu bileti kapatma yetkiniz bulunmamaktadır.',
-            ephemeral: true
-          });
-        }
-
-        // Onay butonları
-        const confirmRow = new ActionRowBuilder().addComponents(
-          new ButtonBuilder()
-            .setCustomId('confirm_close')
-            .setLabel('Evet, Kapat')
-            .setStyle(ButtonStyle.Danger),
-          new ButtonBuilder()
-            .setCustomId('cancel_close')
-            .setLabel('İptal')
-            .setStyle(ButtonStyle.Secondary)
-        );
-
-        const confirmEmbed = new EmbedBuilder()
-          .setTitle('Bilet Kapatma Onayı')
-          .setDescription('Bu bileti kapatmak istediğinizden emin misiniz? Bu işlem geri alınamaz.')
-          .setColor('#ff9900')
-          .setTimestamp();
-
-        await interaction.reply({
-          embeds: [confirmEmbed],
-          components: [confirmRow],
-          ephemeral: true
-        });
-      }
-
-      // Bilet kapatma onayı
-      if (interaction.customId === 'confirm_close') {
-        const ticketInfo = db.get(`ticket_info_${interaction.channel.id}`);
-        const logChannelId = db.get(`ticket_log_channel_${interaction.guild.id}`);
-
-        // Veritabanından temizle
-        db.delete(`user_ticket_${ticketInfo.userId}_${interaction.guild.id}`);
-        db.delete(`ticket_info_${interaction.channel.id}`);
-
-        // Log gönder
-        if (logChannelId) {
-          const logChannel = interaction.guild.channels.cache.get(logChannelId);
-          if (logChannel) {
-            try {
-              const user = await interaction.client.users.fetch(ticketInfo.userId);
-              const claimedByUser = ticketInfo.claimedBy ? await interaction.client.users.fetch(ticketInfo.claimedBy) : null;
-              
-              const logEmbed = new EmbedBuilder()
-                .setTitle('Bilet Kapatıldı')
-                .addFields(
-                  { name: 'Bilet Sahibi', value: `${user.tag} (${user.id})`, inline: true },
-                  { name: 'Kapatan Kişi', value: `${interaction.user.tag}`, inline: true },
-                  { name: 'Üstlenen Kişi', value: claimedByUser ? claimedByUser.tag : 'Kimse', inline: true },
-                  { name: 'Kanal Adı', value: interaction.channel.name, inline: true },
-                  { name: 'Açılma Tarihi', value: new Date(ticketInfo.createdAt).toLocaleString('tr-TR'), inline: true },
-                  { name: 'Kapanma Tarihi', value: new Date().toLocaleString('tr-TR'), inline: true }
-                )
-                .setColor('#ff0000')
-                .setTimestamp();
-
-              await logChannel.send({ embeds: [logEmbed] });
-            } catch (error) {
-              console.error('Log gönderme hatası:', error);
-            }
-          }
-        }
-
-        const closingEmbed = new EmbedBuilder()
-          .setTitle('Bilet Kapatılıyor')
-          .setDescription('Bu bilet 5 saniye içinde kapatılacaktır...')
-          .setColor('#ff0000')
-          .setTimestamp();
-
-        await interaction.update({
-          embeds: [closingEmbed],
-          components: []
-        });
-
-        setTimeout(async () => {
-          try {
-            await interaction.channel.delete();
-          } catch (error) {
-            console.error('Kanal silme hatası:', error);
-          }
-        }, 5000);
-      }
-
-      // Bilet kapatma iptali
-      if (interaction.customId === 'cancel_close') {
-        await interaction.update({
-          content: 'Bilet kapatma işlemi iptal edildi.',
-          embeds: [],
-          components: []
-        });
-      }
-
-      // Bilet üstlenme
-      if (interaction.customId === 'claim_ticket') {
-        const supportRoleId = db.get(`ticket_support_role_${interaction.guild.id}`);
-        
-        if (!interaction.member.roles.cache.has(supportRoleId) && 
-            !interaction.member.permissions.has(PermissionFlagsBits.Administrator)) {
-          return interaction.reply({
-            content: 'Bu bileti üstlenme yetkiniz bulunmamaktadır.',
-            ephemeral: true
-          });
-        }
-
-        const ticketInfo = db.get(`ticket_info_${interaction.channel.id}`);
-        if (ticketInfo.claimedBy) {
-          const claimedUser = await interaction.client.users.fetch(ticketInfo.claimedBy);
-          return interaction.reply({
-            content: `Bu bilet zaten ${claimedUser.tag} tarafından üstlenilmiş.`,
-            ephemeral: true
-          });
-        }
-
-        // Bileti üstlen
-        ticketInfo.claimedBy = interaction.user.id;
-        db.set(`ticket_info_${interaction.channel.id}`, ticketInfo);
-
-        const claimEmbed = new EmbedBuilder()
-          .setTitle('Bilet Üstlenildi')
-          .setDescription(`Bu bilet ${interaction.user} tarafından üstlenildi.`)
-          .setColor('#ffff00')
-          .setTimestamp();
-
-        await interaction.reply({ embeds: [claimEmbed] });
-      }
-
-      // Kullanıcı ekleme (basit implementasyon)
-      if (interaction.customId === 'add_user_ticket') {
-        const supportRoleId = db.get(`ticket_support_role_${interaction.guild.id}`);
-        
-        if (!interaction.member.roles.cache.has(supportRoleId) && 
-            !interaction.member.permissions.has(PermissionFlagsBits.Administrator)) {
-          return interaction.reply({
-            content: 'Bu özelliği kullanma yetkiniz bulunmamaktadır.',
-            ephemeral: true
-          });
-        }
-
-        await interaction.reply({
-          content: 'Kullanıcı ekleme özelliği için kullanıcıyı etiketleyerek kanalda belirtin.',
-          ephemeral: true
-        });
-      }
-    });
-
-    // Bilet kanallarındaki mesajları logla
-    client.on(Events.MessageCreate, async (message) => {
-      if (message.author.bot) return;
-      if (!message.channel.name.includes('-')) return;
-      
-      const ticketInfo = db.get(`ticket_info_${message.channel.id}`);
-      if (!ticketInfo) return;
-
-      const logChannelId = db.get(`ticket_log_channel_${message.guild.id}`);
-      if (!logChannelId) return;
-
-      const logChannel = message.guild.channels.cache.get(logChannelId);
-      if (!logChannel) return;
-
-      // Sadece önemli mesajları logla (çok spam olmaması için)
-      if (message.content.length < 10 && message.attachments.size === 0) return;
-
-      const messageLogEmbed = new EmbedBuilder()
-        .setTitle('Bilet Mesaj Logu')
-        .addFields(
-          { name: 'Kullanıcı', value: `${message.author.tag}`, inline: true },
-          { name: 'Kanal', value: `${message.channel.name}`, inline: true },
-          { name: 'Mesaj', value: message.content.slice(0, 1000) || '[Dosya/Medya]', inline: false }
-        )
-        .setColor('#00ffff')
-        .setTimestamp();
-
-      if (message.attachments.size > 0) {
-        messageLogEmbed.addFields({
-          name: 'Ekler',
-          value: message.attachments.map(att => att.name).join(', '),
-          inline: false
-        });
-      }
-
-      try {
-        await logChannel.send({ embeds: [messageLogEmbed] });
-      } catch (error) {
-        console.error('Mesaj log hatası:', error);
       }
     });
   }
