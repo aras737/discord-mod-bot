@@ -43,32 +43,18 @@ module.exports = {
     const logChannel = interaction.options.getChannel("log-kanal");
     const category = interaction.options.getChannel("kategori");
 
-    // ✅ Veritabanına ayarları kaydet (await ile)
     await db.set(`ticket_support_role_${interaction.guild.id}`, supportRole.id);
     if (logChannel) await db.set(`ticket_log_channel_${interaction.guild.id}`, logChannel.id);
     if (category) await db.set(`ticket_category_${interaction.guild.id}`, category.id);
 
-    // Menü
     const selectMenu = new StringSelectMenuBuilder()
       .setCustomId("ticket_type_select")
       .setPlaceholder("Bilet türünü seçin")
       .addOptions([
-        new StringSelectMenuOptionBuilder()
-          .setLabel("Genel Destek")
-          .setDescription("Genel sorular ve destek talebi")
-          .setValue("general_support"),
-        new StringSelectMenuOptionBuilder()
-          .setLabel("Teknik Sorun")
-          .setDescription("Teknik problemler ve hatalar")
-          .setValue("technical_issue"),
-        new StringSelectMenuOptionBuilder()
-          .setLabel("Şikayet")
-          .setDescription("Şikayet ve öneri bildirimi")
-          .setValue("complaint"),
-        new StringSelectMenuOptionBuilder()
-          .setLabel("Diğer")
-          .setDescription("Diğer konular")
-          .setValue("other")
+        new StringSelectMenuOptionBuilder().setLabel("Genel Destek").setDescription("Genel sorular ve destek").setValue("general_support"),
+        new StringSelectMenuOptionBuilder().setLabel("Teknik Sorun").setDescription("Teknik problemler ve hatalar").setValue("technical_issue"),
+        new StringSelectMenuOptionBuilder().setLabel("Şikayet").setDescription("Şikayet bildirmek için").setValue("complaint"),
+        new StringSelectMenuOptionBuilder().setLabel("Diğer").setDescription("Diğer konular").setValue("other"),
       ]);
 
     const selectRow = new ActionRowBuilder().addComponents(selectMenu);
@@ -76,38 +62,18 @@ module.exports = {
     const ticketEmbed = new EmbedBuilder()
       .setTitle("Destek Bilet Sistemi")
       .setDescription(
-        "Merhaba! Destek ekibimizden yardım almak için aşağıdan uygun bilet türünü seçin.\n\n" +
-        "**Bilet Açmadan Önce:**\n" +
-        "• Sorununuzu açık ve detaylı bir şekilde açıklayın\n" +
-        "• Gerekli ekran görüntülerini hazırlayın\n" +
-        "• Sabırlı olun, ekibimiz en kısa sürede size dönüş yapacaktır\n\n" +
-        "**Destek Saatleri:** 09:00 - 22:00"
+        "Destek almak için aşağıdan uygun bilet türünü seçin.\n\n" +
+        "**Notlar:**\n" +
+        "• Sorununuzu ayrıntılı yazın.\n" +
+        "• Gerekli görselleri ekleyin.\n" +
+        "• Sabırlı olun, ekibimiz en kısa sürede cevap verecektir."
       )
-      .setColor("#0099ff")
-      .setFooter({ text: "Destek ekibi size yardımcı olmaktan mutluluk duyar" })
-      .setTimestamp();
+      .setColor("#0099ff");
 
-    try {
-      await targetChannel.send({
-        embeds: [ticketEmbed],
-        components: [selectRow]
-      });
+    await targetChannel.send({ embeds: [ticketEmbed], components: [selectRow] });
+    await interaction.reply({ content: `Bilet sistemi başarıyla ${targetChannel} kanalında kuruldu.`, ephemeral: true });
 
-      await interaction.reply({
-        content: `Bilet sistemi başarıyla ${targetChannel} kanalında kuruldu.`,
-        ephemeral: true
-      });
-
-      // Event listener'ları kur
-      this.setupEventListeners(client);
-
-    } catch (error) {
-      console.error("Bilet sistemi kurulum hatası:", error);
-      await interaction.reply({
-        content: "Bilet sistemi kurulurken bir hata oluştu. Kanal izinlerini kontrol edin.",
-        ephemeral: true
-      });
-    }
+    this.setupEventListeners(client);
   },
 
   setupEventListeners(client) {
@@ -117,26 +83,11 @@ module.exports = {
     client.on(Events.InteractionCreate, async (interaction) => {
       if (!interaction.isStringSelectMenu() && !interaction.isButton()) return;
 
-      // Bilet seçme
-      if (interaction.customId === 'ticket_type_select') {
+      // 📌 Bilet açma
+      if (interaction.isStringSelectMenu() && interaction.customId === 'ticket_type_select') {
         const ticketType = interaction.values[0];
         const supportRoleId = await db.get(`ticket_support_role_${interaction.guild.id}`);
         const categoryId = await db.get(`ticket_category_${interaction.guild.id}`);
-        const logChannelId = await db.get(`ticket_log_channel_${interaction.guild.id}`);
-
-        // Zaten açık bilet var mı kontrol et
-        const existingTicket = await db.get(`user_ticket_${interaction.user.id}_${interaction.guild.id}`);
-        if (existingTicket) {
-          const channel = interaction.guild.channels.cache.get(existingTicket);
-          if (channel) {
-            return interaction.reply({
-              content: `Zaten açık bir biletiniz bulunmaktadır: ${channel}`,
-              ephemeral: true
-            });
-          } else {
-            await db.delete(`user_ticket_${interaction.user.id}_${interaction.guild.id}`);
-          }
-        }
 
         const ticketTypes = {
           general_support: { name: "genel-destek", description: "Genel Destek" },
@@ -144,51 +95,72 @@ module.exports = {
           complaint: { name: "sikayet", description: "Şikayet" },
           other: { name: "diger", description: "Diğer" }
         };
-
         const selectedType = ticketTypes[ticketType];
         const ticketNumber = Date.now().toString().slice(-6);
 
-        try {
-          const ticketChannel = await interaction.guild.channels.create({
-            name: `${selectedType.name}-${interaction.user.username}-${ticketNumber}`,
-            type: ChannelType.GuildText,
-            parent: categoryId || null,
-            permissionOverwrites: [
-              { id: interaction.guild.id, deny: [PermissionFlagsBits.ViewChannel] },
-              { id: interaction.user.id, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages] },
-              { id: supportRoleId, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages] }
-            ]
-          });
+        const ticketChannel = await interaction.guild.channels.create({
+          name: `${selectedType.name}-${interaction.user.username}-${ticketNumber}`,
+          type: ChannelType.GuildText,
+          parent: categoryId || null,
+          permissionOverwrites: [
+            { id: interaction.guild.id, deny: [PermissionFlagsBits.ViewChannel] },
+            { id: interaction.user.id, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages] },
+            { id: supportRoleId, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages] }
+          ]
+        });
 
-          await db.set(`user_ticket_${interaction.user.id}_${interaction.guild.id}`, ticketChannel.id);
-          await db.set(`ticket_info_${ticketChannel.id}`, {
-            userId: interaction.user.id,
-            type: ticketType,
-            createdAt: Date.now(),
-            status: 'open',
-            claimedBy: null
-          });
+        await db.set(`user_ticket_${interaction.user.id}_${interaction.guild.id}`, ticketChannel.id);
+        await db.set(`ticket_info_${ticketChannel.id}`, {
+          userId: interaction.user.id,
+          type: ticketType,
+          createdAt: Date.now(),
+          status: 'open',
+          claimedBy: null
+        });
 
-          const ticketButtons = new ActionRowBuilder().addComponents(
-            new ButtonBuilder().setCustomId('close_ticket').setLabel('Bileti Kapat').setStyle(ButtonStyle.Danger),
-            new ButtonBuilder().setCustomId('claim_ticket').setLabel('Bileti Üstlen').setStyle(ButtonStyle.Success)
-          );
+        const ticketButtons = new ActionRowBuilder().addComponents(
+          new ButtonBuilder().setCustomId('close_ticket').setLabel('Bileti Kapat').setStyle(ButtonStyle.Danger),
+          new ButtonBuilder().setCustomId('claim_ticket').setLabel('Bileti Üstlen').setStyle(ButtonStyle.Primary)
+        );
 
-          await ticketChannel.send({
-            content: `${interaction.user} <@&${supportRoleId}>`,
-            embeds: [new EmbedBuilder().setTitle(`${selectedType.description} Bileti`).setDescription("Sorununuzu yazın.")],
-            components: [ticketButtons]
-          });
+        await ticketChannel.send({
+          content: `${interaction.user} <@&${supportRoleId}>`,
+          embeds: [new EmbedBuilder().setTitle(`${selectedType.description} Bileti`).setDescription("Sorununuzu buraya yazın.").setColor("Green")],
+          components: [ticketButtons]
+        });
 
-          await interaction.reply({
-            content: `Biletiniz başarıyla oluşturuldu: ${ticketChannel}`,
-            ephemeral: true
-          });
+        await interaction.reply({ content: `Biletiniz açıldı: ${ticketChannel}`, ephemeral: true });
+      }
 
-        } catch (error) {
-          console.error('Bilet oluşturma hatası:', error);
-          await interaction.reply({ content: 'Bilet oluşturulamadı.', ephemeral: true });
+      // 📌 Bilet kapatma
+      if (interaction.isButton() && interaction.customId === "close_ticket") {
+        const ticketInfo = await db.get(`ticket_info_${interaction.channel.id}`);
+        if (!ticketInfo) {
+          return interaction.reply({ content: "Bu kanal için bilet bilgisi bulunamadı.", ephemeral: true });
         }
+
+        await db.delete(`user_ticket_${ticketInfo.userId}_${interaction.guild.id}`);
+        await db.delete(`ticket_info_${interaction.channel.id}`);
+
+        await interaction.reply({ content: "Bilet kapatılıyor, kanal 5 saniye içinde silinecek.", ephemeral: false });
+        setTimeout(() => interaction.channel.delete().catch(() => {}), 5000);
+      }
+
+      // 📌 Bilet üstlenme
+      if (interaction.isButton() && interaction.customId === "claim_ticket") {
+        const ticketInfo = await db.get(`ticket_info_${interaction.channel.id}`);
+        if (!ticketInfo) {
+          return interaction.reply({ content: "Bu kanal için bilet bilgisi bulunamadı.", ephemeral: true });
+        }
+
+        if (ticketInfo.claimedBy) {
+          return interaction.reply({ content: `Bu bilet zaten üstlenilmiş.`, ephemeral: true });
+        }
+
+        ticketInfo.claimedBy = interaction.user.id;
+        await db.set(`ticket_info_${interaction.channel.id}`, ticketInfo);
+
+        await interaction.reply({ content: `Bu bilet ${interaction.user.tag} tarafından üstlenildi.`, ephemeral: false });
       }
     });
   }
