@@ -83,6 +83,9 @@ module.exports = {
     client.on(Events.InteractionCreate, async (interaction) => {
       if (!interaction.isStringSelectMenu() && !interaction.isButton()) return;
 
+      const logChannelId = await db.get(`ticket_log_channel_${interaction.guild.id}`);
+      const logChannel = logChannelId ? interaction.guild.channels.cache.get(logChannelId) : null;
+
       // 📌 Bilet açma
       if (interaction.isStringSelectMenu() && interaction.customId === 'ticket_type_select') {
         const ticketType = interaction.values[0];
@@ -130,6 +133,20 @@ module.exports = {
         });
 
         await interaction.reply({ content: `Biletiniz açıldı: ${ticketChannel}`, ephemeral: true });
+
+        // 🔔 Log gönder
+        if (logChannel) {
+          const logEmbed = new EmbedBuilder()
+            .setTitle("Yeni Bilet Açıldı")
+            .addFields(
+              { name: "Kullanıcı", value: `${interaction.user.tag}`, inline: true },
+              { name: "Tür", value: selectedType.description, inline: true },
+              { name: "Kanal", value: `${ticketChannel}`, inline: true }
+            )
+            .setColor("Blue")
+            .setTimestamp();
+          logChannel.send({ embeds: [logEmbed] });
+        }
       }
 
       // 📌 Bilet kapatma
@@ -143,6 +160,20 @@ module.exports = {
         await db.delete(`ticket_info_${interaction.channel.id}`);
 
         await interaction.reply({ content: "Bilet kapatılıyor, kanal 5 saniye içinde silinecek.", ephemeral: false });
+
+        // 🔔 Log gönder
+        if (logChannel) {
+          const logEmbed = new EmbedBuilder()
+            .setTitle("Bilet Kapatıldı")
+            .addFields(
+              { name: "Kapatılan Kanal", value: `${interaction.channel.name}` },
+              { name: "Kapatıldı", value: `${interaction.user.tag}` }
+            )
+            .setColor("Red")
+            .setTimestamp();
+          logChannel.send({ embeds: [logEmbed] });
+        }
+
         setTimeout(() => interaction.channel.delete().catch(() => {}), 5000);
       }
 
@@ -161,6 +192,19 @@ module.exports = {
         await db.set(`ticket_info_${interaction.channel.id}`, ticketInfo);
 
         await interaction.reply({ content: `Bu bilet ${interaction.user.tag} tarafından üstlenildi.`, ephemeral: false });
+
+        // 🔔 Log gönder
+        if (logChannel) {
+          const logEmbed = new EmbedBuilder()
+            .setTitle("Bilet Üstlenildi")
+            .addFields(
+              { name: "Kanal", value: `${interaction.channel}`, inline: true },
+              { name: "Üstlenen", value: `${interaction.user.tag}`, inline: true }
+            )
+            .setColor("Green")
+            .setTimestamp();
+          logChannel.send({ embeds: [logEmbed] });
+        }
       }
     });
   }
