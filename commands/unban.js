@@ -1,39 +1,56 @@
-const { SlashCommandBuilder, PermissionFlagsBits, EmbedBuilder } = require("discord.js");
-const { QuickDB } = require("quick.db");
-const db = new QuickDB();
+const { SlashCommandBuilder, PermissionFlagsBits, EmbedBuilder } = require('discord.js');
 
 module.exports = {
-  data: new SlashCommandBuilder()
-    .setName("unban")
-    .setDescription("Bir kullanıcının yasağını kaldırır.")
-    .addStringOption(option =>
-      option.setName("id")
-        .setDescription("Yasağı kaldırılacak kullanıcının ID'si")
-        .setRequired(true)
-    )
-    .setDefaultMemberPermissions(PermissionFlagsBits.BanMembers),
+    data: new SlashCommandBuilder()
+        .setName('unban')
+        .setDescription('Yasaklı bir kullanıcının yasağını kaldırır')
+        .addStringOption(option =>
+            option.setName('kullanici_id')
+                .setDescription('Yasağı kaldırılacak kullanıcının ID numarası')
+                .setRequired(true))
+        .addStringOption(option =>
+            option.setName('sebep')
+                .setDescription('Yasak kaldırma sebebi')
+                .setRequired(false))
+        .setDefaultMemberPermissions(PermissionFlagsBits.BanMembers),
 
-  async execute(interaction) {
-    const userId = interaction.options.getString("id");
+    async execute(interaction) {
+        const userId = interaction.options.getString('kullanici_id');
+        const reason = interaction.options.getString('sebep') || 'Sebep belirtilmedi';
 
-    try {
-      await interaction.guild.bans.remove(userId);
+        // ID formatı kontrolü
+        if (!/^\d{17,19}$/.test(userId)) {
+            return interaction.reply({ content: 'Geçersiz kullanıcı ID formatı.', ephemeral: true });
+        }
 
-      // 📌 Banlist’ten sil
-      let banlist = await db.get(`banlist_${interaction.guild.id}`) || [];
-      banlist = banlist.filter(entry => entry.id !== userId);
-      await db.set(`banlist_${interaction.guild.id}`, banlist);
+        try {
+            // Yasaklı kullanıcı kontrolü
+            const bannedUser = await interaction.guild.bans.fetch(userId).catch(() => null);
+            
+            if (!bannedUser) {
+                return interaction.reply({ content: 'Bu kullanıcı yasaklı değil veya bulunamadı.', ephemeral: true });
+            }
 
-      const embed = new EmbedBuilder()
-        .setTitle("Yasaklama Kaldırıldı")
-        .setDescription(`Kullanıcı ID: ${userId}\nYasağı kaldırıldı.`)
-        .setColor("Green")
-        .setTimestamp();
+            // Yasak kaldırma işlemi
+            await interaction.guild.members.unban(userId, `${interaction.user.tag} tarafından yasağı kaldırıldı: ${reason}`);
 
-      await interaction.reply({ embeds: [embed] });
-    } catch (err) {
-      console.error(err);
-      await interaction.reply({ content: "Yasak kaldırılırken hata oluştu.", ephemeral: true });
-    }
-  }
+            // Başarı mesajı
+            const successEmbed = new EmbedBuilder()
+                .setColor('#00FF00')
+                .setTitle('Yasak Başarıyla Kaldırıldı')
+                .addFields(
+                    { name: 'Kullanıcı', value: `${bannedUser.user.tag} (${bannedUser.user.id})`, inline: true },
+                    { name: 'Yetkili', value: interaction.user.tag, inline: true },
+                    { name: 'Sebep', value: reason, inline: false },
+                    { name: 'Tarih', value: new Date().toLocaleString('tr-TR'), inline: true }
+                );
+
+            await interaction.reply({ embeds: [successEmbed] });
+
+        } catch (error) {
+            console.error('Unban hatası:', error);
+            await interaction.reply({ content: 'Yasak kaldırma işlemi sırasında bir hata oluştu.', ephemeral: true });
+        }
+    },
 };
+
