@@ -184,11 +184,6 @@ module.exports = {
           const logEmbed = new EmbedBuilder()
             .setTitle("Bilet Kapatıldı")
             .addFields(
-              { name: "Kapatılan Kanal", value
-        if (logChannel) {
-          const logEmbed = new EmbedBuilder()
-            .setTitle("Bilet Kapatıldı")
-            .addFields(
               { name: "Kapatılan Kanal", value: `${interaction.channel.name}` },
               { name: "Kapatan", value: `${interaction.user.tag}` }
             )
@@ -198,23 +193,19 @@ module.exports = {
           await logChannel.send({ embeds: [logEmbed], files: [attachment] });
         }
 
-        // 🎯 Kullanıcıya transcript DM ile gönderme
         const user = await interaction.guild.members.fetch(ticketInfo.userId).catch(() => null);
         if (user) {
           try {
             await user.send({
-              content: "Biletiniz kapatıldı. Aşağıda konuşma kaydınız (transcript) yer alıyor:",
+              content: "Biletiniz kapatıldı. İşte konuşma kaydınız:",
               files: [attachment]
             });
-          } catch (err) {
-            // Kullanıcının DM kutusu kapalı olabilir
-          }
+          } catch {}
         }
 
-        // 🧹 Kanalı ve transcript dosyasını sil
         setTimeout(() => {
-          fs.unlink(filePath, (err) => {
-            if (err) console.error("Transcript dosyası silinemedi:", err);
+          fs.unlink(filePath, err => {
+            if (err) console.error("Transcript silinemedi:", err);
           });
           interaction.channel.delete().catch(() => {});
         }, 5000);
