@@ -1,17 +1,21 @@
-const { 
-  SlashCommandBuilder, 
-  ActionRowBuilder, 
-  ButtonBuilder, 
-  ButtonStyle, 
-  EmbedBuilder, 
-  ChannelType, 
+const {
+  SlashCommandBuilder,
+  ActionRowBuilder,
+  ButtonBuilder,
+  ButtonStyle,
+  EmbedBuilder,
+  ChannelType,
   PermissionFlagsBits,
   StringSelectMenuBuilder,
   StringSelectMenuOptionBuilder,
-  Events
+  Events,
+  AttachmentBuilder
 } = require("discord.js");
 const { QuickDB } = require("quick.db");
 const db = new QuickDB();
+
+const fs = require("fs");
+const path = require("path");
 
 module.exports = {
   data: new SlashCommandBuilder()
@@ -86,7 +90,7 @@ module.exports = {
       const logChannelId = await db.get(`ticket_log_channel_${interaction.guild.id}`);
       const logChannel = logChannelId ? interaction.guild.channels.cache.get(logChannelId) : null;
 
-      // 📌 Bilet açma
+      // 📌 Bilet Açma
       if (interaction.isStringSelectMenu() && interaction.customId === 'ticket_type_select') {
         const ticketType = interaction.values[0];
         const supportRoleId = await db.get(`ticket_support_role_${interaction.guild.id}`);
@@ -98,6 +102,7 @@ module.exports = {
           complaint: { name: "sikayet", description: "Şikayet" },
           other: { name: "diger", description: "Diğer" }
         };
+
         const selectedType = ticketTypes[ticketType];
         const ticketNumber = Date.now().toString().slice(-6);
 
@@ -134,7 +139,6 @@ module.exports = {
 
         await interaction.reply({ content: `Biletiniz açıldı: ${ticketChannel}`, ephemeral: true });
 
-        // 🔔 Log gönder
         if (logChannel) {
           const logEmbed = new EmbedBuilder()
             .setTitle("Yeni Bilet Açıldı")
@@ -149,7 +153,7 @@ module.exports = {
         }
       }
 
-      // 📌 Bilet kapatma
+      // 📌 Bilet Kapatma + Transcript
       if (interaction.isButton() && interaction.customId === "close_ticket") {
         const ticketInfo = await db.get(`ticket_info_${interaction.channel.id}`);
         if (!ticketInfo) {
@@ -159,25 +163,64 @@ module.exports = {
         await db.delete(`user_ticket_${ticketInfo.userId}_${interaction.guild.id}`);
         await db.delete(`ticket_info_${interaction.channel.id}`);
 
-        await interaction.reply({ content: "Bilet kapatılıyor, kanal 5 saniye içinde silinecek.", ephemeral: false });
+        await interaction.reply({ content: "Bilet kapatılıyor, transcript oluşturuluyor...", ephemeral: false });
 
-        // 🔔 Log gönder
+        const messages = await interaction.channel.messages.fetch({ limit: 100 });
+        const sortedMessages = messages.sort((a, b) => a.createdTimestamp - b.createdTimestamp);
+
+        let transcript = `Transcript - ${interaction.channel.name}\n\n`;
+        sortedMessages.forEach(msg => {
+          const time = new Date(msg.createdTimestamp).toLocaleString();
+          transcript += `[${time}] ${msg.author.tag}: ${msg.content || '[Boş Mesaj]'}\n`;
+        });
+
+        const fileName = `transcript-${interaction.channel.id}.txt`;
+        const filePath = path.join(__dirname, fileName);
+        fs.writeFileSync(filePath, transcript);
+
+        const attachment = new AttachmentBuilder(filePath);
+
+        if (logChannel) {
+          const logEmbed = new EmbedBuilder()
+            .setTitle("Bilet Kapatıldı")
+            .addFields(
+              { name: "Kapatılan Kanal", value
         if (logChannel) {
           const logEmbed = new EmbedBuilder()
             .setTitle("Bilet Kapatıldı")
             .addFields(
               { name: "Kapatılan Kanal", value: `${interaction.channel.name}` },
-              { name: "Kapatıldı", value: `${interaction.user.tag}` }
+              { name: "Kapatan", value: `${interaction.user.tag}` }
             )
             .setColor("Red")
             .setTimestamp();
-          logChannel.send({ embeds: [logEmbed] });
+
+          await logChannel.send({ embeds: [logEmbed], files: [attachment] });
         }
 
-        setTimeout(() => interaction.channel.delete().catch(() => {}), 5000);
+        // 🎯 Kullanıcıya transcript DM ile gönderme
+        const user = await interaction.guild.members.fetch(ticketInfo.userId).catch(() => null);
+        if (user) {
+          try {
+            await user.send({
+              content: "Biletiniz kapatıldı. Aşağıda konuşma kaydınız (transcript) yer alıyor:",
+              files: [attachment]
+            });
+          } catch (err) {
+            // Kullanıcının DM kutusu kapalı olabilir
+          }
+        }
+
+        // 🧹 Kanalı ve transcript dosyasını sil
+        setTimeout(() => {
+          fs.unlink(filePath, (err) => {
+            if (err) console.error("Transcript dosyası silinemedi:", err);
+          });
+          interaction.channel.delete().catch(() => {});
+        }, 5000);
       }
 
-      // 📌 Bilet üstlenme
+      // 📌 Bilet Üstlenme
       if (interaction.isButton() && interaction.customId === "claim_ticket") {
         const ticketInfo = await db.get(`ticket_info_${interaction.channel.id}`);
         if (!ticketInfo) {
@@ -185,7 +228,7 @@ module.exports = {
         }
 
         if (ticketInfo.claimedBy) {
-          return interaction.reply({ content: `Bu bilet zaten üstlenilmiş.`, ephemeral: true });
+          return interaction.reply({ content: "Bu bilet zaten üstlenilmiş.", ephemeral: true });
         }
 
         ticketInfo.claimedBy = interaction.user.id;
@@ -193,7 +236,6 @@ module.exports = {
 
         await interaction.reply({ content: `Bu bilet ${interaction.user.tag} tarafından üstlenildi.`, ephemeral: false });
 
-        // 🔔 Log gönder
         if (logChannel) {
           const logEmbed = new EmbedBuilder()
             .setTitle("Bilet Üstlenildi")
