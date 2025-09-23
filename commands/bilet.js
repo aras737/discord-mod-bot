@@ -8,7 +8,8 @@ const {
   PermissionFlagsBits,
   StringSelectMenuBuilder,
   StringSelectMenuOptionBuilder,
-  Events
+  Events,
+  AttachmentBuilder
 } = require("discord.js");
 const { QuickDB } = require("quick.db");
 const db = new QuickDB();
@@ -225,35 +226,60 @@ module.exports = {
           await db.set(`ticket_info_${interaction.channel.id}`, ticketInfo);
           
           await interaction.reply({ 
-            content: `✅ Talep edilen transfer rütbesi: **${roleName}** (Rank: ${roleRank})`, 
+            content: `Talep edilen transfer rütbesi: **${roleName}** (Rank: ${roleRank})`, 
             ephemeral: false 
           });
         }
       }
 
-      // Bilet kapatma butonu
+      // Bilet kapatma butonu (transcript ile)
       if (interaction.isButton() && interaction.customId === "close_ticket") {
         const ticketInfo = await db.get(`ticket_info_${interaction.channel.id}`);
         if (!ticketInfo) {
           return interaction.reply({ content: "Bu kanal için bilet bilgisi bulunamadı.", ephemeral: true });
         }
 
+        // Veritabanından temizle
         await db.delete(`user_ticket_${ticketInfo.userId}_${interaction.guild.id}`);
         await db.delete(`ticket_info_${interaction.channel.id}`);
 
         await interaction.reply({ content: "Bilet kapatılıyor, kanal 5 saniye içinde silinecek.", ephemeral: false });
 
         if (logChannel) {
+          // Kanal mesajlarını fetchele (son 100 mesaj)
+          const messages = await interaction.channel.messages.fetch({ limit: 100 });
+          const sorted = [...messages.values()].sort((a, b) => a.createdTimestamp - b.createdTimestamp);
+
+          // Transkript içeriğini hazırla
+          let transcript = `Ticket Transcript - ${interaction.channel.name}\n`;
+          transcript += `Oluşturan Kullanıcı : <@${ticketInfo.userId}>\n`;
+          transcript += `Oluşturulma Zamanı  : ${new Date(ticketInfo.createdAt).toLocaleString()}\n`;
+          transcript += `Kapatan Yetkili     : ${interaction.user.tag}\n`;
+          transcript += `Kapatılma Zamanı   : ${new Date().toLocaleString()}\n`;
+          transcript += `Bilet Türü          : ${ticketInfo.type}\n\n`;
+          transcript += `==================== MESAJ LOG ====================\n\n`;
+
+          for (const msg of sorted) {
+            const timestamp = new Date(msg.createdTimestamp).toLocaleString();
+            const author = `${msg.author?.tag || "Bilinmeyen Kullanıcı"}`;
+            const content = msg.content || (msg.attachments.size > 0 ? `[Ek dosya: ${msg.attachments.first().url}]` : "[Boş mesaj]");
+            transcript += `[${timestamp}] ${author}: ${content}\n`;
+          }
+
+          const buffer = Buffer.from(transcript, "utf-8");
+          const attachment = new AttachmentBuilder(buffer, {
+            name: `${interaction.channel.name}_transcript.txt`,
+          });
+
           const logEmbed = new EmbedBuilder()
             .setTitle("Bilet Kapatıldı")
             .addFields(
-              { name: "Kapatılan Kanal", value: `${interaction.channel.name}` },
-              { name: "Kapatıldı", value: `${interaction.user.tag}` }
+              { name: "Kapatılan Kanal", value: `${interaction.channel.name}`, inline: true },
+              { name: "Kapatan Yetkili", value: `${interaction.user.tag}`, inline: true }
             )
             .setColor("Red")
             .setTimestamp();
 
-          // Eğer transfer biletinde rütbe seçildiyse log'a ekle
           if (ticketInfo.selectedRobloxRole && ticketInfo.type === 'transfer') {
             logEmbed.addFields({
               name: "Verilen Transfer Rütbesi",
@@ -262,9 +288,10 @@ module.exports = {
             });
           }
 
-          logChannel.send({ embeds: [logEmbed] });
+          await logChannel.send({ embeds: [logEmbed], files: [attachment] });
         }
 
+        // Kanal silme
         setTimeout(() => interaction.channel.delete().catch(() => {}), 5000);
       }
 
