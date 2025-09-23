@@ -35,6 +35,10 @@ module.exports = {
       option.setName("kategori")
         .setDescription("Bilet kanallarının oluşturulacağı kategori")
         .addChannelTypes(ChannelType.GuildCategory)
+        .setRequired(false))
+    .addStringOption(option =>
+      option.setName("roblox-grup-id")
+        .setDescription("Roblox grup ID'si")
         .setRequired(false)),
 
   async execute(interaction, client) {
@@ -42,10 +46,12 @@ module.exports = {
     const supportRole = interaction.options.getRole("destek-rolu");
     const logChannel = interaction.options.getChannel("log-kanal");
     const category = interaction.options.getChannel("kategori");
+    const robloxGroupId = interaction.options.getString("roblox-grup-id");
 
     await db.set(`ticket_support_role_${interaction.guild.id}`, supportRole.id);
     if (logChannel) await db.set(`ticket_log_channel_${interaction.guild.id}`, logChannel.id);
     if (category) await db.set(`ticket_category_${interaction.guild.id}`, category.id);
+    if (robloxGroupId) await db.set(`roblox_group_id_${interaction.guild.id}`, robloxGroupId);
 
     const selectMenu = new StringSelectMenuBuilder()
       .setCustomId("ticket_type_select")
@@ -77,6 +83,18 @@ module.exports = {
     this.setupEventListeners(client);
   },
 
+  // Roblox grup rollerini getiren fonksiyon
+  async getRobloxGroupRoles(groupId) {
+    try {
+      const response = await fetch(`https://groups.roblox.com/v1/groups/${groupId}/roles`);
+      const data = await response.json();
+      return data.roles || [];
+    } catch (error) {
+      console.error('Roblox grup rolleri alınamadı:', error);
+      return [];
+    }
+  },
+
   setupEventListeners(client) {
     if (client.ticketEventsSetup) return;
     client.ticketEventsSetup = true;
@@ -86,6 +104,7 @@ module.exports = {
 
       const logChannelId = await db.get(`ticket_log_channel_${interaction.guild.id}`);
       const logChannel = logChannelId ? interaction.guild.channels.cache.get(logChannelId) : null;
+      const robloxGroupId = await db.get(`roblox_group_id_${interaction.guild.id}`);
 
       // Bilet türü seçildiğinde
       if (interaction.isStringSelectMenu() && interaction.customId === 'ticket_type_select') {
@@ -151,18 +170,43 @@ module.exports = {
           createdAt: Date.now(),
           status: 'open',
           claimedBy: null,
-          supportRole: supportRoleId
+          supportRole: supportRoleId,
+          selectedRobloxRole: null
         });
 
         const ticketButtons = new ActionRowBuilder().addComponents(
           new ButtonBuilder().setCustomId('close_ticket').setLabel('Bileti Kapat').setStyle(ButtonStyle.Danger),
-          new ButtonBuilder().setCustomId('claim_ticket').setLabel('Bileti Üstlen').setStyle(ButtonStyle.Primary)
+          new ButtonBuilder().setCustomId('claim_ticket').setLabel('Bileti Üstlen').setStyle(ButtonStyle.Primary),
+          new ButtonBuilder().setCustomId('select_roblox_role').setLabel('Roblox Rütbesi Seç').setStyle(ButtonStyle.Secondary)
         );
+
+        // Roblox grup rolleri menüsünü oluştur
+        let robloxRoleRow = null;
+        if (robloxGroupId) {
+          const robloxRoles = await this.getRobloxGroupRoles(robloxGroupId);
+          if (robloxRoles.length > 0) {
+            const roleOptions = robloxRoles.slice(0, 25).map(role => ({
+              label: role.name,
+              description: `Rank: ${role.rank}`,
+              value: `${role.id}_${role.name}_${role.rank}`
+            }));
+
+            const robloxRoleSelect = new StringSelectMenuBuilder()
+              .setCustomId('select_roblox_role_menu')
+              .setPlaceholder('Roblox rütbesi seçin')
+              .addOptions(roleOptions);
+
+            robloxRoleRow = new ActionRowBuilder().addComponents(robloxRoleSelect);
+          }
+        }
+
+        const components = [ticketButtons];
+        if (robloxRoleRow) components.push(robloxRoleRow);
 
         await ticketChannel.send({
           content: `${interaction.user} <@&${supportRoleId}>`,
           embeds: [new EmbedBuilder().setTitle(`${selectedType.description} Bileti`).setDescription("Sorununuzu buraya yazın.").setColor("Green")],
-          components: [ticketButtons]
+          components: components
         });
 
         await interaction.reply({ content: `Biletiniz açıldı: ${ticketChannel}`, ephemeral: true });
@@ -178,6 +222,27 @@ module.exports = {
             .setColor("Blue")
             .setTimestamp();
           logChannel.send({ embeds: [logEmbed] });
+        }
+      }
+
+      // Roblox rol seçimi
+      if (interaction.isStringSelectMenu() && interaction.customId === 'select_roblox_role_menu') {
+        const selectedValue = interaction.values[0];
+        const [roleId, roleName, roleRank] = selectedValue.split('_');
+        
+        const ticketInfo = await db.get(`ticket_info_${interaction.channel.id}`);
+        if (ticketInfo) {
+          ticketInfo.selectedRobloxRole = {
+            id: roleId,
+            name: roleName,
+            rank: roleRank
+          };
+          await db.set(`ticket_info_${interaction.channel.id}`, ticketInfo);
+          
+          await interaction.reply({ 
+            content: `✅ Roblox rütbesi seçildi: **${roleName}** (Rank: ${roleRank})`, 
+            ephemeral: false 
+          });
         }
       }
 
@@ -205,18 +270,43 @@ module.exports = {
           createdAt: Date.now(),
           status: 'open',
           claimedBy: null,
-          supportRole: newSupportRoleId
+          supportRole: newSupportRoleId,
+          selectedRobloxRole: null
         });
 
         const ticketButtons = new ActionRowBuilder().addComponents(
           new ButtonBuilder().setCustomId('close_ticket').setLabel('Bileti Kapat').setStyle(ButtonStyle.Danger),
-          new ButtonBuilder().setCustomId('claim_ticket').setLabel('Bileti Üstlen').setStyle(ButtonStyle.Primary)
+          new ButtonBuilder().setCustomId('claim_ticket').setLabel('Bileti Üstlen').setStyle(ButtonStyle.Primary),
+          new ButtonBuilder().setCustomId('select_roblox_role').setLabel('Roblox Rütbesi Seç').setStyle(ButtonStyle.Secondary)
         );
+
+        // Roblox grup rolleri menüsünü oluştur
+        let robloxRoleRow = null;
+        if (robloxGroupId) {
+          const robloxRoles = await this.getRobloxGroupRoles(robloxGroupId);
+          if (robloxRoles.length > 0) {
+            const roleOptions = robloxRoles.slice(0, 25).map(role => ({
+              label: role.name,
+              description: `Rank: ${role.rank}`,
+              value: `${role.id}_${role.name}_${role.rank}`
+            }));
+
+            const robloxRoleSelect = new StringSelectMenuBuilder()
+              .setCustomId('select_roblox_role_menu')
+              .setPlaceholder('Roblox rütbesi seçin')
+              .addOptions(roleOptions);
+
+            robloxRoleRow = new ActionRowBuilder().addComponents(robloxRoleSelect);
+          }
+        }
+
+        const components = [ticketButtons];
+        if (robloxRoleRow) components.push(robloxRoleRow);
 
         await ticketChannel.send({
           content: `${interaction.user} <@&${newSupportRoleId}>`,
           embeds: [new EmbedBuilder().setTitle(`Transfer Bileti`).setDescription("Bilet transferi için açıldı. Sorununuzu yazabilirsiniz.").setColor("Orange")],
-          components: [ticketButtons]
+          components: components
         });
 
         await interaction.reply({ content: `Transfer bileti açıldı: ${ticketChannel}`, ephemeral: true });
@@ -256,6 +346,16 @@ module.exports = {
             )
             .setColor("Red")
             .setTimestamp();
+
+          // Eğer Roblox rütbesi seçildiyse log'a ekle
+          if (ticketInfo.selectedRobloxRole) {
+            logEmbed.addFields({
+              name: "Seçilen Roblox Rütbesi",
+              value: `**${ticketInfo.selectedRobloxRole.name}** (Rank: ${ticketInfo.selectedRobloxRole.rank})`,
+              inline: true
+            });
+          }
+
           logChannel.send({ embeds: [logEmbed] });
         }
 
