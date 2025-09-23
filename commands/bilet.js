@@ -12,6 +12,7 @@ const {
   AttachmentBuilder
 } = require("discord.js");
 const { QuickDB } = require("quick.db");
+const fetch = require("node-fetch"); // Eğer node-fetch kullanıyorsanız
 const db = new QuickDB();
 
 module.exports = {
