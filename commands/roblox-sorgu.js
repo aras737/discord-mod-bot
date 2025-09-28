@@ -34,7 +34,7 @@ module.exports = {
       const userId = user.id;
 
       // 2. Grup rütbesi
-      const groupId = https: 17167324; // Buraya kendi grup ID’nizi yaz
+      const groupId = 17167324; // Buraya kendi grup ID’nizi yaz
       const groupRes = await fetch(`https://groups.roblox.com/v1/users/${userId}/groups/roles`);
       const groupData = await groupRes.json();
 
