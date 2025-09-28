@@ -38,18 +38,10 @@ const PERMISSION_LEVELS = {
 };
 
 // Yetki kontrolü fonksiyonu
-function checkPermissionLevel(member, requiredLevel) {
-  // Sunucu sahibi kontrolü
-  if (member.guild.ownerId === member.id) {
-    return PERMISSION_LEVELS.OWNER;
-  }
+function checkPermissionLevel(member) {
+  if (member.guild.ownerId === member.id) return PERMISSION_LEVELS.OWNER;
+  if (member.permissions.has(PermissionFlagsBits.Administrator)) return PERMISSION_LEVELS.ADMINISTRATOR;
 
-  // Yönetici yetkisi kontrolü
-  if (member.permissions.has(PermissionFlagsBits.Administrator)) {
-    return PERMISSION_LEVELS.ADMINISTRATOR;
-  }
-
-  // Moderatör yetkileri kontrolü
   const moderatorPermissions = [
     PermissionFlagsBits.BanMembers,
     PermissionFlagsBits.KickMembers,
@@ -59,45 +51,15 @@ function checkPermissionLevel(member, requiredLevel) {
     PermissionFlagsBits.ModerateMembers
   ];
 
-  const hasModerationPerms = moderatorPermissions.some(perm => 
-    member.permissions.has(perm)
-  );
-
-  if (hasModerationPerms) {
+  if (moderatorPermissions.some(perm => member.permissions.has(perm))) {
     return PERMISSION_LEVELS.MODERATOR;
   }
 
   return PERMISSION_LEVELS.EVERYONE;
 }
 
-// Komut yetki gereksinimlerini tanımla
-const COMMAND_PERMISSIONS = {
-  // Herkes kullanabilir
-  'ehliyet-al': PERMISSION_LEVELS.EVERYONE,
-  'ehliyet-sorgula': PERMISSION_LEVELS.EVERYONE,
-  'profil': PERMISSION_LEVELS.EVERYONE,
-  'yardim': PERMISSION_LEVELS.EVERYONE,
-
-  // Moderatör yetkileri
-  'kick': PERMISSION_LEVELS.MODERATOR,
-  'mute': PERMISSION_LEVELS.MODERATOR,
-  'warn': PERMISSION_LEVELS.MODERATOR,
-  'clear': PERMISSION_LEVELS.MODERATOR,
-  'slowmode': PERMISSION_LEVELS.MODERATOR,
-
-  // Yönetici yetkileri
-  'ban': PERMISSION_LEVELS.ADMINISTRATOR,
-  'unban': PERMISSION_LEVELS.ADMINISTRATOR,
-  'banlist': PERMISSION_LEVELS.ADMINISTRATOR,
-  'role': PERMISSION_LEVELS.ADMINISTRATOR,
-  'channel': PERMISSION_LEVELS.ADMINISTRATOR,
-  'server-settings': PERMISSION_LEVELS.ADMINISTRATOR,
-
-  // Sunucu sahibi yetkileri
-  'eval': PERMISSION_LEVELS.OWNER,
-  'restart': PERMISSION_LEVELS.OWNER,
-  'backup': PERMISSION_LEVELS.OWNER
-};
+// Komut yetki gereksinimlerini tanımla (artık oto ayarlanacak)
+const COMMAND_PERMISSIONS = {};
 
 // Yetki seviyesi isimlerini al
 function getPermissionLevelName(level) {
@@ -119,7 +81,15 @@ for (const file of commandFiles) {
   if ("data" in command && "execute" in command) {
     client.commands.set(command.data.name, command);
     commands.push(command.data.toJSON());
-    console.log(`Komut yüklendi: ${command.data.name}`);
+
+    // oto yetki atama
+    if (command.permissionLevel) {
+      COMMAND_PERMISSIONS[command.data.name] = PERMISSION_LEVELS[command.permissionLevel.toUpperCase()] || PERMISSION_LEVELS.EVERYONE;
+    } else {
+      COMMAND_PERMISSIONS[command.data.name] = PERMISSION_LEVELS.EVERYONE;
+    }
+
+    console.log(`Komut yüklendi: ${command.data.name} | Yetki: ${command.permissionLevel || "EVERYONE"}`);
   } else {
     console.log(`Komut eksik veya hatalı: ${file}`);
   }
@@ -161,28 +131,24 @@ client.on(Events.InteractionCreate, async interaction => {
   const userPermissionLevel = checkPermissionLevel(interaction.member);
   const requiredPermissionLevel = COMMAND_PERMISSIONS[interaction.commandName] || PERMISSION_LEVELS.EVERYONE;
 
-  // Yetki kontrolü
   if (userPermissionLevel < requiredPermissionLevel) {
     const requiredLevelName = getPermissionLevelName(requiredPermissionLevel);
     const userLevelName = getPermissionLevelName(userPermissionLevel);
-    
-    console.log(`Yetkisiz komut kullanımı: ${interaction.user.tag} (${userLevelName}) /${interaction.commandName} komutunu kullanmaya çalıştı. Gerekli yetki: ${requiredLevelName}`);
+
+    console.log(`Yetkisiz komut: ${interaction.user.tag} (${userLevelName}) /${interaction.commandName}`);
     
     return interaction.reply({
-      content: `Bu komutu kullanmak için ${requiredLevelName} yetkisine sahip olmanız gerekiyor. Mevcut yetki seviyeniz: ${userLevelName}`,
+      content: `Bu komutu kullanmak için ${requiredLevelName} yetkisine sahip olmanız gerekiyor.\nMevcut yetkiniz: ${userLevelName}`,
       ephemeral: true
     });
   }
 
-  // Komut çalıştırma
   try {
     console.log(`Komut kullanıldı: ${interaction.user.tag} /${interaction.commandName}`);
     await command.execute(interaction, client);
   } catch (err) {
     console.error(`Komut hatası (${interaction.commandName}):`, err);
-    
-    const errorMessage = "Komut çalıştırılırken bir hata oluştu. Lütfen daha sonra tekrar deneyin.";
-    
+    const errorMessage = "Komut çalıştırılırken bir hata oluştu. Lütfen tekrar deneyin.";
     if (interaction.replied || interaction.deferred) {
       await interaction.followUp({ content: errorMessage, ephemeral: true });
     } else {
@@ -195,12 +161,12 @@ client.on(Events.InteractionCreate, async interaction => {
 client.on(Events.GuildMemberAdd, member => {
   const ehliyet = db.get(`ehliyet_${member.id}`);
   if (!ehliyet) {
-    member.send("Sunucuya hoş geldiniz! Ehliyetiniz bulunmamaktadır. Ehliyet almak için /ehliyet-al komutunu kullanabilirsiniz.")
+    member.send("Sunucuya hoş geldiniz! Ehliyetiniz yok. /ehliyet-al komutunu kullanabilirsiniz.")
       .catch(() => console.log(`${member.user.tag} kullanıcısına özel mesaj gönderilemedi.`));
   }
 });
 
-// Üye sunucudan ayrıldığında
+// Üye ayrıldığında
 client.on(Events.GuildMemberRemove, member => {
   const ehliyet = db.get(`ehliyet_${member.id}`);
   if (ehliyet) {
@@ -209,12 +175,9 @@ client.on(Events.GuildMemberRemove, member => {
 });
 
 // Hata yakalama
-process.on('unhandledRejection', error => {
-  console.error('Yakalanmamış Promise hatası:', error);
-});
-
+process.on('unhandledRejection', error => console.error('Promise hatası:', error));
 process.on('uncaughtException', error => {
-  console.error('Yakalanmamış Exception hatası:', error);
+  console.error('Exception:', error);
   process.exit(1);
 });
 
