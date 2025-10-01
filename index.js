@@ -95,6 +95,14 @@ for (const file of commandFiles) {
   }
 }
 
+client.on("messageCreate", message => {
+  if (message.author.bot) return;
+
+  if (message.content.toLowerCase() === "sa") {
+    message.reply("Aleykümselam, hoş geldin!");
+  }
+});
+
 // Bot hazır olduğunda
 client.once(Events.ClientReady, async () => {
   console.log(`Discord bot giriş yaptı: ${client.user.tag}`);
