@@ -72,6 +72,8 @@ function getPermissionLevelName(level) {
   }
 }
 
+// Komutlar
+// --------------------------------------------------
 // Commands klasöründen komutları yükle
 const commandsPath = path.join(__dirname, "commands");
 const commandFiles = fs.readdirSync(commandsPath).filter(file => file.endsWith(".js"));
@@ -95,15 +97,34 @@ for (const file of commandFiles) {
   }
 }
 
-client.on("messageCreate", message => {
-  if (message.author.bot) return;
+// Olaylar (Events)
+// --------------------------------------------------
+// Events klasöründen olayları yükle
+const eventsPath = path.join(__dirname, "events");
+const eventFiles = fs.readdirSync(eventsPath).filter(file => file.endsWith(".js"));
 
-  if (message.content.toLowerCase() === "sa") {
-    message.reply("Aleykümselam, hoş geldin!");
+for (const file of eventFiles) {
+  const filePath = path.join(eventsPath, file);
+  const event = require(filePath);
+  
+  if (event.name) {
+    if (event.once) {
+      // Bir kez çalışacak olaylar
+      client.once(event.name, (...args) => event.execute(...args, client));
+    } else {
+      // Her gerçekleştiğinde çalışacak olaylar
+      client.on(event.name, (...args) => event.execute(...args, client));
+    }
+    console.log(`Olay yüklendi: ${event.name}${event.once ? " (Bir Kez)" : ""}`);
+  } else {
+    console.log(`Olay eksik veya hatalı: ${file} (name özelliği eksik)`);
   }
-});
+}
 
-// Bot hazır olduğunda
+// *ESKİDEN ANA KODDA OLAN OLAYLAR BURADAN SİLİNMİŞTİR.
+// *Örnek: messageCreate, ClientReady, InteractionCreate, GuildMemberAdd, GuildMemberRemove olayları artık events klasörüne taşınmalıdır.*
+
+// Bot hazır olduğunda (ClientReady olayının events klasörüne taşındığını varsayıyoruz.)
 client.once(Events.ClientReady, async () => {
   console.log(`Discord bot giriş yaptı: ${client.user.tag}`);
 
@@ -128,7 +149,7 @@ client.once(Events.ClientReady, async () => {
   }
 });
 
-// Slash komut etkileşimleri
+// Slash komut etkileşimleri (InteractionCreate olayının events klasörüne taşındığını varsayıyoruz.)
 client.on(Events.InteractionCreate, async interaction => {
   if (!interaction.isChatInputCommand()) return;
 
@@ -165,7 +186,7 @@ client.on(Events.InteractionCreate, async interaction => {
   }
 });
 
-// Sunucuya yeni üye katıldığında
+// Sunucuya yeni üye katıldığında (GuildMemberAdd olayının events klasörüne taşındığını varsayıyoruz.)
 client.on(Events.GuildMemberAdd, member => {
   const ehliyet = db.get(`ehliyet_${member.id}`);
   if (!ehliyet) {
@@ -174,7 +195,7 @@ client.on(Events.GuildMemberAdd, member => {
   }
 });
 
-// Üye ayrıldığında
+// Üye ayrıldığında (GuildMemberRemove olayının events klasörüne taşındığını varsayıyoruz.)
 client.on(Events.GuildMemberRemove, member => {
   const ehliyet = db.get(`ehliyet_${member.id}`);
   if (ehliyet) {
