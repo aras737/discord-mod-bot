@@ -1,23 +1,23 @@
-Const { SlashCommandBuilder, PermissionFlagsBits, EmbedBuilder } = require('discord.js');
+const { SlashCommandBuilder, PermissionFlagsBits, EmbedBuilder } = require('discord.js');
 
 module.exports = {
     // Komut Verisi
     data: new SlashCommandBuilder()
         .setName('banlist')
         .setDescription('Sunucudaki yasaklı kullanıcıların listesini gösterir.')
-        // Komut, sadece üyeleri yasaklama yetkisi olanlar tarafından kullanılabilir.
+        // Yetki kontrolü: Sadece BanMembers izni olanlar kullanabilir.
         .setDefaultMemberPermissions(PermissionFlagsBits.BanMembers), 
 
     // Çalıştırma Fonksiyonu
     async execute(interaction) {
-        // İşlem uzun sürebileceği için bekleme mesajı gönderilir. Yanıt sadece yetkiliye görünür.
+        // Yanıt süresi aşılmaması için bekleme mesajı gönderilir.
         await interaction.deferReply({ ephemeral: true }); 
 
         try {
             // Sunucunun tüm yasaklı kullanıcılarını çek
             const bans = await interaction.guild.bans.fetch();
 
-            // Eğer yasaklı kimse yoksa
+            // Yasaklı kullanıcı yoksa
             if (bans.size === 0) {
                 return interaction.editReply({ 
                     content: 'Bu sunucuda şu anda yasaklı kullanıcı bulunmamaktadır.',
@@ -28,17 +28,17 @@ module.exports = {
             // Embed alanına sığacak şekilde listeyi hazırlarız.
             let banListContent = '';
             let count = 0;
-            const maxListCount = 20; // Listeyi ilk 20 kişi ile sınırla
+            const maxListCount = 20; // Discord Embed alanını taşmamak için 20 kişi ile sınırla
 
             // Yasaklılar üzerinde döngü yaparak bilgileri topla
             for (const [userId, ban] of bans.entries()) {
                 if (count >= maxListCount) {
-                    banListContent += `\n...ve diğer ${bans.size - maxListCount} kullanıcı.`;
+                    banListContent += `\n...ve diğer **${bans.size - maxListCount}** kullanıcı.`;
                     break;
                 }
 
                 const userTag = ban.user.tag;
-                // Sebep bilgisi
+                // Sebep çok uzunsa kısaltılır.
                 const reason = ban.reason ? ban.reason.substring(0, 40) + (ban.reason.length > 40 ? '...' : '') : 'Sebep belirtilmedi';
                 
                 // Listeye ekle
@@ -48,7 +48,7 @@ module.exports = {
             
             // Embed oluşturma
             const banListEmbed = new EmbedBuilder()
-                .setColor('#2C3E50') // Kurumsal ve net bir renk
+                .setColor('#2C3E50') // Kurumsal, net tema rengi
                 .setTitle(`Sunucu Yasaklama Kaydı`)
                 .setDescription(`Bu sunucuda toplam **${bans.size}** yasaklı kullanıcı bulunmaktadır.`)
                 .addFields({
