@@ -1,70 +1,70 @@
-const { SlashCommandBuilder, PermissionFlagsBits, EmbedBuilder } = require('discord.js');
+Const { SlashCommandBuilder, PermissionFlagsBits, EmbedBuilder } = require('discord.js');
 
 module.exports = {
+    // Komut Verisi
     data: new SlashCommandBuilder()
         .setName('banlist')
-        .setDescription('Sunucudaki yasaklı kullanıcıları listeler')
-        .addIntegerOption(option =>
-            option.setName('sayfa')
-                .setDescription('Gösterilecek sayfa numarası')
-                .setMinValue(1)
-                .setRequired(false))
-        .setDefaultMemberPermissions(PermissionFlagsBits.BanMembers),
+        .setDescription('Sunucudaki yasaklı kullanıcıların listesini gösterir.')
+        // Komut, sadece üyeleri yasaklama yetkisi olanlar tarafından kullanılabilir.
+        .setDefaultMemberPermissions(PermissionFlagsBits.BanMembers), 
 
+    // Çalıştırma Fonksiyonu
     async execute(interaction) {
-        const page = interaction.options.getInteger('sayfa') || 1;
-        const itemsPerPage = 10;
+        // İşlem uzun sürebileceği için bekleme mesajı gönderilir. Yanıt sadece yetkiliye görünür.
+        await interaction.deferReply({ ephemeral: true }); 
 
         try {
-            // Yasaklı kullanıcıları getir
+            // Sunucunun tüm yasaklı kullanıcılarını çek
             const bans = await interaction.guild.bans.fetch();
 
+            // Eğer yasaklı kimse yoksa
             if (bans.size === 0) {
-                const noBansEmbed = new EmbedBuilder()
-                    .setColor('#00FF00')
-                    .setTitle('Yasaklı Kullanıcı Listesi')
-                    .setDescription('Sunucuda yasaklı kullanıcı bulunmamaktadır.')
-                    .setTimestamp();
-
-                return interaction.reply({ embeds: [noBansEmbed] });
+                return interaction.editReply({ 
+                    content: 'Bu sunucuda şu anda yasaklı kullanıcı bulunmamaktadır.',
+                    ephemeral: true
+                });
             }
 
-            // Sayfa hesaplaması
-            const totalPages = Math.ceil(bans.size / itemsPerPage);
-            if (page > totalPages) {
-                return interaction.reply({ content: `Geçersiz sayfa. Toplam sayfa sayısı: ${totalPages}`, ephemeral: true });
+            // Embed alanına sığacak şekilde listeyi hazırlarız.
+            let banListContent = '';
+            let count = 0;
+            const maxListCount = 20; // Listeyi ilk 20 kişi ile sınırla
+
+            // Yasaklılar üzerinde döngü yaparak bilgileri topla
+            for (const [userId, ban] of bans.entries()) {
+                if (count >= maxListCount) {
+                    banListContent += `\n...ve diğer ${bans.size - maxListCount} kullanıcı.`;
+                    break;
+                }
+
+                const userTag = ban.user.tag;
+                // Sebep bilgisi
+                const reason = ban.reason ? ban.reason.substring(0, 40) + (ban.reason.length > 40 ? '...' : '') : 'Sebep belirtilmedi';
+                
+                // Listeye ekle
+                banListContent += `**${userTag}** (ID: ${userId})\n> Sebep: *${reason}*\n`;
+                count++;
             }
-
-            const startIndex = (page - 1) * itemsPerPage;
-            const endIndex = startIndex + itemsPerPage;
-
-            // Yasaklıları diziye çevir
-            const banArray = Array.from(bans.values()).slice(startIndex, endIndex);
-
-            // Embed oluştur
+            
+            // Embed oluşturma
             const banListEmbed = new EmbedBuilder()
-                .setColor('#FF0000')
-                .setTitle('Yasaklı Kullanıcı Listesi')
-                .setDescription(`Toplam yasaklı kullanıcı: **${bans.size}**`)
-                .setFooter({ text: `Sayfa ${page}/${totalPages}` })
+                .setColor('#2C3E50') // Kurumsal ve net bir renk
+                .setTitle(`Sunucu Yasaklama Kaydı`)
+                .setDescription(`Bu sunucuda toplam **${bans.size}** yasaklı kullanıcı bulunmaktadır.`)
+                .addFields({
+                    name: `Detaylı Kayıtlar: (İlk ${count} Kullanıcı)`, 
+                    value: banListContent || 'Yasaklı listesi bilgisi çekilemedi.',
+                    inline: false
+                })
+                .setFooter({ text: `Denetleyen Yetkili: ${interaction.user.tag}` })
                 .setTimestamp();
-
-            // Her yasaklı kullanıcı için alan ekle
-            banArray.forEach((ban, index) => {
-                const user = ban.user;
-                const reason = ban.reason || 'Sebep belirtilmedi';
-                const number = startIndex + index + 1;
-
-                banListEmbed.addFields(
-                    { name: `${number}. ${user.tag}`, value: `**ID:** ${user.id}\n**Sebep:** ${reason}`, inline: false }
-                );
-            });
-
-            await interaction.reply({ embeds: [banListEmbed] });
+            
+            // Sonucu sadece yetkiliye gönder
+            await interaction.editReply({ embeds: [banListEmbed], ephemeral: true });
 
         } catch (error) {
-            console.error('Banlist hatası:', error);
-            await interaction.reply({ content: 'Yasaklı kullanıcı listesi alınırken hata oluştu.', ephemeral: true });
+            console.error('Banlist çekme hatası:', error);
+            await interaction.editReply({ content: 'Yasaklı listesini çekerken bir API hatası oluştu.', ephemeral: true });
         }
     },
 };
