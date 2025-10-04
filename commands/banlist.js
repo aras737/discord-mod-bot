@@ -18,55 +18,53 @@ module.exports = {
         try {
             // Yasaklı kullanıcıları getir
             const bans = await interaction.guild.bans.fetch();
-            
+
             if (bans.size === 0) {
                 const noBansEmbed = new EmbedBuilder()
                     .setColor('#00FF00')
                     .setTitle('Yasaklı Kullanıcı Listesi')
-                    .setDescription('Bu sunucuda yasaklı kullanıcı bulunmamaktadır.');
-                
+                    .setDescription('Sunucuda yasaklı kullanıcı bulunmamaktadır.')
+                    .setTimestamp();
+
                 return interaction.reply({ embeds: [noBansEmbed] });
             }
 
-            // Sayfalama hesaplamaları
+            // Sayfa hesaplaması
             const totalPages = Math.ceil(bans.size / itemsPerPage);
-            
             if (page > totalPages) {
-                return interaction.reply({ content: `Geçersiz sayfa numarası. Toplam sayfa sayısı: ${totalPages}`, ephemeral: true });
+                return interaction.reply({ content: `Geçersiz sayfa. Toplam sayfa sayısı: ${totalPages}`, ephemeral: true });
             }
 
             const startIndex = (page - 1) * itemsPerPage;
             const endIndex = startIndex + itemsPerPage;
-            
-            // Yasaklı kullanıcıları diziye çevir ve sayfalama uygula
+
+            // Yasaklıları diziye çevir
             const banArray = Array.from(bans.values()).slice(startIndex, endIndex);
-            
+
             // Embed oluştur
             const banListEmbed = new EmbedBuilder()
                 .setColor('#FF0000')
                 .setTitle('Yasaklı Kullanıcı Listesi')
-                .setDescription(`Toplam yasaklı kullanıcı: ${bans.size}`)
+                .setDescription(`Toplam yasaklı kullanıcı: **${bans.size}**`)
                 .setFooter({ text: `Sayfa ${page}/${totalPages}` })
                 .setTimestamp();
 
-            // Her yasaklı kullanıcı için field ekle
+            // Her yasaklı kullanıcı için alan ekle
             banArray.forEach((ban, index) => {
                 const user = ban.user;
                 const reason = ban.reason || 'Sebep belirtilmedi';
-                const banNumber = startIndex + index + 1;
-                
-                banListEmbed.addFields({
-                    name: `${banNumber}. ${user.tag}`,
-                    value: `**ID:** ${user.id}\n**Sebep:** ${reason}`,
-                    inline: false
-                });
+                const number = startIndex + index + 1;
+
+                banListEmbed.addFields(
+                    { name: `${number}. ${user.tag}`, value: `**ID:** ${user.id}\n**Sebep:** ${reason}`, inline: false }
+                );
             });
 
             await interaction.reply({ embeds: [banListEmbed] });
 
         } catch (error) {
             console.error('Banlist hatası:', error);
-            await interaction.reply({ content: 'Yasaklı kullanıcı listesi alınırken bir hata oluştu.', ephemeral: true });
+            await interaction.reply({ content: 'Yasaklı kullanıcı listesi alınırken hata oluştu.', ephemeral: true });
         }
     },
 };
