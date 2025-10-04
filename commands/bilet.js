@@ -12,13 +12,14 @@ const {
   AttachmentBuilder
 } = require("discord.js");
 const { QuickDB } = require("quick.db");
-const fetch = require("node-fetch"); // Eğer node-fetch kullanıyorsanız
+const fetch = require("node-fetch");
 const db = new QuickDB();
 
 module.exports = {
   data: new SlashCommandBuilder()
     .setName("bilet-sistemi")
     .setDescription("Gelişmiş bilet sistemi kurar")
+    .setDefaultMemberPermissions(PermissionFlagsBits.Administrator) // 🔹 Sadece adminler kullanabilir
     .addChannelOption(option =>
       option.setName("kanal")
         .setDescription("Bilet sisteminin kurulacağı kanal")
@@ -44,6 +45,23 @@ module.exports = {
         .setRequired(false)),
 
   async execute(interaction, client) {
+    // 🔹 Yetki kontrolü
+    if (!interaction.member.permissions.has(PermissionFlagsBits.Administrator)) {
+      return interaction.reply({
+        content: "❌ Bu komutu kullanmak için Yönetici yetkisine sahip olmalısınız.",
+        ephemeral: true
+      });
+    }
+
+    // 🔹 Mevcut bilet kontrolü
+    const existingTicket = await db.get(`user_ticket_${interaction.user.id}_${interaction.guild.id}`);
+    if (existingTicket) {
+      return interaction.reply({ 
+        content: "❌ Zaten açık bir biletiniz var! Önce mevcut biletinizi kapatmalısınız.", 
+        ephemeral: true 
+      });
+    }
+
     const targetChannel = interaction.options.getChannel("kanal");
     const supportRole = interaction.options.getRole("destek-rolu");
     const logChannel = interaction.options.getChannel("log-kanal");
@@ -82,10 +100,10 @@ module.exports = {
     await targetChannel.send({ embeds: [ticketEmbed], components: [selectRow] });
     await interaction.reply({ content: `Bilet sistemi başarıyla ${targetChannel} kanalında kuruldu.`, ephemeral: true });
 
+    // 🔹 Eventleri kur
     this.setupEventListeners(client);
   },
 
-  // Roblox grup rollerini getiren fonksiyon
   async getRobloxGroupRoles(groupId) {
     try {
       const response = await fetch(`https://groups.roblox.com/v1/groups/${groupId}/roles`);
@@ -98,7 +116,7 @@ module.exports = {
   },
 
   setupEventListeners(client) {
-    if (client.ticketEventsSetup) return;
+    if (client.ticketEventsSetup) return; // Tekrar kurmamak için
     client.ticketEventsSetup = true;
 
     client.on(Events.InteractionCreate, async (interaction) => {
@@ -108,7 +126,7 @@ module.exports = {
       const logChannel = logChannelId ? interaction.guild.channels.cache.get(logChannelId) : null;
       const robloxGroupId = await db.get(`roblox_group_id_${interaction.guild.id}`);
 
-      // Bilet türü seçildiğinde
+      // 🔹 Bilet türü seçildiğinde
       if (interaction.isStringSelectMenu() && interaction.customId === 'ticket_type_select') {
         const ticketType = interaction.values[0];
         const supportRoleId = await db.get(`ticket_support_role_${interaction.guild.id}`);
@@ -136,6 +154,7 @@ module.exports = {
           ]
         });
 
+        // 🔹 Kullanıcıya açık bilet var olarak kaydet
         await db.set(`user_ticket_${interaction.user.id}_${interaction.guild.id}`, ticketChannel.id);
         await db.set(`ticket_info_${ticketChannel.id}`, {
           userId: interaction.user.id,
@@ -147,57 +166,25 @@ module.exports = {
           selectedRobloxRole: null
         });
 
+        // 🔹 Bilet mesajı ve button
         const ticketButtons = new ActionRowBuilder().addComponents(
           new ButtonBuilder().setCustomId('close_ticket').setLabel('Bileti Kapat').setStyle(ButtonStyle.Danger),
           new ButtonBuilder().setCustomId('claim_ticket').setLabel('Bileti Üstlen').setStyle(ButtonStyle.Primary)
         );
 
-        let components = [ticketButtons];
-        let embedColor = "Green";
-        let embedDescription = "Sorununuzu buraya yazın.";
-
-        // Sadece transfer biletleri için rütbe seçimi
-        if (ticketType === "transfer" && robloxGroupId) {
-          const robloxRoles = await this.getRobloxGroupRoles(robloxGroupId);
-          if (robloxRoles.length > 0) {
-            embedColor = "Orange";
-            embedDescription = "Transfer talebinizi buraya yazın ve aşağıdan istediğiniz rütbeyi seçin.";
-
-            // Rolleri 25'erli gruplara böl (Discord select menu limiti)
-            const roleChunks = [];
-            for (let i = 0; i < robloxRoles.length; i += 25) {
-              roleChunks.push(robloxRoles.slice(i, i + 25));
-            }
-
-            // Her chunk için ayrı select menu oluştur
-            roleChunks.forEach((chunk, index) => {
-              const roleOptions = chunk.map(role => ({
-                label: role.name.length > 100 ? role.name.substring(0, 97) + "..." : role.name,
-                description: `Rank: ${role.rank}`,
-                value: `${role.id}_${role.name}_${role.rank}`
-              }));
-
-              const robloxRoleSelect = new StringSelectMenuBuilder()
-                .setCustomId(`select_roblox_role_menu_${index}`)
-                .setPlaceholder(`Roblox rütbesi seçin ${roleChunks.length > 1 ? `(${index + 1}/${roleChunks.length})` : ''}`)
-                .addOptions(roleOptions);
-
-              components.push(new ActionRowBuilder().addComponents(robloxRoleSelect));
-            });
-          }
-        }
+        const components = [ticketButtons];
+        const embedColor = ticketType === "transfer" ? "Orange" : "Green";
+        const embedDescription = "Sorununuzu buraya yazın.";
 
         await ticketChannel.send({
           content: `${interaction.user} <@&${supportRoleId}>`,
-          embeds: [new EmbedBuilder()
-            .setTitle(`${selectedType.description} Bileti`)
-            .setDescription(embedDescription)
-            .setColor(embedColor)],
+          embeds: [new EmbedBuilder().setTitle(`${selectedType.description} Bileti`).setDescription(embedDescription).setColor(embedColor)],
           components: components
         });
 
         await interaction.reply({ content: `${selectedType.description} biletiniz açıldı: ${ticketChannel}`, ephemeral: true });
 
+        // 🔹 Log
         if (logChannel) {
           const logEmbed = new EmbedBuilder()
             .setTitle("Yeni Bilet Açıldı")
@@ -212,66 +199,17 @@ module.exports = {
         }
       }
 
-      // Roblox rol seçimi (sadece transfer biletleri için)
-      if (interaction.isStringSelectMenu() && interaction.customId.startsWith('select_roblox_role_menu_')) {
-        const selectedValue = interaction.values[0];
-        const [roleId, roleName, roleRank] = selectedValue.split('_');
-        
-        const ticketInfo = await db.get(`ticket_info_${interaction.channel.id}`);
-        if (ticketInfo && ticketInfo.type === 'transfer') {
-          ticketInfo.selectedRobloxRole = {
-            id: roleId,
-            name: roleName,
-            rank: roleRank
-          };
-          await db.set(`ticket_info_${interaction.channel.id}`, ticketInfo);
-          
-          await interaction.reply({ 
-            content: `Talep edilen transfer rütbesi: **${roleName}** (Rank: ${roleRank})`, 
-            ephemeral: false 
-          });
-        }
-      }
-
-      // Bilet kapatma butonu (transcript ile)
+      // 🔹 Bilet kapatma butonu
       if (interaction.isButton() && interaction.customId === "close_ticket") {
         const ticketInfo = await db.get(`ticket_info_${interaction.channel.id}`);
-        if (!ticketInfo) {
-          return interaction.reply({ content: "Bu kanal için bilet bilgisi bulunamadı.", ephemeral: true });
-        }
+        if (!ticketInfo) return interaction.reply({ content: "Bilet bilgisi bulunamadı.", ephemeral: true });
 
-        // Veritabanından temizle
         await db.delete(`user_ticket_${ticketInfo.userId}_${interaction.guild.id}`);
         await db.delete(`ticket_info_${interaction.channel.id}`);
 
         await interaction.reply({ content: "Bilet kapatılıyor, kanal 5 saniye içinde silinecek.", ephemeral: false });
 
         if (logChannel) {
-          // Kanal mesajlarını fetchele (son 100 mesaj)
-          const messages = await interaction.channel.messages.fetch({ limit: 100 });
-          const sorted = [...messages.values()].sort((a, b) => a.createdTimestamp - b.createdTimestamp);
-
-          // Transkript içeriğini hazırla
-          let transcript = `Ticket Transcript - ${interaction.channel.name}\n`;
-          transcript += `Oluşturan Kullanıcı : <@${ticketInfo.userId}>\n`;
-          transcript += `Oluşturulma Zamanı  : ${new Date(ticketInfo.createdAt).toLocaleString()}\n`;
-          transcript += `Kapatan Yetkili     : ${interaction.user.tag}\n`;
-          transcript += `Kapatılma Zamanı   : ${new Date().toLocaleString()}\n`;
-          transcript += `Bilet Türü          : ${ticketInfo.type}\n\n`;
-          transcript += `==================== MESAJ LOG ====================\n\n`;
-
-          for (const msg of sorted) {
-            const timestamp = new Date(msg.createdTimestamp).toLocaleString();
-            const author = `${msg.author?.tag || "Bilinmeyen Kullanıcı"}`;
-            const content = msg.content || (msg.attachments.size > 0 ? `[Ek dosya: ${msg.attachments.first().url}]` : "[Boş mesaj]");
-            transcript += `[${timestamp}] ${author}: ${content}\n`;
-          }
-
-          const buffer = Buffer.from(transcript, "utf-8");
-          const attachment = new AttachmentBuilder(buffer, {
-            name: `${interaction.channel.name}_transcript.txt`,
-          });
-
           const logEmbed = new EmbedBuilder()
             .setTitle("Bilet Kapatıldı")
             .addFields(
@@ -280,32 +218,18 @@ module.exports = {
             )
             .setColor("Red")
             .setTimestamp();
-
-          if (ticketInfo.selectedRobloxRole && ticketInfo.type === 'transfer') {
-            logEmbed.addFields({
-              name: "Verilen Transfer Rütbesi",
-              value: `**${ticketInfo.selectedRobloxRole.name}** (Rank: ${ticketInfo.selectedRobloxRole.rank})`,
-              inline: true
-            });
-          }
-
-          await logChannel.send({ embeds: [logEmbed], files: [attachment] });
+          logChannel.send({ embeds: [logEmbed] });
         }
 
-        // Kanal silme
         setTimeout(() => interaction.channel.delete().catch(() => {}), 5000);
       }
 
-      // Bilet üstlenme butonu
+      // 🔹 Bilet üstlenme
       if (interaction.isButton() && interaction.customId === "claim_ticket") {
         const ticketInfo = await db.get(`ticket_info_${interaction.channel.id}`);
-        if (!ticketInfo) {
-          return interaction.reply({ content: "Bu kanal için bilet bilgisi bulunamadı.", ephemeral: true });
-        }
+        if (!ticketInfo) return interaction.reply({ content: "Bilet bilgisi bulunamadı.", ephemeral: true });
 
-        if (ticketInfo.claimedBy) {
-          return interaction.reply({ content: `Bu bilet zaten üstlenilmiş.`, ephemeral: true });
-        }
+        if (ticketInfo.claimedBy) return interaction.reply({ content: "Bilet zaten üstlenilmiş.", ephemeral: true });
 
         ticketInfo.claimedBy = interaction.user.id;
         await db.set(`ticket_info_${interaction.channel.id}`, ticketInfo);
