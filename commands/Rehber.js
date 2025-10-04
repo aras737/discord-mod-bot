@@ -1,6 +1,8 @@
 const { SlashCommandBuilder, EmbedBuilder } = require("discord.js");
 
 module.exports = {
+  permissionLevel: "ADMINISTRATOR", // 🔹 Sadece yönetici yetkisine sahipler kullanabilir
+
   data: new SlashCommandBuilder()
     .setName("rehber")
     .setDescription("Sunucu rehberini gösterir."),
@@ -40,7 +42,10 @@ module.exports = {
         }
       )
       .setColor("Red")
-      .setFooter({ text: "LOA Yönetim Kurulu Botu", iconURL: "https://i.imgur.com/file-2NMqhhvDaZuAgwjbGwEo1M.png" })
+      .setFooter({
+        text: "LOA Yönetim Kurulu Botu",
+        iconURL: "https://i.imgur.com/file-2NMqhhvDaZuAgwjbGwEo1M.png"
+      })
       .setTimestamp();
 
     await interaction.reply({ embeds: [embed], ephemeral: false });
