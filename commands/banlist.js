@@ -1,23 +1,18 @@
 const { SlashCommandBuilder, PermissionFlagsBits, EmbedBuilder } = require('discord.js');
 
 module.exports = {
-    // Komut Verisi
     data: new SlashCommandBuilder()
         .setName('banlist')
         .setDescription('Sunucudaki yasaklı kullanıcıların listesini gösterir.')
-        // Yetki kontrolü: Sadece BanMembers izni olanlar kullanabilir.
-        .setDefaultMemberPermissions(PermissionFlagsBits.BanMembers), 
+        .setDefaultMemberPermissions(PermissionFlagsBits.BanMembers),
 
-    // Çalıştırma Fonksiyonu
     async execute(interaction) {
-        // Yanıt süresi aşılmaması için bekleme mesajı gönderilir.
-        await interaction.deferReply({ ephemeral: true }); 
+        // İşlem uzun sürebileceği için bekleme mesajı gönderilir.
+        await interaction.deferReply({ ephemeral: true });
 
         try {
-            // Sunucunun tüm yasaklı kullanıcılarını çek
             const bans = await interaction.guild.bans.fetch();
 
-            // Yasaklı kullanıcı yoksa
             if (bans.size === 0) {
                 return interaction.editReply({ 
                     content: 'Bu sunucuda şu anda yasaklı kullanıcı bulunmamaktadır.',
@@ -25,46 +20,74 @@ module.exports = {
                 });
             }
 
-            // Embed alanına sığacak şekilde listeyi hazırlarız.
-            let banListContent = '';
-            let count = 0;
-            const maxListCount = 20; // Discord Embed alanını taşmamak için 20 kişi ile sınırla
+            // --- SAYFALAMA MANTIĞI BAŞLANGICI ---
+            const maxContentLength = 1000; // Güvenli bir sınır (1024'ten biraz az)
+            const banDetails = []; // Tüm kullanıcı detaylarını tutacak dizi
+            let currentContent = '';
+            let pageNumber = 1;
+            const embeds = []; // Oluşturulan tüm Embed'leri tutacak dizi
 
-            // Yasaklılar üzerinde döngü yaparak bilgileri topla
+            // Tüm yasaklıları döngüye al
             for (const [userId, ban] of bans.entries()) {
-                if (count >= maxListCount) {
-                    banListContent += `\n...ve diğer **${bans.size - maxListCount}** kullanıcı.`;
-                    break;
-                }
-
                 const userTag = ban.user.tag;
-                // Sebep çok uzunsa kısaltılır.
-                const reason = ban.reason ? ban.reason.substring(0, 40) + (ban.reason.length > 40 ? '...' : '') : 'Sebep belirtilmedi';
+                const reason = ban.reason ? ban.reason.substring(0, 75) + (ban.reason.length > 75 ? '...' : '') : 'Sebep belirtilmedi';
                 
-                // Listeye ekle
-                banListContent += `**${userTag}** (ID: ${userId})\n> Sebep: *${reason}*\n`;
-                count++;
+                // Her bir yasaklı için oluşturulan metin satırı
+                const entry = `**${userTag}** (ID: ${userId})\n> Sebep: *${reason}*\n`;
+                
+                // Eğer mevcut içerik + yeni giriş, limiti aşacaksa
+                if (currentContent.length + entry.length > maxContentLength) {
+                    
+                    // Önceki sayfayı Embed olarak kaydet
+                    const embed = new EmbedBuilder()
+                        .setColor('#2C3E50')
+                        .setTitle(`Sunucu Yasaklama Kaydı (Sayfa ${pageNumber})`)
+                        .setDescription(`Toplam **${bans.size}** yasaklı kullanıcı bulunmaktadır.`)
+                        .addFields({
+                            name: `Yasaklı Kullanıcılar:`, 
+                            value: currentContent || 'Liste bilgisi çekilemedi.',
+                            inline: false
+                        })
+                        .setFooter({ text: `Sayfa ${pageNumber}` });
+                    
+                    embeds.push(embed);
+                    
+                    // Yeni sayfayı başlat
+                    currentContent = entry;
+                    pageNumber++;
+                } else {
+                    // Limite ulaşılmadıysa mevcut sayfaya ekle
+                    currentContent += entry;
+                }
             }
             
-            // Embed oluşturma
-            const banListEmbed = new EmbedBuilder()
-                .setColor('#2C3E50') // Kurumsal, net tema rengi
-                .setTitle(`Sunucu Yasaklama Kaydı`)
-                .setDescription(`Bu sunucuda toplam **${bans.size}** yasaklı kullanıcı bulunmaktadır.`)
-                .addFields({
-                    name: `Detaylı Kayıtlar: (İlk ${count} Kullanıcı)`, 
-                    value: banListContent || 'Yasaklı listesi bilgisi çekilemedi.',
-                    inline: false
-                })
-                .setFooter({ text: `Denetleyen Yetkili: ${interaction.user.tag}` })
-                .setTimestamp();
-            
-            // Sonucu sadece yetkiliye gönder
-            await interaction.editReply({ embeds: [banListEmbed], ephemeral: true });
+            // Döngü bittikten sonra kalan son içeriği de Embed olarak kaydet
+            if (currentContent.length > 0) {
+                const finalEmbed = new EmbedBuilder()
+                    .setColor('#2C3E50')
+                    .setTitle(`Sunucu Yasaklama Kaydı (Sayfa ${pageNumber})`)
+                    .setDescription(`Toplam **${bans.size}** yasaklı kullanıcı bulunmaktadır.`)
+                    .addFields({
+                        name: `Yasaklı Kullanıcılar:`, 
+                        value: currentContent || 'Liste bilgisi çekilemedi.',
+                        inline: false
+                    })
+                    .setFooter({ text: `Sayfa ${pageNumber}` })
+                    .setTimestamp();
+                
+                embeds.push(finalEmbed);
+            }
+            // --- SAYFALAMA MANTIĞI SONU ---
+
+
+            // Oluşturulan tüm embed'leri gönder (Discord tek mesajda 10'a kadar Embed destekler)
+            // Eğer 10'dan fazla sayfa olursa, bu mantığı daha da geliştirmen gerekir (birden fazla mesaj göndermek gibi).
+            await interaction.editReply({ embeds: embeds, ephemeral: true });
 
         } catch (error) {
             console.error('Banlist çekme hatası:', error);
-            await interaction.editReply({ content: 'Yasaklı listesini çekerken bir API hatası oluştu.', ephemeral: true });
+            // Hatayı daha anlaşılır yapalım
+            await interaction.editReply({ content: 'Yasaklı listesini çekerken beklenmedik bir hata oluştu. Lütfen logları kontrol edin.', ephemeral: true });
         }
     },
 };
