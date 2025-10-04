@@ -74,7 +74,6 @@ function getPermissionLevelName(level) {
 
 // Komutlar
 // --------------------------------------------------
-// Commands klasöründen komutları yükle
 const commandsPath = path.join(__dirname, "commands");
 const commandFiles = fs.readdirSync(commandsPath).filter(file => file.endsWith(".js"));
 
@@ -99,7 +98,6 @@ for (const file of commandFiles) {
 
 // Olaylar (Events)
 // --------------------------------------------------
-// Events klasöründen olayları yükle
 const eventsPath = path.join(__dirname, "events");
 const eventFiles = fs.readdirSync(eventsPath).filter(file => file.endsWith(".js"));
 
@@ -109,10 +107,8 @@ for (const file of eventFiles) {
   
   if (event.name) {
     if (event.once) {
-      // Bir kez çalışacak olaylar
       client.once(event.name, (...args) => event.execute(...args, client));
     } else {
-      // Her gerçekleştiğinde çalışacak olaylar
       client.on(event.name, (...args) => event.execute(...args, client));
     }
     console.log(`Olay yüklendi: ${event.name}${event.once ? " (Bir Kez)" : ""}`);
@@ -121,10 +117,7 @@ for (const file of eventFiles) {
   }
 }
 
-// *ESKİDEN ANA KODDA OLAN OLAYLAR BURADAN SİLİNMİŞTİR.
-// *Örnek: messageCreate, ClientReady, InteractionCreate, GuildMemberAdd, GuildMemberRemove olayları artık events klasörüne taşınmalıdır.*
-
-// Bot hazır olduğunda (ClientReady olayının events klasörüne taşındığını varsayıyoruz.)
+// Bot hazır olduğunda
 client.once(Events.ClientReady, async () => {
   console.log(`Discord bot giriş yaptı: ${client.user.tag}`);
 
@@ -140,6 +133,37 @@ client.once(Events.ClientReady, async () => {
     console.error("Komut yükleme hatası:", err);
   }
 
+  // 🔥 OTO YETKİLENDİRME + ROL EŞLEŞTİRME SİSTEMİ 🔥
+  try {
+    console.log("Tüm komutlar Discord API'den taranıyor...");
+    const globalCommands = await rest.get(Routes.applicationCommands(client.user.id));
+
+    for (const cmd of globalCommands) {
+      const cmdName = cmd.name.toLowerCase();
+
+      // Eğer komut zaten listede yoksa, otomatik ekle
+      if (!COMMAND_PERMISSIONS[cmdName]) {
+        let level = PERMISSION_LEVELS.EVERYONE;
+
+        // Otomatik akıllı yetki atama
+        if (["ban", "kick", "mute", "warn"].some(k => cmdName.includes(k))) {
+          level = PERMISSION_LEVELS.MODERATOR;
+        } else if (["addrole", "removerole", "set"].some(k => cmdName.includes(k))) {
+          level = PERMISSION_LEVELS.ADMINISTRATOR;
+        } else if (["owner", "reload", "eval"].some(k => cmdName.includes(k))) {
+          level = PERMISSION_LEVELS.OWNER;
+        }
+
+        COMMAND_PERMISSIONS[cmdName] = level;
+        console.log(`Yeni komut bulundu (API): /${cmdName} | Otomatik Yetki: ${getPermissionLevelName(level)}`);
+      }
+    }
+
+    console.log(`✅ Toplam ${Object.keys(COMMAND_PERMISSIONS).length} komut yetkilendirildi.`);
+  } catch (err) {
+    console.error("Otomatik komut tarama hatası:", err);
+  }
+
   // Roblox giriş kontrolü
   try {
     const currentUser = await noblox.setCookie(process.env.ROBLOX_COOKIE);
@@ -149,7 +173,7 @@ client.once(Events.ClientReady, async () => {
   }
 });
 
-// Slash komut etkileşimleri (InteractionCreate olayının events klasörüne taşındığını varsayıyoruz.)
+// Slash komut etkileşimleri
 client.on(Events.InteractionCreate, async interaction => {
   if (!interaction.isChatInputCommand()) return;
 
@@ -167,7 +191,7 @@ client.on(Events.InteractionCreate, async interaction => {
     console.log(`Yetkisiz komut: ${interaction.user.tag} (${userLevelName}) /${interaction.commandName}`);
     
     return interaction.reply({
-      content: `Bu komutu kullanmak için ${requiredLevelName} yetkisine sahip olmanız gerekiyor.\nMevcut yetkiniz: ${userLevelName}`,
+      content: `❌ Bu komutu kullanmak için **${requiredLevelName}** yetkisine sahip olmanız gerekiyor.\nMevcut yetkiniz: **${userLevelName}**`,
       ephemeral: true
     });
   }
@@ -186,7 +210,7 @@ client.on(Events.InteractionCreate, async interaction => {
   }
 });
 
-// Sunucuya yeni üye katıldığında (GuildMemberAdd olayının events klasörüne taşındığını varsayıyoruz.)
+// Üye katıldığında
 client.on(Events.GuildMemberAdd, member => {
   const ehliyet = db.get(`ehliyet_${member.id}`);
   if (!ehliyet) {
@@ -195,7 +219,7 @@ client.on(Events.GuildMemberAdd, member => {
   }
 });
 
-// Üye ayrıldığında (GuildMemberRemove olayının events klasörüne taşındığını varsayıyoruz.)
+// Üye ayrıldığında
 client.on(Events.GuildMemberRemove, member => {
   const ehliyet = db.get(`ehliyet_${member.id}`);
   if (ehliyet) {
