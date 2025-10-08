@@ -7,11 +7,9 @@ module.exports = {
         .setDefaultMemberPermissions(PermissionFlagsBits.BanMembers),
 
     async execute(interaction) {
-        // Cevabı başlatıyoruz
         await interaction.deferReply({ ephemeral: false });
 
         try {
-            // Yasaklı kullanıcıları çek
             const bans = await interaction.guild.bans.fetch();
             const totalBans = bans.size;
 
@@ -26,57 +24,52 @@ module.exports = {
             let descriptionContent = `Toplam yasaklı kullanıcı: **${totalBans}**\n\n`;
             let embeds = [];
             let banCounter = 1;
+            const now = new Date().toLocaleString('tr-TR');
 
             for (const [userId, ban] of bans.entries()) {
-                const userTag = ban.user.tag;
+                const userTag = ban.user?.tag || 'Bilinmeyen Kullanıcı';
                 let reason = ban.reason ? ban.reason : 'Sebep belirtilmedi';
-                
-                // Çok uzun sebepleri kısalt
                 if (reason.length > 1024) reason = reason.slice(0, 1021) + '...';
 
                 const entry = 
                     `**${banCounter}. ${userTag}**\nID: ${userId}\nSebep: ${reason}\n\n`;
 
-                // Eğer mevcut açıklamaya sığmıyorsa yeni embed oluştur
                 if (descriptionContent.length + entry.length > maxDescriptionLength) {
                     const embed = new EmbedBuilder()
                         .setColor('#ff0000')
                         .setTitle(`Yasaklı Kullanıcı Listesi`)
                         .setDescription(descriptionContent.trim())
-                        .setFooter({ text: `Sayfa ${embeds.length + 1} | ${new Date().toLocaleString('tr-TR')}` });
+                        .setFooter({ text: `Sayfa ${embeds.length + 1} | ${now}` });
 
                     embeds.push(embed);
                     descriptionContent = entry;
                 } else {
                     descriptionContent += entry;
                 }
-
                 banCounter++;
             }
 
-            // Son sayfayı ekle
             if (descriptionContent.length > 0) {
                 const finalEmbed = new EmbedBuilder()
                     .setColor('#ff0000')
                     .setTitle(`Yasaklı Kullanıcı Listesi`)
                     .setDescription(descriptionContent.trim())
-                    .setFooter({ text: `Sayfa ${embeds.length + 1} | ${new Date().toLocaleString('tr-TR')}` });
+                    .setFooter({ text: `Sayfa ${embeds.length + 1} | ${now}` });
 
                 embeds.push(finalEmbed);
             }
 
-            // İlk sayfayı gönder
+            // Fazla sayfa varsa Discord rate limitine takılmamak için kısa bekleme eklenebilir (isteğe bağlı)
             await interaction.editReply({ embeds: [embeds[0]] });
-
-            // Geri kalan sayfaları takip eden mesajlarla gönder
             for (let i = 1; i < embeds.length; i++) {
+                await new Promise(resolve => setTimeout(resolve, 1000)); // 1 saniye bekle (isteğe bağlı)
                 await interaction.followUp({ embeds: [embeds[i]] });
             }
 
         } catch (error) {
             console.error('Banlist çekme hatası:', error);
 
-            // Kullanıcıya görünür hata mesajı
+            // interaction.deferred ve replied property olarak kullanılmalı
             if (interaction.deferred || interaction.replied) {
                 await interaction.editReply({ 
                     content: `❌ Yasaklı listesini çekerken bir hata oluştu:\n\`\`\`${error.message}\`\`\``, 
