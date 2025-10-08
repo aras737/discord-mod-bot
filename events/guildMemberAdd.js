@@ -1,7 +1,15 @@
-** Kullanıcı Katıldığında Mesaj atar **
+// Kullanıcı Katıldığında Mesaj atar
 
-@bot.event
-async def on_member_join(member):
-    channel = discord.utils.get(member.guild.text_channels, name="hoşgeldin")
-    if channel:
-        await channel.send(f"{member.mention} sunucuya katıldı! 🎉")
+// Bu, bir Discord.js v14 (ve üzeri) event dinleyicisi örneğidir
+module.exports = {
+    name: 'guildMemberAdd',
+    execute(member) {
+        // Kanalı ID veya isim ile bulabilirsiniz.
+        const channel = member.guild.channels.cache.find(ch => ch.name === 'hoşgeldin');
+
+        if (!channel) return; // 'hoşgeldin' kanalı yoksa dur.
+
+        // Mesajı gönder
+        channel.send(`Sunucumuza hoş geldin, ${member.user.tag}! 🎉`);
+    },
+};
