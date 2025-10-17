@@ -1,3 +1,5 @@
+const { QuickDB } = require("quick.db");
+client.db = new QuickDB();
 const fs = require("fs");
 const path = require("path");
 require("dotenv").config();
