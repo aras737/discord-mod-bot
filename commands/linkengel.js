@@ -1,46 +1,88 @@
-const { SlashCommandBuilder, PermissionFlagsBits, ChannelType, Events } = require('discord.js');
+const { SlashCommandBuilder, PermissionFlagsBits, ChannelType, Events, EmbedBuilder } = require('discord.js');
 const fs = require('fs');
 const path = require('path');
 
 // --- VERİTABANI/AYARLAR YÖNETİMİ ---
-// Ayarların saklandığı dosya yolu. Projenizin ana dizinine göre ayarlayın.
-// Varsayım: Bu dosya /commands/ içinde, config ise ana dizinde.
-const configPath = path.resolve(__dirname, '../../link_config.json');
+// DİKKAT: Bu yollar, komut dosyasının /commands/ içinde ve config dosyalarının botun ana dizininde olduğunu varsayar.
+const LINK_CONFIG_PATH = path.resolve(__dirname, '../../link_config.json');
+const LOG_CONFIG_PATH = path.resolve(__dirname, '../../log_config.json'); 
 
-// Yardımcı Fonksiyon: Sunucu ayarlarını çeker
+// Regex: Tüm yaygın link formatlarını (http, https, www, discord.gg vb.) yakalar.
+const linkRegex = /(?:https?:\/\/[^\s]+|www\.[^\s]+|discord\.(?:gg|io|me|li)|(?:[a-z0-9]+-?){1,3}\.[a-z]{2,})/gi;
+
+// Sunucu ayarlarını çeker (Link Ayarları)
 function getLinkSettings(guildId) {
-    if (!fs.existsSync(configPath)) return { enabled: false, ignoredChannels: [] };
+    if (!fs.existsSync(LINK_CONFIG_PATH)) return { enabled: false, ignoredChannels: [] };
     
-    const config = JSON.parse(fs.readFileSync(configPath, 'utf8'));
-    const settings = config[guildId];
-    
-    if (!settings || typeof settings.enabled !== 'boolean') {
+    try {
+        const config = JSON.parse(fs.readFileSync(LINK_CONFIG_PATH, 'utf8'));
+        const settings = config[guildId];
+        
+        if (!settings || typeof settings.enabled !== 'boolean') {
+            return { enabled: false, ignoredChannels: [] };
+        }
+        return settings;
+    } catch (e) {
+        console.error("Link ayarları JSON okuma hatası:", e);
         return { enabled: false, ignoredChannels: [] };
     }
-    return settings;
 }
 
-// Yardımcı Fonksiyon: Ayarları kaydeder
+// Ayarları kaydeder (Link Ayarları)
 function saveLinkSettings(guildId, settings) {
     let config = {};
-    if (fs.existsSync(configPath)) {
-        config = JSON.parse(fs.readFileSync(configPath, 'utf8'));
+    if (fs.existsSync(LINK_CONFIG_PATH)) {
+        try {
+            config = JSON.parse(fs.readFileSync(LINK_CONFIG_PATH, 'utf8'));
+        } catch (e) {
+            console.error("Link ayarları JSON yazma/okuma hatası:", e);
+            // Hata durumunda mevcut ayarları kaybetmemek için devam et.
+        }
     }
     config[guildId] = settings;
-    fs.writeFileSync(configPath, JSON.stringify(config, null, 2), 'utf8');
+    fs.writeFileSync(LINK_CONFIG_PATH, JSON.stringify(config, null, 2), 'utf8');
 }
 
-// Link Regex (HTTP/HTTPS linklerini ve discord.gg davetlerini yakalar)
-const linkRegex = /(https?:\/\/[^\s]+|discord\.gg\/[^\s]+)/gi;
+// Log kanal ID'sini çeker (Loglama sisteminden entegre edilmiştir)
+function getLogChannelId(guildId) {
+    if (!fs.existsSync(LOG_CONFIG_PATH)) return null;
+    
+    try {
+        const config = JSON.parse(fs.readFileSync(LOG_CONFIG_PATH, 'utf8'));
+        // Log sisteminizde kanal ID'si doğrudan kaydedilmişse
+        return config[guildId] || null; 
+    } catch (e) {
+        console.error("Log ayarları JSON okuma hatası:", e);
+        return null;
+    }
+}
+
+// Yardımcı fonksiyon: Log Embed'i gönderir
+async function sendLog(guild, embed) {
+    if (!guild) return;
+    
+    const logChannelId = getLogChannelId(guild.id);
+    if (!logChannelId) return; 
+
+    try {
+        // Kanala erişim yetkisi olmalı
+        const logChannel = await guild.channels.fetch(logChannelId);
+        if (logChannel) {
+            logChannel.send({ embeds: [embed] });
+        }
+    } catch (error) {
+        // Eğer bot kanalı bulamazsa veya yetkisi yoksa
+        console.error(`Log kanalına (${logChannelId}) mesaj gönderilemedi:`, error.message);
+    }
+}
 
 
-// --- 1. SLASH KOMUT TANIMI ---
+// --- 2. SLASH KOMUT TANIMI VE İŞLEMLERİ ---
 module.exports = {
-    // Komut verileri (Sadece yöneticiler kullanabilir)
     data: new SlashCommandBuilder()
         .setName('linkengel')
         .setDescription('Link engelleme sistemini yönetir (Aç/Kapat/Hariç tutulan kanal ekle).')
-        .setDefaultMemberPermissions(PermissionFlagsBits.Administrator)
+        .setDefaultMemberPermissions(PermissionFlagsBits.Administrator) // Sadece Yönetici
         .addSubcommand(subcommand =>
             subcommand.setName('durum')
                 .setDescription('Link engellemeyi açar veya kapatır.')
@@ -65,13 +107,11 @@ module.exports = {
                         .setRequired(true)
                         .addChannelTypes(ChannelType.GuildText))),
     
-    // Komut çalıştığında
     async execute(interaction) {
         const guildId = interaction.guild.id;
         const subcommand = interaction.options.getSubcommand();
-        let settings = getLinkSettings(guildId); // Mevcut ayarları çek
+        let settings = getLinkSettings(guildId);
         
-        // --- DURUM ALT KOMUTU ---
         if (subcommand === 'durum') {
             const isActive = interaction.options.getBoolean('aktif');
             settings.enabled = isActive;
@@ -84,7 +124,6 @@ module.exports = {
             });
         }
         
-        // --- KANAL EKLE ALT KOMUTU ---
         if (subcommand === 'kanalekle') {
             const channel = interaction.options.getChannel('kanal');
             if (settings.ignoredChannels.includes(channel.id)) {
@@ -96,7 +135,6 @@ module.exports = {
             return interaction.reply({ content: `✅ ${channel} kanalı link engellemeyi uygulamayacak şekilde eklendi.`, ephemeral: true });
         }
         
-        // --- KANAL KALDIR ALT KOMUTU ---
         if (subcommand === 'kanalkaldir') {
             const channel = interaction.options.getChannel('kanal');
             const index = settings.ignoredChannels.indexOf(channel.id);
@@ -111,8 +149,7 @@ module.exports = {
         }
     },
 
-    // --- 2. EVENT DİNLEYİCİ (KOMUTUN DIŞINDA TANIMLANIR) ---
-    // Bu fonksiyon, botun ana dosyasındaki komut yükleyicisi tarafından çağrılacaktır.
+    // --- 3. EVENT DİNLEYİCİ FONKSİYONU ---
     registerEvents(client) {
         client.on(Events.MessageCreate, async message => {
             // 1. Temel Kontroller
@@ -134,20 +171,32 @@ module.exports = {
 
             if (hasLink) {
                 try {
+                    const deletedContent = message.content.substring(0, 100) + (message.content.length > 100 ? '...' : '');
+                    
                     // Mesajı sil
                     await message.delete();
                     
-                    // Kullanıcıya geçici bir uyarı gönder
+                    // Kullanıcıya uyarı mesajı (5 sn sonra silinir)
                     const warningMessage = await message.channel.send({ 
                         content: `${message.author}, bu sunucuda link paylaşımı **yöneticiler hariç** yasaktır!`, 
                     });
-                    
-                    // Uyarı mesajını 5 saniye sonra sil
                     setTimeout(() => warningMessage.delete().catch(() => {}), 5000);
 
+                    // --- LOG KAYDI ---
+                    const logEmbed = new EmbedBuilder()
+                        .setColor('#ff4500')
+                        .setTitle('🔗 Link Engellendi')
+                        .addFields(
+                            { name: 'Kullanıcı', value: `${message.author.tag} (\`${message.author.id}\`)`, inline: true },
+                            { name: 'Kanal', value: `${message.channel}`, inline: true },
+                            { name: 'Engellenen Mesaj (İlk 100 Karakter)', value: `\`\`\`\n${deletedContent}\n\`\`\``, inline: false }
+                        )
+                        .setTimestamp();
+
+                    sendLog(message.guild, logEmbed);
+
                 } catch (error) {
-                    // Botun silme yetkisi yoksa burada bir hata mesajı görünebilir.
-                    console.error(`Linkli mesaj silinemedi:`, error);
+                    console.error(`[Link Engelleyici] Mesaj silme yetkisi yok veya başka bir hata:`, error.message);
                 }
             }
         });
