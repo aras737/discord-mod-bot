@@ -1,5 +1,5 @@
 const { QuickDB } = require("quick.db");
-client.db = new QuickDB();
+client.db = new QuickDB(); // ✅ Yeni QuickDB örneği client.db'ye atandı.
 const fs = require("fs");
 const path = require("path");
 require("dotenv").config();
@@ -13,7 +13,7 @@ const {
   Routes,
   PermissionFlagsBits
 } = require("discord.js");
-const db = require("quick.db");
+// ❌ const db = require("quick.db"); // Bu satır kaldırıldı.
 const noblox = require("noblox.js");
 
 // Discord Client
@@ -213,8 +213,8 @@ client.on(Events.InteractionCreate, async interaction => {
 });
 
 // Üye katıldığında
-client.on(Events.GuildMemberAdd, member => {
-  const ehliyet = db.get(`ehliyet_${member.id}`);
+client.on(Events.GuildMemberAdd, async member => { // ✅ Olay asenkron yapıldı
+  const ehliyet = await client.db.get(`ehliyet_${member.id}`); // ✅ client.db kullanıldı ve await eklendi
   if (!ehliyet) {
     member.send("Sunucuya hoş geldiniz! Ehliyetiniz yok. /ehliyet-al komutunu kullanabilirsiniz.")
       .catch(() => console.log(`${member.user.tag} kullanıcısına özel mesaj gönderilemedi.`));
@@ -222,8 +222,8 @@ client.on(Events.GuildMemberAdd, member => {
 });
 
 // Üye ayrıldığında
-client.on(Events.GuildMemberRemove, member => {
-  const ehliyet = db.get(`ehliyet_${member.id}`);
+client.on(Events.GuildMemberRemove, async member => { // ✅ Olay asenkron yapıldı
+  const ehliyet = await client.db.get(`ehliyet_${member.id}`); // ✅ client.db kullanıldı ve await eklendi
   if (ehliyet) {
     console.log(`${member.user.tag} sunucudan ayrıldı. Ehliyet durumu: ${ehliyet.durum}`);
   }
