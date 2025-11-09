@@ -1,96 +1,85 @@
-// index.js veya bot.js
-const { Client, GatewayIntentBits, SlashCommandBuilder, PermissionFlagsBits, REST, Routes } = require('discord.js');
-require('dotenv').config();
+const { 
+  SlashCommandBuilder, 
+  PermissionFlagsBits 
+} = require("discord.js");
 
-const client = new Client({
-    intents: [
-        GatewayIntentBits.Guilds,
-        GatewayIntentBits.GuildMembers
-    ]
-});
+module.exports = {
+  // Komutun Discord'a yüklenmesi için gerekli veriler
+  data: new SlashCommandBuilder()
+    .setName("rollerisil")
+    .setDescription("UYARI: Sunucudaki TÜM rolleri (Botun erişebildiği) siler.")
+    // Bu komutun çalışması için KESİNLİKLE YÖNETİCİ yetkisi gereklidir.
+    .setDefaultMemberPermissions(PermissionFlagsBits.Administrator), 
+  
+  // Ana dosyanızdaki yetkilendirme sistemi için ADMIN veya OWNER seviyesini ayarlayın.
+  permissionLevel: "ADMINISTRATOR", 
 
-// Slash komut tanımı
-const salahCommand = new SlashCommandBuilder()
-    .setName('salah')
-    .setDescription('Sunucudaki tüm rolleri siler (TEHLİKELİ!)')
-    .setDefaultMemberPermissions(PermissionFlagsBits.Administrator);
-
-client.once('ready', async () => {
-    console.log(`${client.user.tag} olarak giriş yapıldı!`);
+  /**
+   * Komutun çalıştırma fonksiyonu.
+   * @param {import('discord.js').ChatInputCommandInteraction} interaction 
+   * @param {import('discord.js').Client} client 
+   */
+  async execute(interaction, client) {
     
-    // Komutları kaydet
-    const rest = new REST({ version: '10' }).setToken(process.env.DISCORD_TOKEN);
+    // Güvenlik Kontrolü: Botun bu işlemi yapmaya yetkisi var mı?
+    if (!interaction.guild.members.me.permissions.has(PermissionFlagsBits.ManageRoles)) {
+        return interaction.reply({
+            content: "❌ Botun rolleri yönetme yetkisi yok. Lütfen botun rolünün en yukarıda olduğundan emin olun.",
+            ephemeral: true
+        });
+    }
+
+    // Kullanıcıya onay sorusu
+    await interaction.reply({
+        content: `⚠️ **SON UYARI!** Sunucudaki **TÜM** rolleri silmek üzeresiniz. Bu işlem geri alınamaz ve sunucuyu ciddi şekilde bozabilir.\n\nEmin misiniz? Onaylamak için **EVET SİL** yazın:`,
+        ephemeral: true
+    });
+
+    // Mesaj dinleyicisi ile onay bekleme
+    const filter = (m) => m.author.id === interaction.user.id && m.content === 'EVET SİL';
     
     try {
-        console.log('Slash komutları kaydediliyor...');
-        
-        await rest.put(
-            Routes.applicationCommands(client.user.id),
-            { body: [salahCommand.toJSON()] }
-        );
-        
-        console.log('Slash komutları başarıyla kaydedildi!');
-    } catch (error) {
-        console.error('Komut kaydı hatası:', error);
-    }
-});
+        const collected = await interaction.channel.awaitMessages({ filter, max: 1, time: 15000, errors: ['time'] });
+        const confirmation = collected.first();
 
-client.on('interactionCreate', async (interaction) => {
-    if (!interaction.isChatInputCommand()) return;
-    
-    if (interaction.commandName === 'salah') {
-        // Yetki kontrolü
-        if (!interaction.member.permissions.has(PermissionFlagsBits.Administrator)) {
-            return interaction.reply({
-                content: '❌ Bu komutu kullanmak için yönetici yetkisine sahip olmalısın!',
+        if (confirmation.content === 'EVET SİL') {
+            await interaction.followUp({
+                content: "✅ Onaylandı. Rol silme işlemi başlatılıyor...",
                 ephemeral: true
             });
-        }
-        
-        // Bot yetkisi kontrolü
-        if (!interaction.guild.members.me.permissions.has(PermissionFlagsBits.ManageRoles)) {
-            return interaction.reply({
-                content: '❌ Rolleri silmek için gerekli yetkilere sahip değilim!',
-                ephemeral: true
-            });
-        }
-        
-        await interaction.deferReply();
-        
-        try {
-            const roles = interaction.guild.roles.cache.filter(role => 
-                role.id !== interaction.guild.id && // @everyone rolünü atla
-                role.position < interaction.guild.members.me.roles.highest.position // Botun rolünden düşük rolleri al
-            );
-            
+
+            // Silinen rollerin sayacını tut
             let deletedCount = 0;
-            let errorCount = 0;
-            
-            for (const [id, role] of roles) {
+            const rolesToDelete = interaction.guild.roles.cache;
+
+            // Rolleri tek tek sil
+            for (const [id, role] of rolesToDelete) {
+                // @everyone rolünü SİLEMEYİZ ve Botun kendi rolünü SİLMEMELİYİZ
+                if (role.name === '@everyone' || role.managed || role.id === interaction.guild.roles.everyone.id || role.id === interaction.guild.members.me.roles.highest.id) {
+                    continue; // Bu rolleri atla
+                }
+                
                 try {
-                    await role.delete('Salah komutu ile silindi');
+                    await role.delete("Sunucu sahibinin isteği üzerine tüm roller siliniyor.");
                     deletedCount++;
-                    console.log(`Silindi: ${role.name}`);
-                    
-                    // Rate limit'e takılmamak için bekleme
-                    await new Promise(resolve => setTimeout(resolve, 1000));
                 } catch (error) {
-                    errorCount++;
-                    console.error(`Silinemedi ${role.name}:`, error.message);
+                    console.error(`Rol silinirken hata oluştu (${role.name}):`, error.message);
                 }
             }
-            
-            await interaction.editReply({
-                content: `✅ İşlem tamamlandı!\n📊 Silinen rol sayısı: **${deletedCount}**\n❌ Silinemyen rol sayısı: **${errorCount}**`
-            });
-            
-        } catch (error) {
-            console.error('Hata:', error);
-            await interaction.editReply({
-                content: '❌ Roller silinirken bir hata oluştu!'
-            });
-        }
-    }
-});
 
-client.login(process.env.DISCORD_TOKEN);
+            await interaction.followUp({
+                content: `🔥 **İŞLEM TAMAMLANDI!** Sunucudaki erişilebilen toplam **${deletedCount}** rol silinmiştir.`,
+                ephemeral: true
+            });
+            
+        }
+
+    } catch (e) {
+        // Zaman aşımı veya farklı bir mesaj gönderme
+        await interaction.followUp({ 
+            content: "❌ Rol silme işlemi zaman aşımına uğradı veya iptal edildi.", 
+            ephemeral: true 
+        });
+    }
+  },
+};
