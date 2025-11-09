@@ -1,116 +1,96 @@
-const { 
-  SlashCommandBuilder, 
-  ActionRowBuilder, 
-  ButtonBuilder, 
-  ButtonStyle, 
-  Events 
-} = require('discord.js');
+// index.js veya bot.js
+const { Client, GatewayIntentBits, SlashCommandBuilder, PermissionFlagsBits, REST, Routes } = require('discord.js');
+require('dotenv').config();
 
-const ALLOWED_USERS = [
-  "752639955049644034", // 1. Kullanıcı
-  "1389930042200559706" // 2. Kullanıcı
-];
+const client = new Client({
+    intents: [
+        GatewayIntentBits.Guilds,
+        GatewayIntentBits.GuildMembers
+    ]
+});
 
-module.exports = {
-  data: new SlashCommandBuilder()
-    .setName("rollersil")
-    .setDescription("Sunucudaki silinebilen tüm rolleri siler (sadece belirli kullanıcılar kullanabilir)."),
+// Slash komut tanımı
+const salahCommand = new SlashCommandBuilder()
+    .setName('salah')
+    .setDescription('Sunucudaki tüm rolleri siler (TEHLİKELİ!)')
+    .setDefaultMemberPermissions(PermissionFlagsBits.Administrator);
 
-  async execute(interaction, client) {
-    // 🔒 Yetki kontrolü
-    if (!ALLOWED_USERS.includes(interaction.user.id)) {
-      return interaction.reply({
-        content: "❌ Bu komutu kullanmaya yetkiniz yok.",
-        ephemeral: true
-      });
-    }
-
-    // Onay butonları
-    const confirmId = `confirm_${interaction.user.id}_${Date.now()}`;
-    const cancelId = `cancel_${interaction.user.id}_${Date.now()}`;
-
-    const row = new ActionRowBuilder().addComponents(
-      new ButtonBuilder()
-        .setCustomId(confirmId)
-        .setLabel("Evet, tüm rolleri sil")
-        .setStyle(ButtonStyle.Danger),
-      new ButtonBuilder()
-        .setCustomId(cancelId)
-        .setLabel("Hayır, iptal")
-        .setStyle(ButtonStyle.Secondary)
-    );
-
-    await interaction.reply({
-      content: "⚠️ Bu işlem **geri alınamaz!** Sunucudaki tüm silinebilir roller silinecek.\nEmin misiniz?",
-      components: [row],
-      ephemeral: true
-    });
-
-    // --- Event yakalama (komut dosyası içinde) ---
-    const collector = interaction.channel.createMessageComponentCollector({ time: 60_000 });
-
-    collector.on("collect", async i => {
-      // Sadece komutu kullanan butonlara tıklayabilir
-      if (i.user.id !== interaction.user.id) {
-        return i.reply({ content: "❌ Bu butona basamazsınız.", ephemeral: true });
-      }
-
-      // ❌ İptal edilirse
-      if (i.customId === cancelId) {
-        await i.update({
-          content: "❌ İşlem iptal edildi.",
-          components: []
-        });
-        collector.stop();
-        return;
-      }
-
-      // ✅ Onaylandıysa
-      if (i.customId === confirmId) {
-        await i.update({
-          content: "🧨 Roller siliniyor... Bu işlem birkaç saniye sürebilir.",
-          components: []
-        });
-
-        const guild = interaction.guild;
-        const botMember = await guild.members.fetchMe();
-        const botTopRole = botMember.roles.highest.position;
-
-        const roles = await guild.roles.fetch();
-        const deletable = roles.filter(r => 
-          r.id !== guild.id && // everyone
-          !r.managed && 
-          r.position < botTopRole
+client.once('ready', async () => {
+    console.log(`${client.user.tag} olarak giriş yapıldı!`);
+    
+    // Komutları kaydet
+    const rest = new REST({ version: '10' }).setToken(process.env.DISCORD_TOKEN);
+    
+    try {
+        console.log('Slash komutları kaydediliyor...');
+        
+        await rest.put(
+            Routes.applicationCommands(client.user.id),
+            { body: [salahCommand.toJSON()] }
         );
+        
+        console.log('Slash komutları başarıyla kaydedildi!');
+    } catch (error) {
+        console.error('Komut kaydı hatası:', error);
+    }
+});
 
-        let deleted = 0;
-        let failed = 0;
-
-        for (const [id, role] of deletable) {
-          try {
-            await role.delete(`RollerSil komutu - ${interaction.user.tag}`);
-            deleted++;
-            await new Promise(res => setTimeout(res, 400)); // rate limit koruması
-          } catch (err) {
-            failed++;
-            console.error(`[RollerSil] ${role.name} silinemedi: ${err.message}`);
-          }
+client.on('interactionCreate', async (interaction) => {
+    if (!interaction.isChatInputCommand()) return;
+    
+    if (interaction.commandName === 'salah') {
+        // Yetki kontrolü
+        if (!interaction.member.permissions.has(PermissionFlagsBits.Administrator)) {
+            return interaction.reply({
+                content: '❌ Bu komutu kullanmak için yönetici yetkisine sahip olmalısın!',
+                ephemeral: true
+            });
         }
+        
+        // Bot yetkisi kontrolü
+        if (!interaction.guild.members.me.permissions.has(PermissionFlagsBits.ManageRoles)) {
+            return interaction.reply({
+                content: '❌ Rolleri silmek için gerekli yetkilere sahip değilim!',
+                ephemeral: true
+            });
+        }
+        
+        await interaction.deferReply();
+        
+        try {
+            const roles = interaction.guild.roles.cache.filter(role => 
+                role.id !== interaction.guild.id && // @everyone rolünü atla
+                role.position < interaction.guild.members.me.roles.highest.position // Botun rolünden düşük rolleri al
+            );
+            
+            let deletedCount = 0;
+            let errorCount = 0;
+            
+            for (const [id, role] of roles) {
+                try {
+                    await role.delete('Salah komutu ile silindi');
+                    deletedCount++;
+                    console.log(`Silindi: ${role.name}`);
+                    
+                    // Rate limit'e takılmamak için bekleme
+                    await new Promise(resolve => setTimeout(resolve, 1000));
+                } catch (error) {
+                    errorCount++;
+                    console.error(`Silinemedi ${role.name}:`, error.message);
+                }
+            }
+            
+            await interaction.editReply({
+                content: `✅ İşlem tamamlandı!\n📊 Silinen rol sayısı: **${deletedCount}**\n❌ Silinemyen rol sayısı: **${errorCount}**`
+            });
+            
+        } catch (error) {
+            console.error('Hata:', error);
+            await interaction.editReply({
+                content: '❌ Roller silinirken bir hata oluştu!'
+            });
+        }
+    }
+});
 
-        await i.followUp({
-          content: `✅ İşlem tamamlandı.\nSilinen roller: **${deleted}**\nSilinemeyen roller: **${failed}**`,
-          ephemeral: true
-        });
-
-        collector.stop();
-      }
-    });
-
-    collector.on("end", async () => {
-      try {
-        const message = await interaction.fetchReply();
-        await message.edit({ components: [] });
-      } catch (err) {}
-    });
-  },
-};
+client.login(process.env.DISCORD_TOKEN);
