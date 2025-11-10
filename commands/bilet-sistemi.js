@@ -19,7 +19,7 @@ module.exports = {
   data: new SlashCommandBuilder()
     .setName("bilet-sistemi")
     .setDescription("Gelişmiş bilet sistemi kurar")
-    .setDefaultMemberPermissions(PermissionFlagsBits.Administrator) // 🔹 Sadece adminler kullanabilir
+    .setDefaultMemberPermissions(PermissionFlagsBits.Administrator)
     .addChannelOption(option =>
       option.setName("kanal")
         .setDescription("Bilet sisteminin kurulacağı kanal")
@@ -45,7 +45,6 @@ module.exports = {
         .setRequired(false)),
 
   async execute(interaction, client) {
-    // 🔹 Yetki kontrolü
     if (!interaction.member.permissions.has(PermissionFlagsBits.Administrator)) {
       return interaction.reply({
         content: "❌ Bu komutu kullanmak için Yönetici yetkisine sahip olmalısınız.",
@@ -53,7 +52,6 @@ module.exports = {
       });
     }
 
-    // 🔹 Mevcut bilet kontrolü
     const existingTicket = await db.get(`user_ticket_${interaction.user.id}_${interaction.guild.id}`);
     if (existingTicket) {
       return interaction.reply({ 
@@ -100,7 +98,6 @@ module.exports = {
     await targetChannel.send({ embeds: [ticketEmbed], components: [selectRow] });
     await interaction.reply({ content: `Bilet sistemi başarıyla ${targetChannel} kanalında kuruldu.`, ephemeral: true });
 
-    // 🔹 Eventleri kur
     this.setupEventListeners(client);
   },
 
@@ -115,8 +112,189 @@ module.exports = {
     }
   },
 
+  // 🔹 TRANSCRIPT OLUŞTURMA FONKSİYONU
+  async createTranscript(channel) {
+    try {
+      const messages = await channel.messages.fetch({ limit: 100 });
+      const sortedMessages = Array.from(messages.values()).reverse();
+
+      let html = `
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Bilet Transkripti - ${channel.name}</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: 'Whitney', 'Helvetica Neue', Helvetica, Arial, sans-serif;
+            background: #36393f;
+            color: #dcddde;
+            padding: 20px;
+        }
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            background: #2f3136;
+            border-radius: 8px;
+            padding: 20px;
+        }
+        .header {
+            background: #202225;
+            padding: 20px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+        }
+        .header h1 {
+            color: #fff;
+            font-size: 24px;
+            margin-bottom: 10px;
+        }
+        .header p {
+            color: #b9bbbe;
+            font-size: 14px;
+        }
+        .message {
+            display: flex;
+            padding: 15px 10px;
+            border-bottom: 1px solid #202225;
+            transition: background 0.2s;
+        }
+        .message:hover {
+            background: #32353b;
+        }
+        .avatar {
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            margin-right: 15px;
+            flex-shrink: 0;
+        }
+        .message-content {
+            flex: 1;
+        }
+        .message-header {
+            display: flex;
+            align-items: center;
+            margin-bottom: 5px;
+        }
+        .username {
+            color: #fff;
+            font-weight: 600;
+            margin-right: 8px;
+        }
+        .timestamp {
+            color: #72767d;
+            font-size: 12px;
+        }
+        .message-text {
+            color: #dcddde;
+            line-height: 1.375;
+            word-wrap: break-word;
+        }
+        .attachment {
+            margin-top: 10px;
+            max-width: 400px;
+        }
+        .attachment img {
+            max-width: 100%;
+            border-radius: 4px;
+        }
+        .embed {
+            background: #2f3136;
+            border-left: 4px solid #5865f2;
+            padding: 12px;
+            margin-top: 8px;
+            border-radius: 4px;
+        }
+        .embed-title {
+            color: #fff;
+            font-weight: 600;
+            margin-bottom: 8px;
+        }
+        .embed-description {
+            color: #dcddde;
+        }
+        .bot-tag {
+            background: #5865f2;
+            color: #fff;
+            font-size: 10px;
+            padding: 2px 4px;
+            border-radius: 3px;
+            margin-left: 5px;
+            font-weight: 600;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>📋 Bilet Transkripti</h1>
+            <p><strong>Kanal:</strong> #${channel.name}</p>
+            <p><strong>Tarih:</strong> ${new Date().toLocaleString('tr-TR')}</p>
+            <p><strong>Toplam Mesaj:</strong> ${sortedMessages.length}</p>
+        </div>
+        <div class="messages">`;
+
+      for (const msg of sortedMessages) {
+        const timestamp = new Date(msg.createdTimestamp).toLocaleString('tr-TR');
+        const avatar = msg.author.displayAvatarURL({ extension: 'png', size: 128 });
+        const botTag = msg.author.bot ? '<span class="bot-tag">BOT</span>' : '';
+
+        html += `
+            <div class="message">
+                <img class="avatar" src="${avatar}" alt="${msg.author.username}">
+                <div class="message-content">
+                    <div class="message-header">
+                        <span class="username">${msg.author.username}</span>
+                        ${botTag}
+                        <span class="timestamp">${timestamp}</span>
+                    </div>
+                    <div class="message-text">${msg.content || '<em>Mesaj içeriği yok</em>'}</div>`;
+
+        // Eklentiler (resimler, dosyalar)
+        if (msg.attachments.size > 0) {
+          msg.attachments.forEach(attachment => {
+            if (attachment.contentType && attachment.contentType.startsWith('image/')) {
+              html += `<div class="attachment"><img src="${attachment.url}" alt="Ek"></div>`;
+            } else {
+              html += `<div class="attachment"><a href="${attachment.url}" target="_blank">📎 ${attachment.name}</a></div>`;
+            }
+          });
+        }
+
+        // Embedler
+        if (msg.embeds.length > 0) {
+          msg.embeds.forEach(embed => {
+            html += `
+                <div class="embed">
+                    ${embed.title ? `<div class="embed-title">${embed.title}</div>` : ''}
+                    ${embed.description ? `<div class="embed-description">${embed.description}</div>` : ''}
+                </div>`;
+          });
+        }
+
+        html += `
+                </div>
+            </div>`;
+      }
+
+      html += `
+        </div>
+    </div>
+</body>
+</html>`;
+
+      return Buffer.from(html, 'utf-8');
+    } catch (error) {
+      console.error('Transcript oluşturulurken hata:', error);
+      return null;
+    }
+  },
+
   setupEventListeners(client) {
-    if (client.ticketEventsSetup) return; // Tekrar kurmamak için
+    if (client.ticketEventsSetup) return;
     client.ticketEventsSetup = true;
 
     client.on(Events.InteractionCreate, async (interaction) => {
@@ -126,7 +304,6 @@ module.exports = {
       const logChannel = logChannelId ? interaction.guild.channels.cache.get(logChannelId) : null;
       const robloxGroupId = await db.get(`roblox_group_id_${interaction.guild.id}`);
 
-      // 🔹 Bilet türü seçildiğinde
       if (interaction.isStringSelectMenu() && interaction.customId === 'ticket_type_select') {
         const ticketType = interaction.values[0];
         const supportRoleId = await db.get(`ticket_support_role_${interaction.guild.id}`);
@@ -154,7 +331,6 @@ module.exports = {
           ]
         });
 
-        // 🔹 Kullanıcıya açık bilet var olarak kaydet
         await db.set(`user_ticket_${interaction.user.id}_${interaction.guild.id}`, ticketChannel.id);
         await db.set(`ticket_info_${ticketChannel.id}`, {
           userId: interaction.user.id,
@@ -166,7 +342,6 @@ module.exports = {
           selectedRobloxRole: null
         });
 
-        // 🔹 Bilet mesajı ve button
         const ticketButtons = new ActionRowBuilder().addComponents(
           new ButtonBuilder().setCustomId('close_ticket').setLabel('Bileti Kapat').setStyle(ButtonStyle.Danger),
           new ButtonBuilder().setCustomId('claim_ticket').setLabel('Bileti Üstlen').setStyle(ButtonStyle.Primary)
@@ -184,7 +359,6 @@ module.exports = {
 
         await interaction.reply({ content: `${selectedType.description} biletiniz açıldı: ${ticketChannel}`, ephemeral: true });
 
-        // 🔹 Log
         if (logChannel) {
           const logEmbed = new EmbedBuilder()
             .setTitle("Yeni Bilet Açıldı")
@@ -199,32 +373,42 @@ module.exports = {
         }
       }
 
-      // 🔹 Bilet kapatma butonu
+      // 🔹 BİLET KAPATMA VE TRANSCRIPT GÖNDERME
       if (interaction.isButton() && interaction.customId === "close_ticket") {
         const ticketInfo = await db.get(`ticket_info_${interaction.channel.id}`);
         if (!ticketInfo) return interaction.reply({ content: "Bilet bilgisi bulunamadı.", ephemeral: true });
 
-        await db.delete(`user_ticket_${ticketInfo.userId}_${interaction.guild.id}`);
-        await db.delete(`ticket_info_${interaction.channel.id}`);
+        await interaction.reply({ content: "📝 Bilet kapatılıyor, transcript oluşturuluyor...", ephemeral: false });
 
-        await interaction.reply({ content: "Bilet kapatılıyor, kanal 5 saniye içinde silinecek.", ephemeral: false });
+        // 🔹 TRANSCRIPT OLUŞTUR
+        const transcriptBuffer = await this.createTranscript(interaction.channel);
 
-        if (logChannel) {
+        if (logChannel && transcriptBuffer) {
+          const attachment = new AttachmentBuilder(transcriptBuffer, { 
+            name: `transcript-${interaction.channel.name}-${Date.now()}.html` 
+          });
+
           const logEmbed = new EmbedBuilder()
-            .setTitle("Bilet Kapatıldı")
+            .setTitle("📋 Bilet Kapatıldı")
             .addFields(
-              { name: "Kapatılan Kanal", value: `${interaction.channel.name}`, inline: true },
-              { name: "Kapatan Yetkili", value: `${interaction.user.tag}`, inline: true }
+              { name: "Kanal", value: `${interaction.channel.name}`, inline: true },
+              { name: "Kapatan", value: `${interaction.user.tag}`, inline: true },
+              { name: "Kullanıcı", value: `<@${ticketInfo.userId}>`, inline: true },
+              { name: "Üstlenen", value: ticketInfo.claimedBy ? `<@${ticketInfo.claimedBy}>` : "Yok", inline: true },
+              { name: "Oluşturulma", value: `<t:${Math.floor(ticketInfo.createdAt / 1000)}:R>`, inline: true }
             )
             .setColor("Red")
             .setTimestamp();
-          logChannel.send({ embeds: [logEmbed] });
+
+          await logChannel.send({ embeds: [logEmbed], files: [attachment] });
         }
+
+        await db.delete(`user_ticket_${ticketInfo.userId}_${interaction.guild.id}`);
+        await db.delete(`ticket_info_${interaction.channel.id}`);
 
         setTimeout(() => interaction.channel.delete().catch(() => {}), 5000);
       }
 
-      // 🔹 Bilet üstlenme
       if (interaction.isButton() && interaction.customId === "claim_ticket") {
         const ticketInfo = await db.get(`ticket_info_${interaction.channel.id}`);
         if (!ticketInfo) return interaction.reply({ content: "Bilet bilgisi bulunamadı.", ephemeral: true });
