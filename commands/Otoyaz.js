@@ -1,4 +1,4 @@
-const { SlashCommandBuilder, PermissionFlagsBits } = require("discord.js");
+const { SlashCommandBuilder, PermissionFlagsBits, EmbedBuilder } = require("discord.js");
 const fs = require("fs");
 const path = require("path");
 
@@ -76,17 +76,19 @@ module.exports = {
       db[guildId].push(record);
       saveData(db);
 
-      await interaction.reply({
-        content: [
-          `Ceza başarıyla eklendi.`,
-          `Kullanıcı: ${user.tag}`,
-          `Kategori: ${kategori}`,
-          `Sebep: ${sebep}`,
-          `Ceza ID: ${id}`,
-          `İşlemi yapan: ${interaction.user.tag}`,
-        ].join("\n"),
-        ephemeral: true,
-      });
+      const embed = new EmbedBuilder()
+        .setTitle("Yeni Ceza Kaydı")
+        .setColor("Red")
+        .addFields(
+          { name: "Kullanıcı", value: `${user.tag} (${user.id})`, inline: false },
+          { name: "Kategori", value: kategori, inline: true },
+          { name: "Sebep", value: sebep, inline: true },
+          { name: "Ceza ID", value: id, inline: true },
+          { name: "Yetkili", value: interaction.user.tag, inline: false },
+          { name: "Tarih", value: new Date().toLocaleString("tr-TR"), inline: false }
+        );
+
+      await interaction.reply({ embeds: [embed] });
     }
 
     // CEZA LİSTE
@@ -94,29 +96,29 @@ module.exports = {
       const cezalar = db[guildId];
       if (!cezalar || cezalar.length === 0) {
         return interaction.reply({
-          content: "Bu sunucuda kayıtlı bir ceza bulunmuyor.",
-          ephemeral: true,
+          embeds: [
+            new EmbedBuilder()
+              .setTitle("Ceza Listesi")
+              .setDescription("Bu sunucuda kayıtlı bir ceza bulunmuyor.")
+              .setColor("Blue"),
+          ],
         });
       }
 
       const metin = cezalar
         .slice(-10)
         .map(c => 
-          [
-            `Ceza ID: ${c.id}`,
-            `Kullanıcı: ${interaction.guild.members.cache.get(c.userId)?.user.tag || c.userId}`,
-            `Kategori: ${c.kategori}`,
-            `Sebep: ${c.sebep}`,
-            `Yetkili: ${interaction.guild.members.cache.get(c.moderator)?.user.tag || c.moderator}`,
-            `Tarih: ${new Date(c.tarih).toLocaleString("tr-TR")}`,
-          ].join("\n")
+          `**ID:** ${c.id}\n**Kullanıcı:** <@${c.userId}> (${c.userId})\n**Kategori:** ${c.kategori}\n**Sebep:** ${c.sebep}\n**Yetkili:** <@${c.moderator}>\n**Tarih:** ${new Date(c.tarih).toLocaleString("tr-TR")}`
         )
         .join("\n\n");
 
-      await interaction.reply({
-        content: `Son cezalar:\n\n${metin}`,
-        ephemeral: true,
-      });
+      const embed = new EmbedBuilder()
+        .setTitle("Ceza Listesi")
+        .setDescription(metin)
+        .setColor("Orange")
+        .setFooter({ text: "Son 10 ceza gösterilmektedir." });
+
+      await interaction.reply({ embeds: [embed] });
     }
 
     // CEZA SİL
@@ -127,24 +129,29 @@ module.exports = {
 
       if (index === -1) {
         return interaction.reply({
-          content: "Bu ID'ye sahip bir ceza bulunamadı.",
-          ephemeral: true,
+          embeds: [
+            new EmbedBuilder()
+              .setTitle("Ceza Silme")
+              .setDescription("Bu ID'ye sahip bir ceza bulunamadı.")
+              .setColor("Grey"),
+          ],
         });
       }
 
       const silinen = cezalar.splice(index, 1)[0];
       saveData(db);
 
-      await interaction.reply({
-        content: [
-          "Ceza kaydı silindi.",
-          `Kullanıcı: ${interaction.guild.members.cache.get(silinen.userId)?.user.tag || silinen.userId}`,
-          `Kategori: ${silinen.kategori}`,
-          `Sebep: ${silinen.sebep}`,
-          `Ceza ID: ${silinen.id}`,
-        ].join("\n"),
-        ephemeral: true,
-      });
+      const embed = new EmbedBuilder()
+        .setTitle("Ceza Kaydı Silindi")
+        .setColor("Green")
+        .addFields(
+          { name: "Kullanıcı", value: `<@${silinen.userId}>`, inline: false },
+          { name: "Kategori", value: silinen.kategori, inline: true },
+          { name: "Sebep", value: silinen.sebep, inline: true },
+          { name: "Ceza ID", value: silinen.id, inline: true }
+        );
+
+      await interaction.reply({ embeds: [embed] });
     }
   },
 };
