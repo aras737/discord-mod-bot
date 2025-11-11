@@ -3,10 +3,12 @@ const fs = require("fs");
 const path = require("path");
 
 const DATA_FILE = path.join(process.cwd(), "cezalar.json");
+
 function loadData() {
   if (!fs.existsSync(DATA_FILE)) return {};
   return JSON.parse(fs.readFileSync(DATA_FILE, "utf8"));
 }
+
 function saveData(data) {
   fs.writeFileSync(DATA_FILE, JSON.stringify(data, null, 2));
 }
@@ -14,81 +16,133 @@ function saveData(data) {
 module.exports = {
   data: new SlashCommandBuilder()
     .setName("ceza")
-    .setDescription("Ceza ekle, listele veya sil")
+    .setDescription("Kullanıcılara ceza ekle, listele veya kaldır.")
     .addSubcommand(sub =>
       sub
         .setName("ekle")
-        .setDescription("Bir kullanıcıya ceza ekle")
-        .addUserOption(opt => opt.setName("kullanici").setDescription("Ceza verilecek kişi").setRequired(true))
-        .addStringOption(opt => opt.setName("kategori").setDescription("Ceza kategorisi (ör: küfür, asayiş)").setRequired(true))
-        .addStringOption(opt => opt.setName("sebep").setDescription("Ceza sebebi").setRequired(true))
+        .setDescription("Bir kullanıcıya ceza ekler.")
+        .addUserOption(opt => 
+          opt.setName("kullanici")
+            .setDescription("Ceza verilecek kullanıcı.")
+            .setRequired(true))
+        .addStringOption(opt => 
+          opt.setName("kategori")
+            .setDescription("Ceza kategorisi (örnek: küfür, reklam, asayiş).")
+            .setRequired(true))
+        .addStringOption(opt => 
+          opt.setName("sebep")
+            .setDescription("Ceza sebebi.")
+            .setRequired(true))
     )
     .addSubcommand(sub =>
       sub
         .setName("liste")
-        .setDescription("Tüm cezaları listele")
+        .setDescription("Sunucudaki cezaları listeler.")
     )
     .addSubcommand(sub =>
       sub
         .setName("sil")
-        .setDescription("Bir cezayı sil")
-        .addStringOption(opt => opt.setName("id").setDescription("Silinecek ceza ID'si").setRequired(true))
+        .setDescription("Bir cezayı ID'sine göre siler.")
+        .addStringOption(opt => 
+          opt.setName("id")
+            .setDescription("Silinecek cezanın ID'si.")
+            .setRequired(true))
     )
     .setDefaultMemberPermissions(PermissionFlagsBits.ManageMessages),
 
   async execute(interaction) {
     const sub = interaction.options.getSubcommand();
     const db = loadData();
-    if (!db[interaction.guild.id]) db[interaction.guild.id] = [];
+    const guildId = interaction.guild.id;
 
+    if (!db[guildId]) db[guildId] = [];
+
+    // CEZA EKLE
     if (sub === "ekle") {
       const user = interaction.options.getUser("kullanici");
       const kategori = interaction.options.getString("kategori");
       const sebep = interaction.options.getString("sebep");
       const id = Date.now().toString(36);
 
-      db[interaction.guild.id].push({
+      const record = {
         id,
         userId: user.id,
         kategori,
         sebep,
         moderator: interaction.user.id,
         tarih: new Date().toISOString(),
-      });
+      };
+
+      db[guildId].push(record);
       saveData(db);
 
       await interaction.reply({
-        content: `✅ Ceza eklendi:\n👤 Kullanıcı: <@${user.id}>\n📂 Kategori: ${kategori}\n📝 Sebep: ${sebep}\n🆔 ID: ${id}`,
+        content: [
+          `Ceza başarıyla eklendi.`,
+          `Kullanıcı: ${user.tag}`,
+          `Kategori: ${kategori}`,
+          `Sebep: ${sebep}`,
+          `Ceza ID: ${id}`,
+          `İşlemi yapan: ${interaction.user.tag}`,
+        ].join("\n"),
         ephemeral: true,
       });
     }
 
+    // CEZA LİSTE
     if (sub === "liste") {
-      const cezalar = db[interaction.guild.id];
-      if (!cezalar.length)
-        return interaction.reply({ content: "Hiç ceza bulunamadı.", ephemeral: true });
+      const cezalar = db[guildId];
+      if (!cezalar || cezalar.length === 0) {
+        return interaction.reply({
+          content: "Bu sunucuda kayıtlı bir ceza bulunmuyor.",
+          ephemeral: true,
+        });
+      }
 
-      const liste = cezalar
+      const metin = cezalar
         .slice(-10)
-        .map(c => `🆔 ${c.id} | 👤 <@${c.userId}> | 📂 ${c.kategori} | 📝 ${c.sebep}`)
-        .join("\n");
+        .map(c => 
+          [
+            `Ceza ID: ${c.id}`,
+            `Kullanıcı: ${interaction.guild.members.cache.get(c.userId)?.user.tag || c.userId}`,
+            `Kategori: ${c.kategori}`,
+            `Sebep: ${c.sebep}`,
+            `Yetkili: ${interaction.guild.members.cache.get(c.moderator)?.user.tag || c.moderator}`,
+            `Tarih: ${new Date(c.tarih).toLocaleString("tr-TR")}`,
+          ].join("\n")
+        )
+        .join("\n\n");
 
-      await interaction.reply({ content: `📋 Son cezalar:\n${liste}`, ephemeral: true });
+      await interaction.reply({
+        content: `Son cezalar:\n\n${metin}`,
+        ephemeral: true,
+      });
     }
 
+    // CEZA SİL
     if (sub === "sil") {
       const id = interaction.options.getString("id");
-      const cezalar = db[interaction.guild.id];
+      const cezalar = db[guildId];
       const index = cezalar.findIndex(c => c.id === id);
 
-      if (index === -1)
-        return interaction.reply({ content: "❌ Bu ID'ye ait ceza bulunamadı.", ephemeral: true });
+      if (index === -1) {
+        return interaction.reply({
+          content: "Bu ID'ye sahip bir ceza bulunamadı.",
+          ephemeral: true,
+        });
+      }
 
       const silinen = cezalar.splice(index, 1)[0];
       saveData(db);
 
       await interaction.reply({
-        content: `✅ Ceza silindi: <@${silinen.userId}> | ${silinen.kategori} | ${silinen.sebep}`,
+        content: [
+          "Ceza kaydı silindi.",
+          `Kullanıcı: ${interaction.guild.members.cache.get(silinen.userId)?.user.tag || silinen.userId}`,
+          `Kategori: ${silinen.kategori}`,
+          `Sebep: ${silinen.sebep}`,
+          `Ceza ID: ${silinen.id}`,
+        ].join("\n"),
         ephemeral: true,
       });
     }
