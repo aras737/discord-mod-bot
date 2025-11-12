@@ -32,6 +32,7 @@ const commands = [];
 const ALLOWED_USERS = [
   "752639955049644034", // Kullanıcı 1
   "1389930042200559706" // Kullanıcı 2
+  "1336374889447293000" // Kullanıcı 3
 ];
 
 // Komutları yükle
