@@ -2,7 +2,7 @@ const { SlashCommandBuilder, PermissionFlagsBits, EmbedBuilder } = require('disc
 
 module.exports = {
     data: new SlashCommandBuilder()
-        .setName('banlist')
+        .setName('banlis')
         .setDescription('Sunucudaki yasaklı kullanıcıların listesini gösterir.')
         .setDefaultMemberPermissions(PermissionFlagsBits.BanMembers),
 
