@@ -1,130 +1,279 @@
-const { 
-  SlashCommandBuilder, 
-  ActionRowBuilder, 
-  ButtonBuilder, 
-  ButtonStyle, 
-  Events 
-} = require("discord.js");
+const { SlashCommandBuilder, PermissionFlagsBits, EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, Events } = require("discord.js");
 
-// 🚨 KRİTİK: Bot sahibinin ID'si (BigInt hatasını önlemek için string olarak tanımlandı)
-const OWNER_ID = "1389930042200559706"; 
+/**
+ * /çekiliş time_value: integer (sayı)
+ * time_unit: seçim (dk, saat, gün, ay)
+ * ödül: string
+ * kazanan_sayisi: integer
+ *
+ * Kullanım: yetkili biri komutu tetikler -> kanal içine embed atılır, herkes görebilir.
+ * Butona tıklayanlar katılır/çıkar (toggle). Süre dolunca rastgele kazanan(lar) seçilir,
+ * kanal içine embed ile sonuç atılır ve kazananlara DM de gönderilir.
+ *
+ * Not: Bu komut kısa süreli çekilişleri destekler. Embed güncellemeleri her saniye yapılır
+ * (Discord rate limit'lerine dikkat; çok fazla çekiliş aynı anda olursa hatalar olabilir).
+ */
 
 module.exports = {
-  // Komutun Discord'a yüklenmesi için gerekli veriler
   data: new SlashCommandBuilder()
-    .setName("yonetim-paneli")
-    .setDescription("Bot sahibine özel yönetim panelini açar."),
+    .setName("çekiliş")
+    .setDescription("Yeni bir çekiliş başlatır.")
+    .setDefaultMemberPermissions(PermissionFlagsBits.ManageGuild)
+    .addIntegerOption(opt =>
+      opt.setName("time_value")
+        .setDescription("Süre değeri (ör: 5)")
+        .setRequired(true)
+    )
+    .addStringOption(opt =>
+      opt.setName("time_unit")
+        .setDescription("Süre birimi")
+        .setRequired(true)
+        .addChoices(
+          { name: "dakika", value: "minute" },
+          { name: "saat", value: "hour" },
+          { name: "gün", value: "day" },
+          { name: "ay", value: "month" }
+        )
+    )
+    .addStringOption(opt =>
+      opt.setName("ödül")
+        .setDescription("Çekiliş ödülü")
+        .setRequired(true)
+    )
+    .addIntegerOption(opt =>
+      opt.setName("kazanan_sayisi")
+        .setDescription("Kazanan kişi sayısı")
+        .setRequired(true)
+    ),
 
-  permissionLevel: "OWNER", 
-  
-  /**
-   * Komutun çalıştırma fonksiyonu.
-   * @param {import('discord.js').ChatInputCommandInteraction} interaction 
-   * @param {import('discord.js').Client} client 
-   */
-  async execute(interaction, client) {
-    
-    // --- 1. KRİTİK YETKİ KONTROLÜ (Sabit ID kullanılır) ---
-    if (interaction.user.id !== OWNER_ID) {
-        return interaction.reply({
-            content: "Bu yönetim paneli komutunu kullanmaya yetkiniz bulunmamaktadır. Yalnızca **Bot Sahibi** kullanabilir.",
-            ephemeral: true
-        });
+  async execute(interaction) {
+    // Parametreleri al
+    const value = interaction.options.getInteger("time_value", true);
+    const unit = interaction.options.getString("time_unit", true); // minute/hour/day/month
+    const prize = interaction.options.getString("ödül", true);
+    let winnersCount = interaction.options.getInteger("kazanan_sayisi", true);
+
+    // Süreyi ms'e çevir
+    const unitMultipliers = {
+      minute: 60 * 1000,
+      hour: 60 * 60 * 1000,
+      day: 24 * 60 * 60 * 1000,
+      month: 30 * 24 * 60 * 60 * 1000
+    };
+
+    if (value <= 0 || winnersCount <= 0) {
+      return interaction.reply({ content: "Süre ve kazanan sayısı 1 veya daha büyük olmalıdır.", ephemeral: true });
     }
 
-    // --- 2. BUTON BİLEŞENLERİNİ OLUŞTURMA ---
-    const row1 = new ActionRowBuilder()
-      .addComponents(
-        new ButtonBuilder()
-          .setCustomId("panel_yeniden_baslat")
-          .setLabel("Botu Yeniden Başlat")
-          .setStyle(ButtonStyle.Danger),
-        new ButtonBuilder()
-          .setCustomId("panel_durum_degistir")
-          .setLabel("Durum Değiştir")
-          .setStyle(ButtonStyle.Primary),
+    const multiplier = unitMultipliers[unit];
+    if (!multiplier) return interaction.reply({ content: "Geçersiz zaman birimi.", ephemeral: true });
+
+    const duration = value * multiplier;
+    const startTimestamp = Date.now();
+    const endTimestamp = startTimestamp + duration;
+
+    // Hazırlık: embed ve buton
+    const embed = new EmbedBuilder()
+      .setTitle("ÇEKİLİŞ BAŞLADI")
+      .setDescription(prize)
+      .addFields(
+        { name: "Süre", value: `${value} ${unit}`, inline: true },
+        { name: "Kazanan sayısı", value: `${winnersCount}`, inline: true },
+        { name: "Katılanlar", value: `0`, inline: true }
+      )
+      .setFooter({ text: `Başlatan: ${interaction.user.tag}` })
+      .setTimestamp();
+
+    const enterButton = new ButtonBuilder()
+      .setCustomId("giveaway_enter")
+      .setLabel("Katıl / Çık")
+      .setStyle(ButtonStyle.Primary);
+
+    const row = new ActionRowBuilder().addComponents(enterButton);
+
+    // Yalnızca yönetici/komutu kullananın açıkladığı mesaj: herkes görsün
+    await interaction.deferReply({ ephemeral: false });
+
+    const sent = await interaction.followUp({ embeds: [embed], components: [row], fetchReply: true });
+
+    // Katılımcılar seti (userId -> true)
+    const participants = new Map();
+
+    // Collector kur (butonlar için). Süre: duration ms
+    const collector = sent.createMessageComponentCollector({ time: duration });
+
+    // İç toggle davranışı: bir daha basarsa çıkar
+    collector.on("collect", async (btn) => {
+      try {
+        // Kullanıcı katılımcı toggle
+        const uid = btn.user.id;
+
+        if (participants.has(uid)) {
+          participants.delete(uid);
+          // cevap: özel bilgilendirme
+          await btn.reply({ content: "Çekilişten ayrıldınız.", ephemeral: true });
+        } else {
+          participants.set(uid, btn.user.tag);
+          await btn.reply({ content: "Çekilişe katıldınız.", ephemeral: true });
+        }
+
+        // Embed güncelle: güncel katılımcı sayısı ve kalan süre
+        const remainingMs = Math.max(0, endTimestamp - Date.now());
+        const remaining = formatDuration(remainingMs);
+        const newEmbed = EmbedBuilder.from(embed)
+          .setFields(
+            { name: "Süre", value: remaining, inline: true },
+            { name: "Kazanan sayısı", value: `${winnersCount}`, inline: true },
+            { name: "Katılanlar", value: `${participants.size}`, inline: true }
+          );
+
+        // try-catch ile editReply (rate limit koruması)
+        try {
+          await sent.edit({ embeds: [newEmbed], components: [row] });
+        } catch (e) {
+          // ignore edit hatası (rate limit vs.)
+        }
+      } catch (err) {
+        console.error("Collector collect error:", err);
+      }
+    });
+
+    // Her saniye embed güncellemesi (kalan süre ve katılımcı sayısı)
+    const interval = setInterval(async () => {
+      try {
+        const remainingMs = Math.max(0, endTimestamp - Date.now());
+        const remaining = formatDuration(remainingMs);
+        const newEmbed = EmbedBuilder.from(embed)
+          .setFields(
+            { name: "Süre", value: remaining, inline: true },
+            { name: "Kazanan sayısı", value: `${winnersCount}`, inline: true },
+            { name: "Katılanlar", value: `${participants.size}`, inline: true }
+          );
+        try {
+          await sent.edit({ embeds: [newEmbed], components: [row] });
+        } catch (e) {
+          // ignore (rate limit)
+        }
+      } catch (e) {
+        // ignore
+      }
+    }, 1000);
+
+    // Collector end -> çekiliş bitiş işlemleri
+    collector.on("end", async () => {
+      clearInterval(interval);
+
+      // Disable button
+      const disabledRow = new ActionRowBuilder().addComponents(
+        ButtonBuilder.from(enterButton).setDisabled(true)
       );
 
-    const row2 = new ActionRowBuilder()
-      .addComponents(
-        new ButtonBuilder()
-          .setCustomId("panel_sunucu_sayi")
-          .setLabel("Sunucu Sayısını Kontrol Et")
-          .setStyle(ButtonStyle.Secondary),
-        new ButtonBuilder()
-          .setCustomId("panel_kapat")
-          .setLabel("Paneli Kapat")
-          .setStyle(ButtonStyle.Success),
+      // Eğer hiç katılımcı yoksa bilgilendir
+      if (participants.size === 0) {
+        const noParticipantsEmbed = EmbedBuilder.from(embed)
+          .setTitle("ÇEKİLİŞ SONUÇLANDI")
+          .setDescription(prize)
+          .setFields(
+            { name: "Durum", value: "Katılan olmadığı için çekiliş iptal edildi.", inline: false }
+          )
+          .setFooter({ text: `Başlatan: ${interaction.user.tag}` })
+          .setTimestamp();
+
+        try {
+          await sent.edit({ embeds: [noParticipantsEmbed], components: [disabledRow] });
+          await interaction.followUp({ content: "Çekiliş katılımcı olmadığı için sonlandırıldı.", ephemeral: false });
+        } catch (e) {}
+        return;
+      }
+
+      // Kazanan sayısı katılımcı sayısından fazla ise düzelt
+      if (winnersCount > participants.size) winnersCount = participants.size;
+
+      // Katılımcıları diziye al ve rastgele seç
+      const participantIds = Array.from(participants.keys());
+      shuffleArray(participantIds);
+
+      const winners = participantIds.slice(0, winnersCount);
+
+      // Kanal ve DM bildirimleri
+      const winnersMention = winners.map(id => `<@${id}>`).join(", ");
+      const resultEmbed = new EmbedBuilder()
+        .setTitle("ÇEKİLİŞ SONUÇLANDI")
+        .setDescription(prize)
+        .addFields(
+          { name: "Kazanan(lar)", value: winnersMention || "Yok", inline: false },
+          { name: "Katılanlar", value: `${participants.size}`, inline: true },
+          { name: "Kazanan sayısı", value: `${winnersCount}`, inline: true }
+        )
+        .setFooter({ text: `Başlatan: ${interaction.user.tag}` })
+        .setTimestamp();
+
+      try {
+        await sent.edit({ embeds: [resultEmbed], components: [disabledRow] });
+      } catch (e) {}
+
+      // Kanal duyurusu (mention kazananlar)
+      try {
+        await interaction.followUp({ content: `${winners.map(id => `<@${id}>`).join(" ")} çekilişi kazandı.`, ephemeral: false });
+        await interaction.followUp({ embeds: [resultEmbed], ephemeral: false });
+      } catch (e) {}
+
+      // DM ile kazananlara bildirim gönder
+      for (const winnerId of winners) {
+        try {
+          const user = await interaction.client.users.fetch(winnerId);
+          await user.send({
+            content: `Tebrikler! Sunucuda başlatılan çekilişi kazandınız.\nÖdül: ${prize}\nSunucu: ${interaction.guild.name}`
+          }).catch(() => {
+            // DM kapalı olabilir
+          });
+        } catch (e) {
+          console.error("DM gönderme hatası:", e);
+        }
+      }
+    });
+
+    // İlk etkileşim mesajını düzenle (başlangıç durumu)
+    const remainingInitial = formatDuration(duration);
+    const initialEmbed = EmbedBuilder.from(embed)
+      .setFields(
+        { name: "Süre", value: remainingInitial, inline: true },
+        { name: "Kazanan sayısı", value: `${winnersCount}`, inline: true },
+        { name: "Katılanlar", value: `0`, inline: true }
       );
 
-    // --- 3. YÖNETİM PANELİ MESAJINI GÖNDERME ---
-    await interaction.reply({
-      content: `🛠️ **BOT YÖNETİM PANELİ**\n\nYetkiniz doğrulandı. Lütfen yapmak istediğiniz işlemi seçin. Butonlar yalnızca sizin için **60 saniye** boyunca aktif olacaktır.`,
-      components: [row1, row2],
-      ephemeral: true, 
-      fetchReply: true 
-    });
+    try {
+      await sent.edit({ embeds: [initialEmbed] });
+    } catch (e) {}
 
-    // --- 4. BUTON ETKİLEŞİMLERİNİ DİNLEME (COLLECTOR) ---
-    // Filtre: Sadece 'panel_' ID'li butonlar ve sadece Bot Sahibi kullanıcısı (OWNER_ID) için
-    const filter = (i) => i.customId.startsWith('panel_') && i.user.id === OWNER_ID;
-    
-    // 60 saniyelik (60000 ms) dinleyici oluştur
-    const collector = interaction.channel.createMessageComponentCollector({ 
-        filter, 
-        time: 60000 
-    }); 
+    // Son olarak komutu kullanan kişiye başarılı cevap (özet)
+    try {
+      await interaction.editReply({ content: `Çekiliş başlatıldı: Ödül "${prize}" — Süre: ${value} ${unit} — Kazanan sayısı: ${winnersCount}`, ephemeral: false });
+    } catch (e) {
+      // Eğer deferReply + followUp kullanıldıysa, zaten followUp ile mesaj gönderildi
+    }
 
-    collector.on('collect', async i => {
-        await i.deferUpdate(); // Butona basıldığını Discord'a bildir
+    // Helper fonksiyonlar
+    function formatDuration(ms) {
+      if (ms <= 0) return "Süre doldu";
+      const s = Math.floor(ms / 1000) % 60;
+      const m = Math.floor(ms / (60 * 1000)) % 60;
+      const h = Math.floor(ms / (60 * 60 * 1000)) % 24;
+      const d = Math.floor(ms / (24 * 60 * 60 * 1000));
+      const parts = [];
+      if (d) parts.push(`${d}g`);
+      if (h) parts.push(`${h}s`);
+      if (m) parts.push(`${m}dk`);
+      if (s) parts.push(`${s}s`);
+      return parts.join(" ");
+    }
 
-        switch (i.customId) {
-            case "panel_yeniden_baslat":
-                await i.followUp({ content: "⚠️ **UYARI:** Bot yeniden başlatılıyor. (Yeniden başlatma işlemi için PM2 veya benzeri bir araç kullanılıyor olmalı.)", ephemeral: true });
-                collector.stop('restart_requested'); 
-                
-                // Botu durdurma komutu (PM2/Docker otomatik yeniden başlatmayı tetikler)
-                setTimeout(() => process.exit(0), 1000); 
-                break;
-            
-            case "panel_durum_degistir":
-                client.user.setActivity("Yönetim İşlemi", { type: 3 /* Watching */ }); 
-                await i.followUp({ 
-                    content: `Botun durumu başarıyla **"İzliyor: Yönetim İşlemi"** olarak ayarlandı.`, 
-                    ephemeral: true 
-                });
-                break;
-
-            case "panel_sunucu_sayi":
-                const guildCount = client.guilds.cache.size;
-                await i.followUp({ 
-                    content: `📊 **İstatistik:** Botun hizmet verdiği anlık sunucu sayısı: **${guildCount}**`, 
-                    ephemeral: true 
-                });
-                break;
-            
-            case "panel_kapat":
-                await i.editReply({ 
-                    content: "✅ **Panel kapatıldı.** Tekrar açmak için `/yonetim-paneli` komutunu kullanın.",
-                    components: [] // Butonları mesajdan kaldır
-                });
-                collector.stop('closed_by_user'); 
-                break;
-        }
-    });
-
-    collector.on('end', async (collected, reason) => {
-        // Zaman dolduğunda mesajı güncelle ve butonları kaldır
-        if (reason === 'time') {
-            try {
-                await interaction.editReply({ 
-                    content: "⏳ **Panel oturumu zaman aşımına uğradı.** Butonlar devre dışı bırakıldı.",
-                    components: []
-                });
-            } catch (error) {
-                // Hata mesajını sessize al
-            }
-        }
-    });
-  },
+    function shuffleArray(array) {
+      for (let i = array.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [array[i], array[j]] = [array[j], array[i]];
+      }
+      return array;
+    }
+  }
 };
