@@ -1,85 +1,64 @@
-const { 
-  SlashCommandBuilder, 
-  PermissionFlagsBits 
-} = require("discord.js");
+const { SlashCommandBuilder, PermissionFlagsBits, EmbedBuilder } = require('discord.js');
+const { QuickDB } = require('quick.db');
+const db = new QuickDB();
 
 module.exports = {
-  // Komutun Discord'a yüklenmesi için gerekli veriler
-  data: new SlashCommandBuilder()
-    .setName("rollerisil")
-    .setDescription("UYARI: Sunucudaki TÜM rolleri (Botun erişebildiği) siler.")
-    // Bu komutun çalışması için KESİNLİKLE YÖNETİCİ yetkisi gereklidir.
-    .setDefaultMemberPermissions(PermissionFlagsBits.Administrator), 
-  
-  // Ana dosyanızdaki yetkilendirme sistemi için ADMIN veya OWNER seviyesini ayarlayın.
-  permissionLevel: "ADMINISTRATOR", 
+    data: new SlashCommandBuilder()
+        .setName('otorol')
+        .setDescription('Sunucuya katılan üyelere otomatik verilecek rolü ayarlar.')
+        .setDefaultMemberPermissions(PermissionFlagsBits.ManageRoles)
+        .addRoleOption(option =>
+            option.setName('rol')
+                .setDescription('Otomatik verilecek rolü seçin.')
+                .setRequired(true)
+        ),
 
-  /**
-   * Komutun çalıştırma fonksiyonu.
-   * @param {import('discord.js').ChatInputCommandInteraction} interaction 
-   * @param {import('discord.js').Client} client 
-   */
-  async execute(interaction, client) {
-    
-    // Güvenlik Kontrolü: Botun bu işlemi yapmaya yetkisi var mı?
-    if (!interaction.guild.members.me.permissions.has(PermissionFlagsBits.ManageRoles)) {
-        return interaction.reply({
-            content: "❌ Botun rolleri yönetme yetkisi yok. Lütfen botun rolünün en yukarıda olduğundan emin olun.",
-            ephemeral: true
-        });
-    }
+    async execute(interaction, client) {
+        const role = interaction.options.getRole('rol');
 
-    // Kullanıcıya onay sorusu
-    await interaction.reply({
-        content: `⚠️ **SON UYARI!** Sunucudaki **TÜM** rolleri silmek üzeresiniz. Bu işlem geri alınamaz ve sunucuyu ciddi şekilde bozabilir.\n\nEmin misiniz? Onaylamak için **EVET SİL** yazın:`,
-        ephemeral: true
-    });
-
-    // Mesaj dinleyicisi ile onay bekleme
-    const filter = (m) => m.author.id === interaction.user.id && m.content === 'EVET SİL';
-    
-    try {
-        const collected = await interaction.channel.awaitMessages({ filter, max: 1, time: 15000, errors: ['time'] });
-        const confirmation = collected.first();
-
-        if (confirmation.content === 'EVET SİL') {
-            await interaction.followUp({
-                content: "✅ Onaylandı. Rol silme işlemi başlatılıyor...",
+        // Yetki kontrolü
+        if (!interaction.guild.members.me.permissions.has(PermissionFlagsBits.ManageRoles)) {
+            return interaction.reply({
+                content: '❌ Roller yönetme yetkim yok!',
                 ephemeral: true
             });
-
-            // Silinen rollerin sayacını tut
-            let deletedCount = 0;
-            const rolesToDelete = interaction.guild.roles.cache;
-
-            // Rolleri tek tek sil
-            for (const [id, role] of rolesToDelete) {
-                // @everyone rolünü SİLEMEYİZ ve Botun kendi rolünü SİLMEMELİYİZ
-                if (role.name === '@everyone' || role.managed || role.id === interaction.guild.roles.everyone.id || role.id === interaction.guild.members.me.roles.highest.id) {
-                    continue; // Bu rolleri atla
-                }
-                
-                try {
-                    await role.delete("Sunucu sahibinin isteği üzerine tüm roller siliniyor.");
-                    deletedCount++;
-                } catch (error) {
-                    console.error(`Rol silinirken hata oluştu (${role.name}):`, error.message);
-                }
-            }
-
-            await interaction.followUp({
-                content: `🔥 **İŞLEM TAMAMLANDI!** Sunucudaki erişilebilen toplam **${deletedCount}** rol silinmiştir.`,
-                ephemeral: true
-            });
-            
         }
 
-    } catch (e) {
-        // Zaman aşımı veya farklı bir mesaj gönderme
-        await interaction.followUp({ 
-            content: "❌ Rol silme işlemi zaman aşımına uğradı veya iptal edildi.", 
-            ephemeral: true 
+        // Rol hiyerarşi kontrolü
+        const botRole = interaction.guild.members.me.roles.highest;
+        if (role.position >= botRole.position) {
+            return interaction.reply({
+                content: '❌ Bu rol, botun rolünden daha yüksek olduğu için ayarlanamaz!',
+                ephemeral: true
+            });
+        }
+
+        // Veritabanına kaydet
+        await db.set(`otorol_${interaction.guild.id}`, role.id);
+
+        const embed = new EmbedBuilder()
+            .setColor('#00ff88')
+            .setTitle('✅ Otomatik Rol Ayarlandı')
+            .setDescription(`Yeni katılan üyelere otomatik olarak şu rol verilecek:\n> ${role}`)
+            .setFooter({ text: `Ayarlayan: ${interaction.user.tag}`, iconURL: interaction.user.displayAvatarURL() })
+            .setTimestamp();
+
+        await interaction.reply({ embeds: [embed], ephemeral: false });
+
+        // EVENT: Yeni biri katıldığında rol ver
+        client.on('guildMemberAdd', async member => {
+            try {
+                const otorolID = await db.get(`otorol_${member.guild.id}`);
+                if (!otorolID) return;
+
+                const rol = member.guild.roles.cache.get(otorolID);
+                if (!rol) return;
+
+                await member.roles.add(rol);
+                console.log(`${member.user.tag} kullanıcısına oto rol verildi: ${rol.name}`);
+            } catch (err) {
+                console.error('Oto rol hatası:', err);
+            }
         });
     }
-  },
 };
