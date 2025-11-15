@@ -1,99 +1,115 @@
 // commands/antiguard.js
-// Single-file, production-ready Anti-Nuke / Anti-Abuse system with a single slash command to configure.
-// Usage:
-// 1) Place this file in commands/antiguard.js
-// 2) Register slash commands as usual; this module's command name is "antiguard".
-// 3) After client login call: require('./commands/antiguard').init(client);
-// Requires: discord.js v14, quick.db (QuickDB), node 16+
-// Permissions: bot must have ManageRoles, BanMembers, ManageChannels, ManageGuild, ViewAuditLog, ModerateMembers
-// Privileged intents: GuildMembers recommended.
+// All-in-one hardened Anti-Nuke / Anti-Abuse system
+// Requires: discord.js v14, quick.db (QuickDB)
+// Place in commands folder and call .init(client) after login.
 
-const { SlashCommandBuilder, PermissionFlagsBits, EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, AuditLogEvent, Events } = require("discord.js");
+const {
+  SlashCommandBuilder,
+  PermissionFlagsBits,
+  EmbedBuilder,
+  ActionRowBuilder,
+  ButtonBuilder,
+  ButtonStyle,
+  AuditLogEvent,
+  Events
+} = require("discord.js");
 const { QuickDB } = require("quick.db");
 const fs = require("fs");
 const path = require("path");
 
 const db = new QuickDB();
 
-// rollback storage (local file)
-const ROLLBACK_PATH = path.join(process.cwd(), "antiguard_rollback.json");
-function loadRollback() {
+// Rollback store file (durable)
+const ROLLBACK_FILE = path.join(process.cwd(), "antiguard_rollback.json");
+function readRollback() {
   try {
-    if (!fs.existsSync(ROLLBACK_PATH)) return { channels: [], roles: [] };
-    return JSON.parse(fs.readFileSync(ROLLBACK_PATH, "utf8"));
+    if (!fs.existsSync(ROLLBACK_FILE)) return { channels: [], roles: [] };
+    return JSON.parse(fs.readFileSync(ROLLBACK_FILE, "utf8"));
   } catch {
     return { channels: [], roles: [] };
   }
 }
-function saveRollback(data) {
-  fs.writeFileSync(ROLLBACK_PATH, JSON.stringify(data, null, 2));
+function writeRollback(data) {
+  fs.writeFileSync(ROLLBACK_FILE, JSON.stringify(data, null, 2));
 }
 async function snapshotChannel(ch) {
-  const data = loadRollback();
-  data.channels.push({
-    guildId: ch.guild.id,
-    name: ch.name,
-    type: ch.type,
-    position: ch.position,
-    parentId: ch.parentId || null,
-    topic: ch.topic || null,
-    nsfw: ch.nsfw || false,
-    rateLimitPerUser: ch.rateLimitPerUser || 0,
-    createdAt: Date.now()
-  });
-  saveRollback(data);
+  try {
+    if (!ch.guild) return;
+    const data = readRollback();
+    data.channels.push({
+      guildId: ch.guild.id,
+      id: ch.id,
+      name: ch.name,
+      type: ch.type,
+      position: ch.position,
+      parentId: ch.parentId || null,
+      topic: ch.topic || null,
+      nsfw: ch.nsfw || false,
+      rateLimitPerUser: ch.rateLimitPerUser || 0,
+      createdAt: Date.now()
+    });
+    writeRollback(data);
+  } catch {}
 }
 async function snapshotRole(role) {
-  const data = loadRollback();
-  data.roles.push({
-    guildId: role.guild.id,
-    name: role.name,
-    color: role.color,
-    hoist: role.hoist,
-    permissions: role.permissions.bitfield,
-    mentionable: role.mentionable,
-    position: role.position,
-    createdAt: Date.now()
-  });
-  saveRollback(data);
+  try {
+    if (!role.guild) return;
+    const data = readRollback();
+    data.roles.push({
+      guildId: role.guild.id,
+      id: role.id,
+      name: role.name,
+      color: role.color,
+      hoist: role.hoist,
+      permissions: role.permissions.bitfield,
+      mentionable: role.mentionable,
+      position: role.position,
+      createdAt: Date.now()
+    });
+    writeRollback(data);
+  } catch {}
 }
 async function restoreChannels(guild) {
-  const data = loadRollback();
-  const toRestore = data.channels.filter(c => c.guildId === guild.id);
-  for (const c of toRestore) {
-    try {
+  try {
+    const data = readRollback();
+    const toRestore = data.channels.filter(c => c.guildId === guild.id);
+    for (const c of toRestore) {
+      // check exists already by name to avoid duplicates
+      if (guild.channels.cache.find(x => x.name === c.name)) continue;
       await guild.channels.create({
         name: c.name,
         type: c.type,
-        topic: c.topic,
-        nsfw: c.nsfw,
-        parent: c.parentId || null,
+        topic: c.topic || undefined,
+        nsfw: c.nsfw || false,
         rateLimitPerUser: c.rateLimitPerUser || 0,
-        position: c.position
+        parent: c.parentId || null,
+        position: c.position || undefined
       }).catch(()=>{});
-    } catch {}
-  }
+    }
+  } catch (e) { console.error("restoreChannels error:", e); }
 }
 async function restoreRoles(guild) {
-  const data = loadRollback();
-  const toRestore = data.roles.filter(r => r.guildId === guild.id);
-  for (const r of toRestore) {
-    try {
+  try {
+    const data = readRollback();
+    const toRestore = data.roles.filter(r => r.guildId === guild.id);
+    for (const r of toRestore) {
+      if (guild.roles.cache.find(x => x.name === r.name)) continue;
       await guild.roles.create({
         name: r.name,
-        color: r.color,
-        hoist: r.hoist,
-        permissions: r.permissions,
-        mentionable: r.mentionable,
-        position: r.position
+        color: r.color || undefined,
+        hoist: r.hoist || false,
+        permissions: r.permissions || undefined,
+        mentionable: r.mentionable || false,
+        position: r.position || undefined
       }).catch(()=>{});
-    } catch {}
-  }
+    }
+  } catch (e) { console.error("restoreRoles error:", e); }
 }
 
 // Defaults
 const DEFAULTS = {
   protectionEnabled: false,
+  panicMode: false,
   logChannelId: null,
   adminRoleId: null,
   whitelist: [], // user IDs
@@ -105,7 +121,7 @@ const DEFAULTS = {
     timeWindowMs: 5000
   },
   autoPunish: {
-    roleCreate: "ban",        // ban | timeout | removeroles | none
+    roleCreate: "ban",
     roleDelete: "ban",
     channelCreate: "ban",
     channelDelete: "ban",
@@ -116,7 +132,7 @@ const DEFAULTS = {
   }
 };
 
-// in-memory counters: Map keys -> `${guildId}:${type}:${userId}` -> [timestamps]
+// In-memory counters: key `${guildId}:${type}:${userId}` -> timestamps[]
 const counters = new Map();
 function pushAction(guildId, type, userId, windowMs) {
   const key = `${guildId}:${type}:${userId}`;
@@ -128,61 +144,68 @@ function pushAction(guildId, type, userId, windowMs) {
   counters.set(key, arr);
   return arr.length;
 }
-function clearOldCounters() {
+function cleanupCounters() {
   const now = Date.now();
   for (const [k, arr] of counters.entries()) {
-    if (!arr.length || now - arr[arr.length - 1] > 10 * 60 * 1000) counters.delete(k);
+    if (!arr.length || now - arr[arr.length-1] > 10*60*1000) counters.delete(k);
   }
 }
-setInterval(clearOldCounters, 60_000);
+setInterval(cleanupCounters, 60_000);
 
-// helpers
-async function getGuildConfig(guildId) {
-  const cfg = await db.get(`antiguard_cfg_${guildId}`) || {};
-  return { ...DEFAULTS, ...cfg, thresholds: { ...DEFAULTS.thresholds, ...(cfg.thresholds||{}) }, autoPunish: { ...DEFAULTS.autoPunish, ...(cfg.autoPunish||{}) } };
+// Config helpers
+async function getCfg(guildId) {
+  const raw = await db.get(`antiguard_cfg_${guildId}`) || {};
+  // deep merge defaults
+  return {
+    ...DEFAULTS,
+    ...raw,
+    thresholds: { ...DEFAULTS.thresholds, ...(raw.thresholds||{}) },
+    autoPunish: { ...DEFAULTS.autoPunish, ...(raw.autoPunish||{}) }
+  };
 }
-async function setGuildConfig(guildId, newcfg) {
-  await db.set(`antiguard_cfg_${guildId}`, newcfg);
+async function setCfg(guildId, cfg) {
+  await db.set(`antiguard_cfg_${guildId}`, cfg);
 }
 
-// check exemption: owner, admin perms, configured adminRole, whitelist
+// Exempt check
 async function isExempt(member) {
   if (!member) return false;
   if (member.id === member.guild.ownerId) return true;
   if (member.permissions?.has && member.permissions.has(PermissionFlagsBits.Administrator)) return true;
-  const cfg = await getGuildConfig(member.guild.id);
+  const cfg = await getCfg(member.guild.id);
   if (cfg.adminRoleId && member.roles.cache.has(cfg.adminRoleId)) return true;
-  const wl = cfg.whitelist || [];
-  if (wl.includes(member.id)) return true;
+  if ((cfg.whitelist||[]).includes(member.id)) return true;
   return false;
 }
 
-// apply punishment
+// Safe punish
 async function applyPunish(guild, targetId, kind, reason) {
   try {
     const member = await guild.members.fetch(targetId).catch(()=>null);
-    if (!member) return { ok: false, error: "not found" };
+    if (!member) return { ok:false, error:"notfound" };
+    if (await isExempt(member)) return { ok:false, error:"exempt" };
+
     if (kind === "ban") {
       await guild.members.ban(targetId, { reason }).catch(()=>{});
-      return { ok: true, action: "ban" };
+      return { ok:true, action:"ban" };
     }
     if (kind === "timeout") {
-      await member.timeout(15 * 60 * 1000, reason).catch(()=>{});
-      return { ok: true, action: "timeout" };
+      await member.timeout(15*60*1000, reason).catch(()=>{});
+      return { ok:true, action:"timeout" };
     }
     if (kind === "removeroles") {
-      const rolesToRemove = member.roles.cache.filter(r => r.id !== guild.id).map(r=>r.id);
-      if (rolesToRemove.length) await member.roles.remove(rolesToRemove).catch(()=>{});
-      return { ok: true, action: "removeroles" };
+      const roles = member.roles.cache.filter(r => r.id !== guild.id).map(r=>r.id);
+      if (roles.length) await member.roles.remove(roles).catch(()=>{});
+      return { ok:true, action:"removeroles" };
     }
-    return { ok: false, error: "unknown" };
+    return { ok:false, error:"unknownkind" };
   } catch (e) {
-    return { ok: false, error: String(e) };
+    return { ok:false, error:String(e) };
   }
 }
 async function sendLog(guild, embed) {
   try {
-    const cfg = await getGuildConfig(guild.id);
+    const cfg = await getCfg(guild.id);
     if (cfg.logChannelId) {
       const ch = guild.channels.cache.get(cfg.logChannelId) || await guild.channels.fetch(cfg.logChannelId).catch(()=>null);
       if (ch && ch.send) return ch.send({ embeds: [embed] }).catch(()=>{});
@@ -191,152 +214,153 @@ async function sendLog(guild, embed) {
   } catch {}
 }
 
-// punishment & log wrapper
+// consolidated handler
 async function handleBadActor(guild, executor, type, details = {}) {
   try {
     if (!executor) return;
     const member = await guild.members.fetch(executor.id).catch(()=>null);
     if (!member) return;
     if (await isExempt(member)) return;
-
-    const cfg = await getGuildConfig(guild.id);
+    const cfg = await getCfg(guild.id);
     const kind = cfg.autoPunish[type] || "ban";
 
-    // take snapshot if roles/channels were affected
+    // snapshot
     if (details.snapshotChannel) await snapshotChannel(details.snapshotChannel).catch(()=>{});
     if (details.snapshotRole) await snapshotRole(details.snapshotRole).catch(()=>{});
 
-    // attempt conservative action: remove roles then punish
+    // conservative - remove roles first if manageable
     try {
       if (member.manageable) {
-        const rolesToRemove = member.roles.cache.filter(r => r.id !== guild.id).map(r=>r.id);
-        if (rolesToRemove.length) await member.roles.remove(rolesToRemove).catch(()=>{});
+        const roles = member.roles.cache.filter(r => r.id !== guild.id).map(r=>r.id);
+        if (roles.length) await member.roles.remove(roles).catch(()=>{});
       }
     } catch {}
 
-    const res = await applyPunish(guild, executor.id, kind, `Auto-protect (${type})`).catch(()=>({ok:false}));
+    const res = await applyPunish(guild, executor.id, kind, `AntiGuard auto (${type})`).catch(()=>({ok:false}));
 
     const embed = new EmbedBuilder()
-      .setTitle("🚨 Anti-Nuke — Tehlike Engellendi")
+      .setTitle("🚨 AntiGuard — Tehlike Engellendi")
       .setColor("Red")
       .setDescription(`**Tür:** ${type}\n**Fail:** <@${executor.id}> (${executor.tag})\n**Uygulanan:** ${res.ok ? res.action : "uygulama başarısız"}`)
       .setTimestamp();
-
-    if (details.info) embed.addFields({ name: "Detay", value: details.info, inline: false });
+    if (details.info) embed.addFields({ name:"Detay", value:details.info });
 
     await sendLog(guild, embed);
+
+    // Panic mode extra: lock server verification level if configured
+    if (cfg.panicMode) {
+      try { await guild.setVerificationLevel(4); } catch {}
+    }
   } catch (e) {
     console.error("handleBadActor error:", e);
   }
 }
 
-// Core event handlers (to be attached in init)
+// Robust audit log getter: wait & double-check to reduce race conditions
+async function fetchExecutorSafely(guild, auditType, targetId=null, attempts=3, delayMs=250) {
+  for (let i=0;i<attempts;i++) {
+    try {
+      const logs = await guild.fetchAuditLogs({ type: auditType, limit: 5 }).catch(()=>null);
+      if (!logs) { await new Promise(r=>setTimeout(r, delayMs)); continue; }
+      // If targetId provided, search entries with matching targetId
+      const entry = targetId ? logs.entries.find(e=>String(e.targetId) === String(targetId)) || logs.entries.first() : logs.entries.first();
+      if (entry && entry.executor) return entry.executor;
+    } catch {}
+    await new Promise(r=>setTimeout(r, delayMs));
+  }
+  return null;
+}
+
+// Register core handlers
 async function registerHandlers(client) {
-  // role create
+  // avoid double-init
+  if (client._antiguard_registered) return;
+  client._antiguard_registered = true;
+
+  // Role create
   client.on(Events.RoleCreate, async (role) => {
     try {
       const guild = role.guild;
-      const cfg = await getGuildConfig(guild.id);
+      const cfg = await getCfg(guild.id);
       if (!cfg.protectionEnabled) return;
 
-      // audit
-      const audit = await guild.fetchAuditLogs({ type: AuditLogEvent.RoleCreate, limit: 1 }).catch(()=>null);
-      const entry = audit?.entries.first();
-      if (!entry) return;
-      const executor = entry.executor;
+      const executor = await fetchExecutorSafely(guild, AuditLogEvent.RoleCreate, role.id);
       if (!executor || executor.id === client.user.id) return;
 
       const count = pushAction(guild.id, "roleCreate", executor.id, cfg.thresholds.timeWindowMs);
+      // snapshot role for potential restore
+      await snapshotRole(role).catch(()=>{});
       if (count >= cfg.thresholds.roleCreateLimit) {
-        await handleBadActor(guild, executor, "roleCreate", { snapshotRole: role, info: `Oluşturulan rol: ${role.name} (${role.id})` });
-        // delete the role (cleanup)
-        try { await role.delete("Anti-Nuke: role spam cleanup").catch(()=>{}); } catch {}
-      } else {
-        // snapshot for rollback if needed
-        await snapshotRole(role).catch(()=>{});
+        await handleBadActor(guild, executor, "roleCreate", { snapshotRole: role, info:`Oluşturulan: ${role.name} (${role.id})` });
+        try { await role.delete("AntiGuard cleanup: role spam").catch(()=>{}); } catch {}
       }
     } catch (e) { console.error("RoleCreate handler error:", e); }
   });
 
-  // role delete
+  // Role delete
   client.on(Events.GuildRoleDelete, async (role) => {
     try {
       const guild = role.guild;
-      const cfg = await getGuildConfig(guild.id);
+      const cfg = await getCfg(guild.id);
       if (!cfg.protectionEnabled) return;
 
-      const audit = await guild.fetchAuditLogs({ type: AuditLogEvent.RoleDelete, limit: 1 }).catch(()=>null);
-      const entry = audit?.entries.first();
-      if (!entry) return;
-      const executor = entry.executor;
+      const executor = await fetchExecutorSafely(guild, AuditLogEvent.RoleDelete, role.id);
       if (!executor || executor.id === client.user.id) return;
 
       const count = pushAction(guild.id, "roleDelete", executor.id, cfg.thresholds.timeWindowMs);
+      await snapshotRole(role).catch(()=>{});
       if (count >= cfg.thresholds.roleCreateLimit) {
-        await handleBadActor(guild, executor, "roleDelete", { info: `Silinen rol: ${role.name} (${role.id})` });
-        // attempt restore later
+        await handleBadActor(guild, executor, "roleDelete", { info:`Silinen: ${role.name} (${role.id})` });
         setTimeout(()=> restoreRoles(guild).catch(()=>{}), 2000);
-      } else {
-        // save snapshot for restore
-        await snapshotRole(role).catch(()=>{});
       }
     } catch (e) { console.error("RoleDelete handler error:", e); }
   });
 
-  // channel create
+  // Channel create
   client.on(Events.ChannelCreate, async (ch) => {
     try {
       const guild = ch.guild;
-      const cfg = await getGuildConfig(guild.id);
+      const cfg = await getCfg(guild.id);
       if (!cfg.protectionEnabled) return;
 
-      const audit = await guild.fetchAuditLogs({ type: AuditLogEvent.ChannelCreate, limit: 1 }).catch(()=>null);
-      const entry = audit?.entries.first();
-      if (!entry) return;
-      const executor = entry.executor;
+      const executor = await fetchExecutorSafely(guild, AuditLogEvent.ChannelCreate, ch.id);
       if (!executor || executor.id === client.user.id) return;
 
       const count = pushAction(guild.id, "channelCreate", executor.id, cfg.thresholds.timeWindowMs);
+      await snapshotChannel(ch).catch(()=>{});
       if (count >= cfg.thresholds.channelCreateLimit) {
-        await handleBadActor(guild, executor, "channelCreate", { snapshotChannel: ch, info: `Oluşturulan kanal: ${ch.name} (${ch.id})` });
-        try { await ch.delete("Anti-Nuke: channel spam cleanup").catch(()=>{}); } catch {}
-      } else {
-        await snapshotChannel(ch).catch(()=>{});
+        await handleBadActor(guild, executor, "channelCreate", { snapshotChannel: ch, info:`Oluşturulan: ${ch.name} (${ch.id})` });
+        try { await ch.delete("AntiGuard cleanup: channel spam").catch(()=>{}); } catch {}
       }
     } catch (e) { console.error("ChannelCreate handler error:", e); }
   });
 
-  // channel delete
+  // Channel delete
   client.on(Events.ChannelDelete, async (ch) => {
     try {
       const guild = ch.guild;
-      const cfg = await getGuildConfig(guild.id);
+      const cfg = await getCfg(guild.id);
       if (!cfg.protectionEnabled) return;
 
-      const audit = await guild.fetchAuditLogs({ type: AuditLogEvent.ChannelDelete, limit: 1 }).catch(()=>null);
-      const entry = audit?.entries.first();
-      if (!entry) return;
-      const executor = entry.executor;
+      const executor = await fetchExecutorSafely(guild, AuditLogEvent.ChannelDelete, ch.id);
       if (!executor || executor.id === client.user.id) return;
 
       const count = pushAction(guild.id, "channelDelete", executor.id, cfg.thresholds.timeWindowMs);
+      await snapshotChannel(ch).catch(()=>{});
       if (count >= cfg.thresholds.channelCreateLimit) {
-        await handleBadActor(guild, executor, "channelDelete", { info: `Silinen kanal: ${ch.name} (${ch.id})` });
+        await handleBadActor(guild, executor, "channelDelete", { info:`Silinen: ${ch.name} (${ch.id})` });
         setTimeout(()=> restoreChannels(guild).catch(()=>{}), 2000);
-      } else {
-        await snapshotChannel(ch).catch(()=>{});
       }
     } catch (e) { console.error("ChannelDelete handler error:", e); }
   });
 
-  // webhookUpdate - generic (can't easily get creator), just log and check frequency per executor via recent audit logs
+  // Webhook update
   client.on(Events.WebhookUpdate, async (ch) => {
     try {
       const guild = ch.guild;
-      const cfg = await getGuildConfig(guild.id);
+      const cfg = await getCfg(guild.id);
       if (!cfg.protectionEnabled) return;
 
-      // fetch recent audit logs for webhook create/delete
       const audit = await guild.fetchAuditLogs({ limit: 6 }).catch(()=>null);
       if (!audit) return;
       const entry = audit.entries.find(e => [AuditLogEvent.WebhookCreate, AuditLogEvent.WebhookDelete].includes(e.action));
@@ -348,23 +372,19 @@ async function registerHandlers(client) {
       if (count >= cfg.thresholds.webhookCreateLimit) {
         await handleBadActor(guild, executor, "webhookSpam", { info: `Webhook update in ${ch.name || 'channel'}` });
       } else {
-        const embed = new EmbedBuilder()
-          .setTitle("⚠️ Webhook güncellemesi algılandı")
-          .setColor("Orange")
-          .setDescription(`Kanal: ${ch.name}\nOlayı yapan: ${executor.tag}`);
+        const embed = new EmbedBuilder().setTitle("⚠️ Webhook güncellemesi").setColor("Orange").setDescription(`Kanal: ${ch.name}\nFail: ${executor.tag}`);
         await sendLog(guild, embed);
       }
     } catch (e) { console.error("WebhookUpdate handler error:", e); }
   });
 
-  // guild ban add (mass ban detection)
+  // Guild Ban add (mass bans)
   client.on(Events.GuildBanAdd, async (guild, user) => {
     try {
-      const cfg = await getGuildConfig(guild.id);
+      const cfg = await getCfg(guild.id);
       if (!cfg.protectionEnabled) return;
 
-      const audit = await guild.fetchAuditLogs({ type: AuditLogEvent.MemberBanAdd, limit: 5 }).catch(()=>null);
-      const entry = audit?.entries.first();
+      const entry = (await guild.fetchAuditLogs({ type: AuditLogEvent.MemberBanAdd, limit: 5 }).catch(()=>null))?.entries.first();
       if (!entry) return;
       const executor = entry.executor;
       if (!executor || executor.id === client.user.id) return;
@@ -372,93 +392,82 @@ async function registerHandlers(client) {
       const count = pushAction(guild.id, "ban", executor.id, cfg.thresholds.timeWindowMs);
       const limit = cfg.thresholds.banLimit || DEFAULTS.thresholds.banLimit;
       if (count >= limit) {
-        await handleBadActor(guild, executor, "massBan", { info: `Mass bans detected; last banned: ${user.tag || user.id}` });
+        await handleBadActor(guild, executor, "massBan", { info:`Son banlanan: ${user.tag || user.id}` });
       } else {
-        const embed = new EmbedBuilder()
-          .setTitle("⚠️ Şüpheli ban hareketi")
-          .setColor("DarkRed")
-          .setDescription(`Yapan: ${executor.tag}\nHedef: ${user.tag || user.id}\nSayaç: ${count}/${limit}`);
+        const embed = new EmbedBuilder().setTitle("⚠️ Şüpheli ban").setColor("DarkRed").setDescription(`Yapan: ${executor.tag}\nHedef: ${user.tag || user.id}\nSayaç: ${count}/${limit}`);
         await sendLog(guild, embed);
       }
     } catch (e) { console.error("GuildBanAdd handler error:", e); }
   });
 
-  // role update (dangerous perms added)
+  // Role update (dangerous perms)
   client.on(Events.GuildRoleUpdate, async (oldRole, newRole) => {
     try {
       const guild = newRole.guild;
-      const cfg = await getGuildConfig(guild.id);
+      const cfg = await getCfg(guild.id);
       if (!cfg.protectionEnabled) return;
 
-      // detect newly added dangerous permissions
       const dangerous = [ PermissionFlagsBits.Administrator, PermissionFlagsBits.ManageGuild, PermissionFlagsBits.ManageRoles, PermissionFlagsBits.BanMembers, PermissionFlagsBits.KickMembers ];
       for (const p of dangerous) {
         const had = oldRole.permissions.has(p);
         const hasNow = newRole.permissions.has(p);
         if (!had && hasNow) {
-          const audit = await guild.fetchAuditLogs({ type: AuditLogEvent.RoleUpdate, limit: 1 }).catch(()=>null);
-          const entry = audit?.entries.first();
-          if (!entry) return;
-          const executor = entry.executor;
+          const executor = await fetchExecutorSafely(guild, AuditLogEvent.RoleUpdate);
           if (!executor || executor.id === client.user.id) return;
           const member = await guild.members.fetch(executor.id).catch(()=>null);
           if (!member) return;
           if (await isExempt(member)) return;
 
-          // revert
+          // revert role perms
           await newRole.setPermissions(oldRole.permissions).catch(()=>{});
-          await handleBadActor(guild, executor, "dangerousPermGrant", { info: `Rol: ${newRole.name}` });
+          await handleBadActor(guild, executor, "dangerousPermGrant", { info:`Rol: ${newRole.name}` });
           return;
         }
       }
     } catch (e) { console.error("GuildRoleUpdate handler error:", e); }
   });
 
-  // guild update (name/icon)
+  // Guild update (name/icon revert)
   client.on(Events.GuildUpdate, async (oldGuild, newGuild) => {
     try {
       const guild = newGuild;
-      const cfg = await getGuildConfig(guild.id);
+      const cfg = await getCfg(guild.id);
       if (!cfg.protectionEnabled) return;
 
-      // name change
       if (oldGuild.name !== newGuild.name) {
-        const audit = await guild.fetchAuditLogs({ type: AuditLogEvent.GuildUpdate, limit: 1 }).catch(()=>null);
-        const entry = audit?.entries.first();
+        const entry = (await guild.fetchAuditLogs({ type: AuditLogEvent.GuildUpdate, limit: 5 }).catch(()=>null))?.entries.first();
         const executor = entry?.executor;
         if (executor && executor.id !== client.user.id) {
           const member = await guild.members.fetch(executor.id).catch(()=>null);
           if (member && !await isExempt(member)) {
             await newGuild.setName(oldGuild.name).catch(()=>{});
-            await handleBadActor(guild, executor, "guildNameChange", { info: `Eski isim: ${oldGuild.name}` });
+            await handleBadActor(guild, executor, "guildNameChange", { info:`Eski: ${oldGuild.name}` });
           }
         }
       }
-      // icon change
       if (oldGuild.icon !== newGuild.icon) {
-        const audit = await guild.fetchAuditLogs({ type: AuditLogEvent.GuildUpdate, limit: 1 }).catch(()=>null);
-        const entry = audit?.entries.first();
+        const entry = (await guild.fetchAuditLogs({ type: AuditLogEvent.GuildUpdate, limit: 5 }).catch(()=>null))?.entries.first();
         const executor = entry?.executor;
         if (executor && executor.id !== client.user.id) {
           const member = await guild.members.fetch(executor.id).catch(()=>null);
           if (member && !await isExempt(member)) {
             await newGuild.setIcon(oldGuild.iconURL() || null).catch(()=>{});
-            await handleBadActor(guild, executor, "guildIconChange", { info: `Icon reverted` });
+            await handleBadActor(guild, executor, "guildIconChange", { info:`Icon reverted` });
           }
         }
       }
     } catch (e) { console.error("GuildUpdate handler error:", e); }
   });
 
-  // bot add detection (guildMemberAdd with bot true)
+  // Bot add detection
   client.on(Events.GuildMemberAdd, async (member) => {
     try {
       const guild = member.guild;
-      const cfg = await getGuildConfig(guild.id);
+      const cfg = await getCfg(guild.id);
       if (!cfg.protectionEnabled) return;
       if (!member.user.bot) return;
 
-      const audit = await guild.fetchAuditLogs({ limit: 6 }).catch(()=>null);
+      const audit = await guild.fetchAuditLogs({ limit: 8 }).catch(()=>null);
       if (!audit) return;
       const entry = audit.entries.find(e => e.targetId === member.user.id && e.action === AuditLogEvent.BotAdd);
       const executor = entry?.executor;
@@ -466,34 +475,36 @@ async function registerHandlers(client) {
       const execMember = await guild.members.fetch(executor.id).catch(()=>null);
       if (!execMember) return;
       if (await isExempt(execMember)) return;
+
       await handleBadActor(guild, executor, "botAdd", { info: `Bot: ${member.user.tag}` });
       await guild.members.ban(member.user.id, { reason: "Unauthorized bot added" }).catch(()=>{});
     } catch (e) { /* ignore */ }
   });
 
-  console.log("[ANTIGUARD] Handlers registered.");
+  console.log("[ANTIGUARD] handlers ready");
 }
 
-// Command definition (slash)
-const command = new SlashCommandBuilder()
+// Slash command
+const cmd = new SlashCommandBuilder()
   .setName("antiguard")
-  .setDescription("Anti-Nuke / Abuse koruma ayar paneli")
+  .setDescription("Gelişmiş Anti-Nuke / Anti-Abuse sistemi - panel ve ayarlar")
   .setDefaultMemberPermissions(PermissionFlagsBits.Administrator)
-  .addSubcommand(sc => sc.setName("status").setDescription("Koruma durumunu göster"))
-  .addSubcommand(sc => sc.setName("enable").setDescription("Koruma aç"))
-  .addSubcommand(sc => sc.setName("disable").setDescription("Koruma kapa"))
-  .addSubcommand(sc => sc.setName("setlog").setDescription("Log kanalı ayarla").addChannelOption(o => o.setName("kanal").setDescription("Log kanalı").setRequired(true)))
-  .addSubcommand(sc => sc.setName("setadminrole").setDescription("Koruma için bypass rolü ayarla").addRoleOption(o => o.setName("rol").setDescription("Yönetici rolü").setRequired(true)))
-  .addSubcommand(sc => sc.setName("whitelist-add").setDescription("Whitelist kullanıcı ekle").addUserOption(o=>o.setName("kullanici").setRequired(true)))
-  .addSubcommand(sc => sc.setName("whitelist-remove").setDescription("Whitelist kullanıcı çıkar").addUserOption(o=>o.setName("kullanici").setRequired(true)))
+  .addSubcommand(sc => sc.setName("status").setDescription("Koruma durumunu gösterir"))
+  .addSubcommand(sc => sc.setName("enable").setDescription("Koruma modunu açar"))
+  .addSubcommand(sc => sc.setName("disable").setDescription("Koruma modunu kapatır"))
+  .addSubcommand(sc => sc.setName("panic").setDescription("Panic modu: hızlı önlem (kilitle)"))
+  .addSubcommand(sc => sc.setName("setlog").setDescription("Log kanalını ayarlar").addChannelOption(o => o.setName("kanal").setDescription("Log kanalı").setRequired(true)))
+  .addSubcommand(sc => sc.setName("setadminrole").setDescription("Koruma bypass rolü ayarla").addRoleOption(o => o.setName("rol").setDescription("Bypass rolü").setRequired(true)))
+  .addSubcommand(sc => sc.setName("whitelist-add").setDescription("Whitelist kullanıcı ekle").addUserOption(o=>o.setName("kullanici").setDescription("Kullanıcı").setRequired(true)))
+  .addSubcommand(sc => sc.setName("whitelist-remove").setDescription("Whitelist kullanıcı çıkar").addUserOption(o=>o.setName("kullanici").setDescription("Kullanıcı").setRequired(true)))
   .addSubcommand(sc => sc.setName("restore").setDescription("Rollback: kaydedilmiş roller/kanalları geri yükle"));
 
 module.exports = {
-  data: command,
+  data: cmd,
   async execute(interaction) {
     const sub = interaction.options.getSubcommand();
     const guildId = interaction.guild.id;
-    const cfg = await getGuildConfig(guildId);
+    const cfg = await getCfg(guildId);
 
     if (sub === "status") {
       const embed = new EmbedBuilder()
@@ -501,6 +512,7 @@ module.exports = {
         .setColor(cfg.protectionEnabled ? "Green" : "Red")
         .addFields(
           { name: "Koruma", value: cfg.protectionEnabled ? "Açık" : "Kapalı", inline: true },
+          { name: "Panic Mode", value: cfg.panicMode ? "Aktif" : "Kapalı", inline: true },
           { name: "Log Kanalı", value: cfg.logChannelId ? `<#${cfg.logChannelId}>` : "Ayarlı değil", inline: true },
           { name: "Admin Rolü (Bypass)", value: cfg.adminRoleId ? `<@&${cfg.adminRoleId}>` : "Ayarlı değil", inline: true },
           { name: "Rol oluşturma limiti", value: `${cfg.thresholds.roleCreateLimit} / ${cfg.thresholds.timeWindowMs}ms`, inline: true },
@@ -513,27 +525,40 @@ module.exports = {
 
     if (sub === "enable") {
       cfg.protectionEnabled = true;
-      await setGuildConfig(guildId, cfg);
+      await setCfg(guildId, cfg);
       return interaction.reply({ embeds: [ new EmbedBuilder().setTitle("✅ AntiGuard Aktif").setColor("Green").setDescription("Koruma başarıyla açıldı.") ], ephemeral: true });
     }
 
     if (sub === "disable") {
       cfg.protectionEnabled = false;
-      await setGuildConfig(guildId, cfg);
+      await setCfg(guildId, cfg);
       return interaction.reply({ embeds: [ new EmbedBuilder().setTitle("⚠️ AntiGuard Devre Dışı").setColor("Red").setDescription("Koruma kapatıldı.") ], ephemeral: true });
+    }
+
+    if (sub === "panic") {
+      cfg.panicMode = !cfg.panicMode;
+      await setCfg(guildId, cfg);
+      if (cfg.panicMode) {
+        try { await interaction.guild.setVerificationLevel(4); } catch {}
+        await interaction.reply({ embeds: [ new EmbedBuilder().setTitle("🚨 Panic Mode Aktif").setColor("Orange").setDescription("Sunucu geçici olarak kilitlendi ve yüksek önlem moduna alındı.") ], ephemeral: true });
+      } else {
+        try { await interaction.guild.setVerificationLevel(1); } catch {}
+        await interaction.reply({ embeds: [ new EmbedBuilder().setTitle("✅ Panic Mode Devre Dışı").setColor("Green").setDescription("Sunucu kilidi kaldırıldı.") ], ephemeral: true });
+      }
+      return;
     }
 
     if (sub === "setlog") {
       const ch = interaction.options.getChannel("kanal");
       cfg.logChannelId = ch.id;
-      await setGuildConfig(guildId, cfg);
+      await setCfg(guildId, cfg);
       return interaction.reply({ embeds: [ new EmbedBuilder().setTitle("✅ Log Kanalı Ayarlandı").setColor("Blue").setDescription(`Log kanalı: <#${ch.id}>`) ], ephemeral: true });
     }
 
     if (sub === "setadminrole") {
       const role = interaction.options.getRole("rol");
       cfg.adminRoleId = role.id;
-      await setGuildConfig(guildId, cfg);
+      await setCfg(guildId, cfg);
       return interaction.reply({ embeds: [ new EmbedBuilder().setTitle("✅ Admin Rolü Ayarlandı").setColor("Blue").setDescription(`Bypass rolü: <@&${role.id}>`) ], ephemeral: true });
     }
 
@@ -541,7 +566,7 @@ module.exports = {
       const user = interaction.options.getUser("kullanici");
       cfg.whitelist = cfg.whitelist || [];
       if (!cfg.whitelist.includes(user.id)) cfg.whitelist.push(user.id);
-      await setGuildConfig(guildId, cfg);
+      await setCfg(guildId, cfg);
       return interaction.reply({ embeds: [ new EmbedBuilder().setTitle("✅ Whitelist eklendi").setColor("Green").setDescription(`${user.tag} whitelist'e eklendi.`) ], ephemeral: true });
     }
 
@@ -549,7 +574,7 @@ module.exports = {
       const user = interaction.options.getUser("kullanici");
       cfg.whitelist = cfg.whitelist || [];
       cfg.whitelist = cfg.whitelist.filter(x=>x!==user.id);
-      await setGuildConfig(guildId, cfg);
+      await setCfg(guildId, cfg);
       return interaction.reply({ embeds: [ new EmbedBuilder().setTitle("✅ Whitelist çıkarıldı").setColor("Green").setDescription(`${user.tag} whitelist'ten çıkarıldı.`) ], ephemeral: true });
     }
 
@@ -565,11 +590,8 @@ module.exports = {
     }
   },
 
-  // init must be called once after client login: require('./commands/antiguard').init(client)
+  // init: call after client login
   init: async (client) => {
-    // attach handlers once
-    if (client._antiguard_inited) return;
-    client._antiguard_inited = true;
     await registerHandlers(client);
   }
 };
