@@ -38,12 +38,12 @@ module.exports = {
         {
           name: "Bilgilendirme",
           value:
-            "Sunucularımız bu şekildedir. Eğer Roblox gruplarına ulaşmak isterseniz [Buraya Tıklayın](https://roblox.com/groups/17167324) ve ardından müttefikler kısmına basın. Roblox gruplarına bu şekilde ulaşabilirsiniz. İyi eğlenceler!"
+            "Sunucularımız bu şekildedir. Eğer Roblox gruplarına ulaşmak isterseniz [Buraya Tıklayın](https://www.roblox.com/group/33389098) ve ardından müttefikler kısmına basın. Roblox gruplarına bu şekilde ulaşabilirsiniz. İyi eğlenceler!"
         }
       )
       .setColor("Red")
       .setFooter({
-        text: "LOA Yönetim Kurulu Botu",
+        text: "TAH Yönetim Kurulu Botu",
         iconURL: "https://i.imgur.com/file-2NMqhhvDaZuAgwjbGwEo1M.png"
       })
       .setTimestamp();
