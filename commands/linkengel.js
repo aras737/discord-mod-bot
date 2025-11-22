@@ -31,9 +31,6 @@ const path = require("path");
 const BACKUP_DIR = path.join(process.cwd(), "modpanel_backups");
 if (!fs.existsSync(BACKUP_DIR)) fs.mkdirSync(BACKUP_DIR, { recursive: true });
 
-// Local thumbnail path (developer-provided). This will be converted to a URL in your hosting if needed.
-const THUMB_URL = "/mnt/data/89391D-F7F9-407F-A4F6-B5A24052F76C.jpeg";
-
 // Default configuration
 const DEFAULTS = {
   protectionEnabled: false,
@@ -208,7 +205,6 @@ function buildPanelEmbed(cfg) {
     .setTitle("🛡 Moderasyon Paneli — Gerçek Koruma")
     .setDescription(`Koruma: **${cfg.protectionEnabled ? "Açık ✅" : "Kapalı ❌"}**\nLog kanalını, admin rolünü ve hassas ayarları yönetebilirsiniz.`)
     .setColor(cfg.protectionEnabled ? 0x00ff88 : 0xff4444)
-    .setThumbnail(THUMB_URL)
     .addFields(
       { name: "Log Kanalı", value: cfg.logChannelId ? `<#${cfg.logChannelId}>` : "Ayarlı değil", inline: true },
       { name: "Admin Rolü (bypass)", value: cfg.adminRoleId ? `<@&${cfg.adminRoleId}>` : "Ayarlı değil", inline: true },
