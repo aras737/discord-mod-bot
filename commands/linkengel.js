@@ -1,14 +1,14 @@
 // commands/modpanel.js
-// Single-file Moderasyon Paneli + Otomatik Ceza Sistemi + Abuse Koruma
-// Notlar:
-// - Discord.js v14
-// - quick.db (QuickDB) ile ayarlar/punitions saklanır
-// - Dosyayı commands klasörüne koy ve index.js'inizde komutları yükleyin.
-// - index.js içinde: after login, call require('./commands/modpanel').initEvents(client);
-// - .env içinde DISCORD_TOKEN olmalı
-// - Gerekli intent'ler: Guilds, GuildMembers, GuildBans, GuildMessages, MessageContent (gerekiyorsa)
-// - Botun log atacağı kanal yoksa guild.systemChannel kullanılır
-// - Kullanıcı izni: komut Admin gerektirir
+// Tam çalışan, gerçek koruma + panel + log + rollback (tek dosya).
+// Gereksinimler: discord.js v14, quick.db (QuickDB)
+// Kurulum:
+// 1) Bu dosyayı commands/modpanel.js içine koy.
+// 2) index.js içinde komutları yükle ve client.once('ready', ... ) içinde:
+//    const modpanel = require('./commands/modpanel');
+//    if (modpanel && typeof modpanel.initEvents === 'function') modpanel.initEvents(client);
+// 3) npm i discord.js quick.db
+// 4) Bot için izinler: ManageRoles, ManageChannels, BanMembers, ViewAuditLog, ModerateMembers, SendMessages, EmbedLinks
+// Thumbnail / yerel görsel (opsiyonel): "/mnt/data/89391D-F7F9-407F-A4F6-B5A24052F76C.jpeg"
 
 const {
   SlashCommandBuilder,
@@ -20,558 +20,463 @@ const {
   StringSelectMenuBuilder,
   ComponentType,
   AuditLogEvent,
-  Events,
+  Events
 } = require("discord.js");
 
 const { QuickDB } = require("quick.db");
 const db = new QuickDB();
 
+const fs = require("fs");
+const path = require("path");
+const BACKUP_DIR = path.join(process.cwd(), "modpanel_backups");
+if (!fs.existsSync(BACKUP_DIR)) fs.mkdirSync(BACKUP_DIR, { recursive: true });
+
+// Local thumbnail path (developer-provided). This will be converted to a URL in your hosting if needed.
+const THUMB_URL = "/mnt/data/89391D-F7F9-407F-A4F6-B5A24052F76C.jpeg";
+
+// Default configuration
 const DEFAULTS = {
   protectionEnabled: false,
   logChannelId: null,
   adminRoleId: null,
-  autoPunish: {
-    massChannelDelete: "ban", // ban | timeout | removeroles | none
-    massRoleDelete: "ban",
-    massBan: "timeout", // for mass ban, timeout by default
-    dangerousPermGrant: "removeroles", // remove elevated perms
-    botAdd: "ban",
-  },
+  whitelist: [],
   thresholds: {
-    massChannelDeleteWindowMs: 60_000,
-    massChannelDeleteLimit: 3,
-    massRoleDeleteWindowMs: 60_000,
-    massRoleDeleteLimit: 3,
-    massBanWindowMs: 60_000,
-    massBanLimit: 3,
+    channelDeleteWindowMs: 60_000,
+    channelDeleteLimit: 3,
+    roleDeleteWindowMs: 60_000,
+    roleDeleteLimit: 3,
+    banWindowMs: 60_000,
+    banLimit: 3
   },
-  whitelist: [] // user IDs exempt
+  autoPunish: {
+    channelDelete: "ban", // ban | timeout | removeroles | none
+    roleDelete: "ban",
+    massBan: "ban",
+    botAdd: "ban",
+    dangerousPermGrant: "removeroles"
+  }
 };
 
-// Helper: get log channel
-async function getLogChannel(guild) {
-  const id = await db.get(`${guild.id}.logChannelId`) || DEFAULTS.logChannelId;
-  if (id) return guild.channels.cache.get(id) || await guild.channels.fetch(id).catch(()=>null);
-  return guild.systemChannel || null;
-}
-
-// Helper: get admin role exemption
-async function isExempt(member) {
-  if (!member) return false;
-  const adminRoleId = await db.get(`${member.guild.id}.adminRoleId`);
-  if (adminRoleId && member.roles.cache.has(adminRoleId)) return true;
-  if (member.permissions?.has && member.permissions.has(PermissionFlagsBits.Administrator)) return true;
-  const wl = await db.get(`whitelist_${member.guild.id}`) || [];
-  if (wl.includes(member.id)) return true;
-  return false;
-}
-
-// Apply punishment function
-async function applyPunish(guild, targetId, kind, reason = "Automatic protection") {
+// Simple rollback snapshot functions (store JSON files per entity)
+function saveChannelSnapshot(channel) {
   try {
-    const member = await guild.members.fetch(targetId).catch(()=>null);
-    if (!member) return { ok: false, error: "Member not found" };
-
-    if (kind === "ban") {
-      await guild.members.ban(targetId, { reason }).catch(()=>{});
-      return { ok: true, action: "ban" };
-    }
-    if (kind === "timeout") {
-      // timeout for 15 minutes
-      await member.timeout(15 * 60 * 1000, reason).catch(()=>{});
-      return { ok: true, action: "timeout" };
-    }
-    if (kind === "removeroles") {
-      // remove all roles except @everyone
-      const rolesToRemove = member.roles.cache.filter(r => r.id !== guild.id).map(r => r.id);
-      if (rolesToRemove.length) await member.roles.remove(rolesToRemove).catch(()=>{});
-      return { ok: true, action: "removeroles" };
-    }
-    return { ok: false, error: "Unknown kind" };
-  } catch (e) {
-    return { ok: false, error: e.message || String(e) };
-  }
+    const data = {
+      id: channel.id,
+      guildId: channel.guild.id,
+      name: channel.name,
+      type: channel.type,
+      parentId: channel.parentId || null,
+      position: channel.position,
+      topic: channel.topic || null,
+      nsfw: channel.nsfw || false,
+      rateLimitPerUser: channel.rateLimitPerUser || 0,
+      createdAt: Date.now()
+    };
+    fs.writeFileSync(path.join(BACKUP_DIR, `channel_${channel.guild.id}_${channel.id}.json`), JSON.stringify(data, null, 2));
+  } catch (e) { console.error("saveChannelSnapshot error", e); }
 }
 
-// record audit action counts in-memory (per guild/per user)
-const actionCounters = new Map(); // key: `${guildId}:${type}:${userId}` -> timestamps array
-function addActionCount(guildId, type, userId, windowMs) {
+function saveRoleSnapshot(role) {
+  try {
+    const data = {
+      id: role.id,
+      guildId: role.guild.id,
+      name: role.name,
+      color: role.color,
+      hoist: role.hoist,
+      permissions: role.permissions.bitfield,
+      mentionable: role.mentionable,
+      position: role.position,
+      createdAt: Date.now()
+    };
+    fs.writeFileSync(path.join(BACKUP_DIR, `role_${role.guild.id}_${role.id}.json`), JSON.stringify(data, null, 2));
+  } catch (e) { console.error("saveRoleSnapshot error", e); }
+}
+
+async function restoreChannels(guild) {
+  try {
+    const files = fs.readdirSync(BACKUP_DIR).filter(f => f.startsWith(`channel_${guild.id}_`));
+    for (const file of files) {
+      const data = JSON.parse(fs.readFileSync(path.join(BACKUP_DIR, file)));
+      // avoid duplicates by name
+      if (guild.channels.cache.find(c => c.name === data.name)) continue;
+      await guild.channels.create({
+        name: data.name,
+        type: data.type,
+        topic: data.topic || undefined,
+        nsfw: data.nsfw || false,
+        rateLimitPerUser: data.rateLimitPerUser || 0,
+        parent: data.parentId || null,
+        position: data.position || undefined
+      }).catch(()=>{});
+    }
+  } catch (e) { console.error("restoreChannels error", e); }
+}
+
+async function restoreRoles(guild) {
+  try {
+    const files = fs.readdirSync(BACKUP_DIR).filter(f => f.startsWith(`role_${guild.id}_`));
+    for (const file of files) {
+      const data = JSON.parse(fs.readFileSync(path.join(BACKUP_DIR, file)));
+      if (guild.roles.cache.find(r => r.name === data.name)) continue;
+      await guild.roles.create({
+        name: data.name,
+        color: data.color || undefined,
+        hoist: data.hoist || false,
+        permissions: data.permissions || undefined,
+        mentionable: data.mentionable || false,
+        position: data.position || undefined
+      }).catch(()=>{});
+    }
+  } catch (e) { console.error("restoreRoles error", e); }
+}
+
+// in-memory counters for rate detection
+const counters = new Map();
+function pushAction(guildId, type, userId, windowMs) {
   const key = `${guildId}:${type}:${userId}`;
   const now = Date.now();
-  if (!actionCounters.has(key)) actionCounters.set(key, []);
-  const arr = actionCounters.get(key);
+  if (!counters.has(key)) counters.set(key, []);
+  const arr = counters.get(key);
   arr.push(now);
-  // purge old
   while (arr.length && now - arr[0] > windowMs) arr.shift();
-  actionCounters.set(key, arr);
+  counters.set(key, arr);
   return arr.length;
 }
+setInterval(() => {
+  const now = Date.now();
+  for (const [k, arr] of counters) {
+    if (!arr.length || now - arr[arr.length - 1] > 10 * 60_000) counters.delete(k);
+  }
+}, 60_000);
 
-// Build mod panel embed + components
-function buildPanelEmbed(guild, enabled) {
+// Quick helpers
+async function getCfg(guildId) {
+  const raw = await db.get(`modpanel_cfg_${guildId}`) || {};
+  return { ...DEFAULTS, ...raw, thresholds: { ...DEFAULTS.thresholds, ...(raw.thresholds||{}) }, autoPunish: { ...DEFAULTS.autoPunish, ...(raw.autoPunish||{}) } };
+}
+async function setCfg(guildId, cfg) {
+  await db.set(`modpanel_cfg_${guildId}`, cfg);
+}
+async function getLogChannel(guild) {
+  const cfg = await getCfg(guild.id);
+  if (cfg.logChannelId) return guild.channels.cache.get(cfg.logChannelId) || await guild.channels.fetch(cfg.logChannelId).catch(()=>null);
+  return guild.systemChannel || null;
+}
+async function isExempt(member) {
+  if (!member) return false;
+  if (member.id === member.guild.ownerId) return true;
+  if (member.permissions?.has && member.permissions.has(PermissionFlagsBits.Administrator)) return true;
+  const cfg = await getCfg(member.guild.id);
+  if (cfg.adminRoleId && member.roles.cache.has(cfg.adminRoleId)) return true;
+  if ((cfg.whitelist||[]).includes(member.id)) return true;
+  return false;
+}
+async function applyPunish(guild, id, kind, reason) {
+  try {
+    const member = await guild.members.fetch(id).catch(()=>null);
+    if (!member) return { ok:false, error:"notfound" };
+    if (await isExempt(member)) return { ok:false, error:"exempt" };
+    if (kind === "ban") { await guild.members.ban(id, { reason }).catch(()=>{}); return { ok:true, action:"ban" }; }
+    if (kind === "timeout") { await member.timeout(15*60*1000, reason).catch(()=>{}); return { ok:true, action:"timeout" }; }
+    if (kind === "removeroles") {
+      const roles = member.roles.cache.filter(r => r.id !== guild.id).map(r=>r.id);
+      if (roles.length) await member.roles.remove(roles).catch(()=>{});
+      return { ok:true, action:"removeroles" };
+    }
+    return { ok:false, error:"unknown" };
+  } catch (e) { return { ok:false, error:String(e) }; }
+}
+
+// audit-safe fetcher (tries a few times)
+async function fetchExecutorSafe(guild, type, targetId=null) {
+  for (let i=0;i<4;i++) {
+    const logs = await guild.fetchAuditLogs({ type, limit: 5 }).catch(()=>null);
+    if (!logs) { await new Promise(r=>setTimeout(r, 250)); continue; }
+    let entry = null;
+    if (targetId) entry = logs.entries.find(e => String(e.targetId) === String(targetId)) || logs.entries.first();
+    else entry = logs.entries.first();
+    if (entry && entry.executor) return entry.executor;
+    await new Promise(r=>setTimeout(r, 250));
+  }
+  return null;
+}
+
+// Build panel UI
+function buildPanelEmbed(cfg) {
   return new EmbedBuilder()
-    .setTitle(enabled ? "🛡 Moderasyon Paneli — Koruma Aktif" : "⛔ Moderasyon Paneli — Koruma Kapalı")
-    .setDescription("Butonlarla hızlı moderasyon yapabilirsiniz. Otomatik ceza davranışları ve koruma ayarları burada uygulanır.")
+    .setTitle("🛡 Moderasyon Paneli — Gerçek Koruma")
+    .setDescription(`Koruma: **${cfg.protectionEnabled ? "Açık ✅" : "Kapalı ❌"}**\nLog kanalını, admin rolünü ve hassas ayarları yönetebilirsiniz.`)
+    .setColor(cfg.protectionEnabled ? 0x00ff88 : 0xff4444)
+    .setThumbnail(THUMB_URL)
     .addFields(
-      { name: "Koruma Durumu", value: enabled ? "Aktif" : "Kapalı", inline: true },
-      { name: "Otomatik Ceza (örnek)", value: "Kanal silme -> ban\nRol silme -> ban\nMass ban -> timeout", inline: true },
-      { name: "Not", value: "Butonlar sadece yetkili kişiler için çalışır (Admin veya config'te tanımlı rol).", inline: false }
+      { name: "Log Kanalı", value: cfg.logChannelId ? `<#${cfg.logChannelId}>` : "Ayarlı değil", inline: true },
+      { name: "Admin Rolü (bypass)", value: cfg.adminRoleId ? `<@&${cfg.adminRoleId}>` : "Ayarlı değil", inline: true },
+      { name: "Not", value: "Gerçek koruma: kanal/rol silme, bot ekleme, tehlikeli yetki denemelerine karşı otomatik aksiyon alır.", inline: false }
     )
-    .setColor(enabled ? 0x1abc9c : 0xe74c3c)
     .setTimestamp();
 }
 
-function buildPanelRow(enabled) {
-  return new ActionRowBuilder().addComponents(
-    new ButtonBuilder()
-      .setCustomId(`protect_toggle:${enabled ? "off" : "on"}`)
-      .setLabel(enabled ? "Koruma Kapat" : "Koruma Aç")
-      .setStyle(enabled ? ButtonStyle.Danger : ButtonStyle.Success),
-    new ButtonBuilder()
-      .setCustomId("lock_server")
-      .setLabel("Sunucuyu Kilitle")
-      .setStyle(ButtonStyle.Secondary),
-    new ButtonBuilder()
-      .setCustomId("unlock_server")
-      .setLabel("Kilit Kaldır")
-      .setStyle(ButtonStyle.Primary),
-    new ButtonBuilder()
-      .setCustomId("restore_roles")
-      .setLabel("Restore (Roller)")
-      .setStyle(ButtonStyle.Primary)
+function buildControlRows(cfg) {
+  const row1 = new ActionRowBuilder().addComponents(
+    new ButtonBuilder().setCustomId(`toggle_protect`).setLabel(cfg.protectionEnabled ? "Koruma Kapat" : "Koruma Aç").setStyle(cfg.protectionEnabled ? ButtonStyle.Danger : ButtonStyle.Success),
+    new ButtonBuilder().setCustomId("lock_server").setLabel("Sunucuyu Kilitle").setStyle(ButtonStyle.Secondary),
+    new ButtonBuilder().setCustomId("unlock_server").setLabel("Kilidi Aç").setStyle(ButtonStyle.Primary),
+    new ButtonBuilder().setCustomId("restore_all").setLabel("Restore (Roller+Kanallar)").setStyle(ButtonStyle.Primary)
   );
+  const row2 = new ActionRowBuilder().addComponents(
+    new StringSelectMenuBuilder().setCustomId("quick_mod").setPlaceholder("Hızlı moderasyon").addOptions([
+      { label: "Toplu Kick", value: "mass_kick", description: "ID ile kick" },
+      { label: "Toplu Ban", value: "mass_ban", description: "ID ile ban" },
+      { label: "Toplu Timeout", value: "mass_timeout", description: "ID ile timeout" }
+    ])
+  );
+  return [row1, row2];
 }
 
-function buildModerationMenu() {
-  return new ActionRowBuilder().addComponents(
-    new StringSelectMenuBuilder()
-      .setCustomId("mod_menu")
-      .setPlaceholder("Hızlı Moderasyon Menüsü")
-      .addOptions([
-        { label: "Toplu Timeout (seçili)", description: "Seçili kullanıcıları 15dk timeout", value: "mass_timeout" },
-        { label: "Toplu Kick", description: "Seçili kullanıcıları at", value: "mass_kick" },
-        { label: "Toplu Ban", description: "Seçili kullanıcıları banla", value: "mass_ban" },
-        { label: "Güvenliği Aç/Kapat", description: "Koruma modu aç/kapat", value: "toggle_protect" },
-      ])
-  );
-}
-
-// The exported command object
+// Export command
 module.exports = {
   data: new SlashCommandBuilder()
     .setName("modpanel")
-    .setDescription("Havalı moderasyon panelini açar (embed + butonlar).")
+    .setDescription("Gerçek moderasyon paneli ve koruma sistemi.")
     .setDefaultMemberPermissions(PermissionFlagsBits.Administrator)
-    .addChannelOption(opt => opt.setName("logkanal").setDescription("Opsiyonel: log kanalı ayarla"))
-    .addRoleOption(opt => opt.setName("adminrol").setDescription("Opsiyonel: paneli kullanabilecek yönetici rolü")),
+    .addChannelOption(opt => opt.setName("log").setDescription("Log kanalı ayarla"))
+    .addRoleOption(opt => opt.setName("adminrole").setDescription("Koruma bypass rolü ayarla")),
 
   async execute(interaction) {
-    // set log channel / admin role if provided
     const guild = interaction.guild;
-    const chan = interaction.options.getChannel("logkanal");
-    const role = interaction.options.getRole("adminrol");
+    const logCh = interaction.options.getChannel("log");
+    const adminRole = interaction.options.getRole("adminrole");
 
-    if (chan) await db.set(`${guild.id}.logChannelId`, chan.id);
-    if (role) await db.set(`${guild.id}.adminRoleId`, role.id);
+    const cfgRaw = await db.get(`modpanel_cfg_${guild.id}`) || {};
+    const cfg = { ...DEFAULTS, ...cfgRaw, thresholds: { ...DEFAULTS.thresholds, ...(cfgRaw.thresholds||{}) }, autoPunish: { ...DEFAULTS.autoPunish, ...(cfgRaw.autoPunish||{}) } };
 
-    const enabled = await db.get(`${guild.id}.protectionEnabled`) ?? DEFAULTS.protectionEnabled;
+    if (logCh) cfg.logChannelId = logCh.id;
+    if (adminRole) cfg.adminRoleId = adminRole.id;
 
-    const embed = buildPanelEmbed(guild, enabled);
-    const row = buildPanelRow(enabled);
-    const menu = buildModerationMenu();
+    await setCfg(guild.id, cfg);
 
-    const panelMsg = await interaction.reply({ embeds: [embed], components: [row, menu], fetchReply: true });
+    const embed = buildPanelEmbed(cfg);
+    const rows = buildControlRows(cfg);
 
-    // create a collector for buttons and select menu attached to this message
-    const filter = i => i.message.id === panelMsg.id;
-    const collector = panelMsg.createMessageComponentCollector({ time: 1000 * 60 * 60, componentType: ComponentType.Button });
+    const message = await interaction.reply({ embeds: [embed], components: rows, fetchReply: true });
 
-    collector.on("collect", async btn => {
+    // Collectors
+    const btnCollector = message.createMessageComponentCollector({ componentType: ComponentType.Button, time: 60*60*1000 });
+    btnCollector.on("collect", async btn => {
       await btn.deferReply({ ephemeral: true });
-      try {
-        const member = await guild.members.fetch(btn.user.id).catch(()=>null);
-        if (!member) return btn.editReply({ content: "Üye bulunamadı.", ephemeral: true });
+      const member = await guild.members.fetch(btn.user.id).catch(()=>null);
+      if (!member) return btn.editReply({ content: "Üye bulunamadı.", ephemeral: true });
 
-        // permission / role check
-        if (!(member.permissions.has(PermissionFlagsBits.Administrator) || (await db.get(`${guild.id}.adminRoleId`) && member.roles.cache.has(await db.get(`${guild.id}.adminRoleId`))))) {
-          return btn.editReply({ content: "Bu paneli kullanmak için yetkiniz yok.", ephemeral: true });
-        }
-
-        const [action, param] = btn.customId.split(":");
-
-        if (action === "protect_toggle") {
-          const turn = param === "on";
-          await db.set(`${guild.id}.protectionEnabled`, turn);
-          await btn.editReply({ content: `Koruma ${turn ? "açıldı" : "kapatıldı"}.`, ephemeral: true });
-          // edit panel embed to reflect new state
-          const newEmbed = buildPanelEmbed(guild, turn);
-          const newRow = buildPanelRow(turn);
-          await panelMsg.edit({ embeds: [newEmbed], components: [newRow, menu] }).catch(()=>{});
-          return;
-        }
-
-        if (btn.customId === "lock_server") {
-          // set verification very high and restrict @everyone send messages in default channels
-          await db.set(`${guild.id}.locked`, true);
-          // try set verification highest
-          try { await guild.setVerificationLevel(4); } catch {}
-          await btn.editReply({ content: "Sunucu kilitlendi (verification level yükseltildi).", ephemeral: true });
-          const logC = await getLogChannel(guild);
-          if (logC) logC.send({ embeds: [ new EmbedBuilder().setTitle("🔐 Sunucu Kilitlendi").setDescription(`Yetkili: ${btn.user.tag}`).setColor("Orange").setTimestamp() ] }).catch(()=>{});
-          return;
-        }
-
-        if (btn.customId === "unlock_server") {
-          await db.set(`${guild.id}.locked`, false);
-          try { await guild.setVerificationLevel(1); } catch {}
-          await btn.editReply({ content: "Sunucu kilidi kaldırıldı.", ephemeral: true });
-          const logC = await getLogChannel(guild);
-          if (logC) logC.send({ embeds: [ new EmbedBuilder().setTitle("🔓 Sunucu Kilidi Kaldırıldı").setDescription(`Yetkili: ${btn.user.tag}`).setColor("Green").setTimestamp() ] }).catch(()=>{});
-          return;
-        }
-
-        if (btn.customId === "restore_roles") {
-          // try to restore roles from rollback.json if available (quick attempt)
-          const restore = require("../utils/restore");
-          await restore.restoreRoles(guild).catch(()=>{});
-          await btn.editReply({ content: "Restore (roller) başlatıldı.", ephemeral: true });
-          const logC = await getLogChannel(guild);
-          if (logC) logC.send({ embeds: [ new EmbedBuilder().setTitle("🔁 Restore Başlatıldı (Roller)").setDescription(`Yetkili: ${btn.user.tag}`).setColor("Blue").setTimestamp() ] }).catch(()=>{});
-          return;
-        }
-
-        return btn.editReply({ content: "Bilinmeyen işlem.", ephemeral: true });
-      } catch (e) {
-        console.error("Panel button error:", e);
-        return btn.editReply({ content: "İşlem sırasında hata oluştu.", ephemeral: true });
+      if (! (member.permissions.has(PermissionFlagsBits.Administrator) || (cfg.adminRoleId && member.roles.cache.has(cfg.adminRoleId)) ) ) {
+        return btn.editReply({ content: "Bu paneli kullanmak için yetkiniz yok.", ephemeral: true });
       }
+
+      if (btn.customId === "toggle_protect") {
+        cfg.protectionEnabled = !cfg.protectionEnabled;
+        await setCfg(guild.id, cfg);
+        await btn.editReply({ content: `Koruma ${cfg.protectionEnabled ? "AÇILDI ✅" : "KAPANDI ❌"}`, ephemeral: true });
+        // update panel
+        const newEmbed = buildPanelEmbed(cfg);
+        const newRows = buildControlRows(cfg);
+        await message.edit({ embeds: [newEmbed], components: newRows }).catch(()=>{});
+        const log = await getLogChannel(guild);
+        if (log) log.send({ embeds: [ new EmbedBuilder().setTitle("⚙️ Koruma Durumu Değişti").setDescription(`Yetkili: ${btn.user.tag}\nDurum: ${cfg.protectionEnabled ? "Açıldı" : "Kapalı"}`).setColor(cfg.protectionEnabled ? 0x00ff88 : 0xff4444).setTimestamp() ] }).catch(()=>{});
+        return;
+      }
+
+      if (btn.customId === "lock_server") {
+        await db.set(`modpanel_cfg_${guild.id}.panic`, true).catch(()=>{});
+        try { await guild.setVerificationLevel(4); } catch {}
+        await btn.editReply({ content: "Sunucu kilitlendi.", ephemeral: true });
+        const log = await getLogChannel(guild);
+        if (log) log.send({ embeds: [ new EmbedBuilder().setTitle("🔐 Sunucu Kilitlendi").setDescription(`Yetkili: ${btn.user.tag}`).setColor(0xff8800).setTimestamp() ] }).catch(()=>{});
+        return;
+      }
+
+      if (btn.customId === "unlock_server") {
+        await db.set(`modpanel_cfg_${guild.id}.panic`, false).catch(()=>{});
+        try { await guild.setVerificationLevel(1); } catch {}
+        await btn.editReply({ content: "Sunucu kilidi kaldırıldı.", ephemeral: true });
+        const log = await getLogChannel(guild);
+        if (log) log.send({ embeds: [ new EmbedBuilder().setTitle("🔓 Sunucu Kilidi Kaldırıldı").setDescription(`Yetkili: ${btn.user.tag}`).setColor(0x00cc88).setTimestamp() ] }).catch(()=>{});
+        return;
+      }
+
+      if (btn.customId === "restore_all") {
+        await btn.editReply({ content: "Restore işlemi başlatıldı. Roller ve kanallar yeniden oluşturuluyor (varsa yedekten).", ephemeral: true });
+        await restoreRoles(guild).catch(()=>{});
+        await restoreChannels(guild).catch(()=>{});
+        const log = await getLogChannel(guild);
+        if (log) log.send({ embeds: [ new EmbedBuilder().setTitle("🔁 Restore Başlatıldı").setDescription(`Yetkili: ${btn.user.tag}`).setColor(0x3399ff).setTimestamp() ] }).catch(()=>{});
+        return;
+      }
+
+      return btn.editReply({ content: "Bilinmeyen buton.", ephemeral: true });
     });
 
-    // also listen select menu (different collector)
-    const selectCollector = panelMsg.createMessageComponentCollector({ time: 1000 * 60 * 60, componentType: ComponentType.StringSelect });
-
+    const selectCollector = message.createMessageComponentCollector({ componentType: ComponentType.StringSelect, time: 60*60*1000 });
     selectCollector.on("collect", async sel => {
       await sel.deferReply({ ephemeral: true });
       const member = await guild.members.fetch(sel.user.id).catch(()=>null);
       if (!member) return sel.editReply({ content: "Üye bulunamadı.", ephemeral: true });
-      if (!(member.permissions.has(PermissionFlagsBits.Administrator) || (await db.get(`${guild.id}.adminRoleId`) && member.roles.cache.has(await db.get(`${guild.id}.adminRoleId`))))) {
+      if (! (member.permissions.has(PermissionFlagsBits.Administrator) || (cfg.adminRoleId && member.roles.cache.has(cfg.adminRoleId)) ) ) {
         return sel.editReply({ content: "Bu paneli kullanmak için yetkiniz yok.", ephemeral: true });
       }
 
-      const val = sel.values[0];
-      if (val === "mass_timeout" || val === "mass_kick" || val === "mass_ban") {
-        // expect user to mention users in the follow-up; request modal-like interaction via followup
-        await sel.editReply({ content: `Lütfen komutu kullanırken hedef kullanıcı ID'lerini virgülle ayırarak gönder (örn: 123,456,789). Şimdi mesaj olarak ID listesi gönder.`, ephemeral: true });
+      const choice = sel.values[0];
+      sel.editReply({ content: "Hedef kullanıcı ID'lerini virgül ile içeren bir mesaj gönderin (ör: `123,456,789`).", ephemeral: true });
 
-        // create message collector to get IDs from same user
-        const filter = m => m.author.id === sel.user.id;
-        const channel = sel.channel;
-        const msgCollector = channel.createMessageCollector({ filter, time: 30_000, max: 1 });
+      const mc = sel.channel.createMessageCollector({ filter: m => m.author.id === sel.user.id, max: 1, time: 30_000 });
+      mc.on("collect", async m => {
+        const ids = m.content.split(",").map(s => s.trim()).filter(Boolean);
+        const performed = [];
+        for (const id of ids) {
+          const memberTarget = await guild.members.fetch(id).catch(()=>null);
+          if (!memberTarget) continue;
+          try {
+            if (choice === "mass_kick") { await memberTarget.kick(`Mass action by ${sel.user.tag}`).catch(()=>{}); performed.push(`Kick → ${memberTarget.user.tag}`); }
+            if (choice === "mass_ban") { await guild.members.ban(id, { reason: `Mass action by ${sel.user.tag}` }).catch(()=>{}); performed.push(`Ban → ${memberTarget.user.tag}`); }
+            if (choice === "mass_timeout") { await memberTarget.timeout(15*60*1000, `Mass action by ${sel.user.tag}`).catch(()=>{}); performed.push(`Timeout → ${memberTarget.user.tag}`); }
+          } catch (e) { console.error("mass action error", e); }
+        }
+        const log = await getLogChannel(guild);
+        if (log) log.send({ embeds: [ new EmbedBuilder().setTitle("📝 Toplu Moderasyon").setDescription(`Yetkili: ${sel.user.tag}\nİşlem: ${choice}\nHedef sayısı: ${performed.length}`).addFields({ name: "Detay", value: performed.join("\n") }).setColor(0x0066ff).setTimestamp() ] }).catch(()=>{});
+        sel.followUp({ content: `İşlem tamamlandı: ${performed.length} hedef`, ephemeral: true });
+      });
 
-        msgCollector.on("collect", async m => {
-          const raw = m.content.replace(/<@!?\d+>/g, s => s.replace(/[<@!>]/g, "").trim());
-          // split by comma or spaces
-          const ids = raw.split(/[\s,]+/).map(x => x.trim()).filter(Boolean);
-          if (!ids.length) {
-            await sel.followUp({ content: "Geçersiz giriş.", ephemeral: true });
-            return;
-          }
-          await sel.followUp({ content: `İşlem başlatılıyor (${val}) -> ${ids.length} hedef`, ephemeral: true });
-          for (const id of ids) {
-            try {
-              const target = await guild.members.fetch(id).catch(()=>null);
-              if (!target) continue;
-              if (val === "mass_timeout") {
-                await target.timeout(15 * 60 * 1000, `Mass action by ${sel.user.tag}`).catch(()=>{});
-              } else if (val === "mass_kick") {
-                await target.kick(`Mass action by ${sel.user.tag}`).catch(()=>{});
-              } else if (val === "mass_ban") {
-                await guild.members.ban(id, { reason: `Mass action by ${sel.user.tag}` }).catch(()=>{});
-              }
-            } catch (e) {
-              console.error("mass action error", e);
-            }
-          }
-          const logC = await getLogChannel(guild);
-          if (logC) logC.send({ embeds: [ new EmbedBuilder().setTitle("⚙️ Moderasyon Paneli İşlemi").setDescription(`Yetkili: ${sel.user.tag}\nİşlem: ${val}\nHedef sayısı: ${ids.length}`).setColor("Blue").setTimestamp() ] }).catch(()=>{});
-        });
-
-        msgCollector.on("end", collected => {
-          if (collected.size === 0) sel.followUp({ content: "Süre doldu, işlem iptal edildi.", ephemeral: true });
-        });
-
-        return;
-      }
-
-      if (val === "toggle_protect") {
-        const cur = await db.get(`${guild.id}.protectionEnabled`) ?? DEFAULTS.protectionEnabled;
-        await db.set(`${guild.id}.protectionEnabled`, !cur);
-        sel.editReply({ content: `Koruma ${!cur ? "açıldı" : "kapatıldı"}`, ephemeral: true });
-        // update panel UI
-        const newEmbed = buildPanelEmbed(guild, !cur);
-        const newRow = buildPanelRow(!cur);
-        await panelMsg.edit({ embeds: [newEmbed], components: [newRow, menu] }).catch(()=>{});
-        return;
-      }
-
-      return sel.editReply({ content: "Bilinmeyen işlem.", ephemeral: true });
+      mc.on("end", collected => {
+        if (collected.size === 0) sel.followUp({ content: "Süre doldu, işlem iptal edildi.", ephemeral: true });
+      });
     });
   },
 
-  // initEvents to register automatic protections / punishments
-  async initEvents(client) {
-    // ensure utils/restore exists; if not, many features degrade gracefully
-    let restore;
-    try { restore = require("../utils/restore"); } catch(e) { restore = null; }
-
-    // helper to log to guild's log channel
-    async function log(guild, embed) {
-      const ch = await getLogChannel(guild);
-      if (ch) ch.send({ embeds: [embed] }).catch(()=>{});
-      else guild.systemChannel?.send({ embeds: [embed] }).catch(()=>{});
-    }
-
-    // CHANNEL DELETE protection
+  // initEvents: attach real protection listeners (call once after client login)
+  initEvents: async (client) => {
+    // Channel delete protection
     client.on(Events.ChannelDelete, async (channel) => {
       try {
         const guild = channel.guild;
-        const enabled = await db.get(`${guild.id}.protectionEnabled`) ?? DEFAULTS.protectionEnabled;
-        if (!enabled) return;
-
-        const audit = await guild.fetchAuditLogs({ type: AuditLogEvent.ChannelDelete, limit: 1 }).catch(()=>null);
-        const entry = audit?.entries.first();
-        if (!entry) return;
-        const executor = entry.executor;
-        if (!executor || executor.bot) return;
-
-        // skip exempt
+        const cfg = await getCfg(guild.id);
+        if (!cfg.protectionEnabled) return;
+        // save snapshot before anything (best effort)
+        try { saveChannelSnapshot(channel); } catch {}
+        const executor = await fetchExecutorSafe(guild, AuditLogEvent.ChannelDelete, channel.id);
+        if (!executor || executor.id === client.user.id) return;
         const member = await guild.members.fetch(executor.id).catch(()=>null);
         if (!member) return;
         if (await isExempt(member)) return;
-
-        // record count
-        const count = addActionCount(guild.id, "channelDelete", executor.id, (await db.get(`${guild.id}.thresholds.massChannelDeleteWindowMs`)) || DEFAULTS.thresholds.massChannelDeleteWindowMs);
-        const limit = (await db.get(`${guild.id}.thresholds.massChannelDeleteLimit`)) || DEFAULTS.thresholds.massChannelDeleteLimit;
-
-        // take action depending on threshold
-        const autoKind = (await db.get(`${guild.id}.autoPunish.massChannelDelete`)) || DEFAULTS.autoPunish.massChannelDelete;
-        let actionResult = { ok: false };
-        if (count >= limit) {
-          actionResult = await applyPunish(guild, executor.id, autoKind, "Mass channel delete - auto protection");
-        } else {
-          // soft action: remove roles temporarily
-          actionResult = await applyPunish(guild, executor.id, "removeroles", "Suspicious channel delete");
-        }
-
-        // log embed
-        const embed = new EmbedBuilder()
-          .setTitle("🔥 Kanal Silme Tespit Edildi")
-          .setColor("Red")
-          .setDescription(`Kanal: **${channel.name}**\nFail: <@${executor.id}> (${executor.tag})`)
-          .addFields(
-            { name: "Eylem", value: actionResult.ok ? (actionResult.action || "uygulandı") : "uygulama başarısız", inline: true },
-            { name: "Sayac", value: `${count}/${limit}`, inline: true }
-          )
-          .setTimestamp();
-
-        await log(guild, embed);
-
-        // save snapshot & restore if utils available
-        if (restore) {
-          await restore.saveChannelSnapshot(channel).catch(()=>{});
-          setTimeout(()=> restore.restoreChannels(guild).catch(()=>{}), 2000);
-        }
-      } catch (e) {
-        console.error("channelDelete protection error:", e);
-      }
+        const count = pushAction(guild.id, "channelDelete", executor.id, cfg.thresholds.channelDeleteWindowMs);
+        const limit = cfg.thresholds.channelDeleteLimit;
+        const kind = cfg.autoPunish.channelDelete || "ban";
+        let res = { ok:false };
+        if (count >= limit) res = await applyPunish(guild, executor.id, kind, "Mass channel delete - protection");
+        else res = await applyPunish(guild, executor.id, "removeroles", "Suspicious channel delete");
+        const log = await getLogChannel(guild);
+        if (log) log.send({ embeds: [ new EmbedBuilder().setTitle("🔥 Kanal Silme Tespit Edildi").setDescription(`Kanal: **${channel.name}**\nFail: <@${executor.id}> (${executor.tag})`).addFields({ name:"Eylem", value: res.ok ? res.action : "uygulama başarısız" }, { name:"Sayaç", value: `${count}/${limit}` }).setColor(0xff0000).setTimestamp() ] }).catch(()=>{});
+        // attempt restore after small delay
+        setTimeout(()=> restoreChannels(guild).catch(()=>{}), 2000);
+      } catch (e) { console.error("ChannelDelete handler error", e); }
     });
 
-    // ROLE DELETE protection
+    // Role delete protection
     client.on(Events.GuildRoleDelete, async (role) => {
       try {
         const guild = role.guild;
-        const enabled = await db.get(`${guild.id}.protectionEnabled`) ?? DEFAULTS.protectionEnabled;
-        if (!enabled) return;
-
-        const audit = await guild.fetchAuditLogs({ type: AuditLogEvent.RoleDelete, limit: 1 }).catch(()=>null);
-        const entry = audit?.entries.first();
-        if (!entry) return;
-        const executor = entry.executor;
-        if (!executor || executor.bot) return;
-
+        const cfg = await getCfg(guild.id);
+        if (!cfg.protectionEnabled) return;
+        try { saveRoleSnapshot(role); } catch {}
+        const executor = await fetchExecutorSafe(guild, AuditLogEvent.RoleDelete, role.id);
+        if (!executor || executor.id === client.user.id) return;
         const member = await guild.members.fetch(executor.id).catch(()=>null);
         if (!member) return;
         if (await isExempt(member)) return;
-
-        const count = addActionCount(guild.id, "roleDelete", executor.id, (await db.get(`${guild.id}.thresholds.massRoleDeleteWindowMs`)) || DEFAULTS.thresholds.massRoleDeleteWindowMs);
-        const limit = (await db.get(`${guild.id}.thresholds.massRoleDeleteLimit`)) || DEFAULTS.thresholds.massRoleDeleteLimit;
-
-        const autoKind = (await db.get(`${guild.id}.autoPunish.massRoleDelete`)) || DEFAULTS.autoPunish.massRoleDelete;
-        let actionResult = { ok: false };
-        if (count >= limit) {
-          actionResult = await applyPunish(guild, executor.id, autoKind, "Mass role delete - auto protection");
-        } else {
-          actionResult = await applyPunish(guild, executor.id, "removeroles", "Suspicious role delete");
-        }
-
-        const embed = new EmbedBuilder()
-          .setTitle("🔥 Rol Silme Tespit Edildi")
-          .setColor("Red")
-          .setDescription(`Rol: **${role.name}**\nFail: <@${executor.id}> (${executor.tag})`)
-          .addFields(
-            { name: "Eylem", value: actionResult.ok ? (actionResult.action || "uygulandı") : "uygulama başarısız", inline: true },
-            { name: "Sayac", value: `${count}/${limit}`, inline: true }
-          )
-          .setTimestamp();
-
-        await log(guild, embed);
-
-        if (restore) {
-          await restore.saveRoleSnapshot(role).catch(()=>{});
-          setTimeout(()=> restore.restoreRoles(guild).catch(()=>{}), 2000);
-        }
-      } catch (e) {
-        console.error("roleDelete protection error:", e);
-      }
+        const count = pushAction(guild.id, "roleDelete", executor.id, cfg.thresholds.roleDeleteWindowMs);
+        const limit = cfg.thresholds.roleDeleteLimit;
+        const kind = cfg.autoPunish.roleDelete || "ban";
+        let res = { ok:false };
+        if (count >= limit) res = await applyPunish(guild, executor.id, kind, "Mass role delete - protection");
+        else res = await applyPunish(guild, executor.id, "removeroles", "Suspicious role delete");
+        const log = await getLogChannel(guild);
+        if (log) log.send({ embeds: [ new EmbedBuilder().setTitle("🔥 Rol Silme Tespit Edildi").setDescription(`Rol: **${role.name}**\nFail: <@${executor.id}> (${executor.tag})`).addFields({ name:"Eylem", value: res.ok ? res.action : "uygulama başarısız" }, { name:"Sayaç", value: `${count}/${limit}` }).setColor(0xff0000).setTimestamp() ] }).catch(()=>{});
+        setTimeout(()=> restoreRoles(guild).catch(()=>{}), 2000);
+      } catch (e) { console.error("RoleDelete handler error", e); }
     });
 
-    // MASS BAN protection
-    client.on(Events.GuildBanAdd, async (guildOrGuild, user) => {
-      try {
-        const guild = guildOrGuild instanceof Object && guildOrGuild.id ? guildOrGuild : null;
-        if (!guild) return;
-        const enabled = await db.get(`${guild.id}.protectionEnabled`) ?? DEFAULTS.protectionEnabled;
-        if (!enabled) return;
-
-        const audit = await guild.fetchAuditLogs({ type: AuditLogEvent.MemberBanAdd, limit: 1 }).catch(()=>null);
-        const entry = audit?.entries.first();
-        if (!entry) return;
-        const executor = entry.executor;
-        if (!executor || executor.bot) return;
-
-        const member = await guild.members.fetch(executor.id).catch(()=>null);
-        if (!member) return;
-        if (await isExempt(member)) return;
-
-        const count = addActionCount(guild.id, "ban", executor.id, (await db.get(`${guild.id}.thresholds.massBanWindowMs`)) || DEFAULTS.thresholds.massBanWindowMs);
-        const limit = (await db.get(`${guild.id}.thresholds.massBanLimit`)) || DEFAULTS.thresholds.massBanLimit;
-
-        const autoKind = (await db.get(`${guild.id}.autoPunish.massBan`)) || DEFAULTS.autoPunish.massBan;
-        let actionResult = { ok: false };
-        if (count >= limit) {
-          actionResult = await applyPunish(guild, executor.id, autoKind, "Mass ban - auto protection");
-        } else {
-          actionResult = await applyPunish(guild, executor.id, "timeout", "Suspicious ban activity");
-        }
-
-        const embed = new EmbedBuilder()
-          .setTitle("🚨 Toplu Ban Tespit Edildi")
-          .setColor("DarkRed")
-          .setDescription(`Fail: <@${executor.id}> (${executor.tag})\nAtılan kullanıcı: ${user.tag || user.id}`)
-          .addFields(
-            { name: "Eylem", value: actionResult.ok ? (actionResult.action || "uygulandı") : "uygulama başarısız", inline: true },
-            { name: "Sayaç", value: `${count}/${limit}`, inline: true }
-          )
-          .setTimestamp();
-
-        await log(guild, embed);
-      } catch (e) {
-        console.error("guildBanAdd protection error:", e);
-      }
-    });
-
-    // ROLE UPDATE (dangerous permission grant)
+    // Role update dangerous perms
     client.on(Events.GuildRoleUpdate, async (oldRole, newRole) => {
       try {
         const guild = newRole.guild;
-        const enabled = await db.get(`${guild.id}.protectionEnabled`) ?? DEFAULTS.protectionEnabled;
-        if (!enabled) return;
-
-        const dangerousPerms = [
-          PermissionFlagsBits.Administrator,
-          PermissionFlagsBits.ManageGuild,
-          PermissionFlagsBits.ManageRoles,
-          PermissionFlagsBits.BanMembers,
-        ];
-
-        for (const p of dangerousPerms) {
+        const cfg = await getCfg(guild.id);
+        if (!cfg.protectionEnabled) return;
+        const dangerous = [ PermissionFlagsBits.Administrator, PermissionFlagsBits.ManageGuild, PermissionFlagsBits.ManageRoles, PermissionFlagsBits.BanMembers ];
+        for (const p of dangerous) {
           if (!oldRole.permissions.has(p) && newRole.permissions.has(p)) {
-            // someone increased perms on role
-            const audit = await guild.fetchAuditLogs({ type: AuditLogEvent.RoleUpdate, limit: 1 }).catch(()=>null);
-            const entry = audit?.entries.first();
-            const executor = entry?.executor;
-            if (!executor || executor.bot) return;
+            const executor = await fetchExecutorSafe(guild, AuditLogEvent.RoleUpdate);
+            if (!executor || executor.id === client.user.id) return;
             const member = await guild.members.fetch(executor.id).catch(()=>null);
             if (!member) return;
             if (await isExempt(member)) return;
-
-            // revert permissions
+            // revert perms
             await newRole.setPermissions(oldRole.permissions).catch(()=>{});
-            // punish according to config
-            const autoKind = (await db.get(`${guild.id}.autoPunish.dangerousPermGrant`)) || DEFAULTS.autoPunish.dangerousPermGrant;
-            const actionResult = await applyPunish(guild, executor.id, autoKind, "Unauthorized permission grant - auto protection");
-
-            const embed = new EmbedBuilder()
-              .setTitle("🔱 Tehlikeli Yetki Denemesi Engellendi")
-              .setColor("DarkRed")
-              .setDescription(`Rol: **${newRole.name}**\nFail: <@${executor.id}> (${executor.tag})`)
-              .addFields(
-                { name: "Eylem", value: actionResult.ok ? (actionResult.action || "uygulandı") : "uygulama başarısız" }
-              )
-              .setTimestamp();
-
-            await log(guild, embed);
+            const kind = cfg.autoPunish.dangerousPermGrant || "removeroles";
+            const res = await applyPunish(guild, executor.id, kind, "Unauthorized permission grant");
+            const log = await getLogChannel(guild);
+            if (log) log.send({ embeds: [ new EmbedBuilder().setTitle("🔱 Tehlikeli Yetki Denemesi Engellendi").setDescription(`Rol: **${newRole.name}**\nFail: <@${executor.id}> (${executor.tag})`).addFields({ name:"Eylem", value: res.ok ? res.action : "uygulama başarısız" }).setColor(0x990000).setTimestamp() ] }).catch(()=>{});
             return;
           }
         }
-      } catch (e) {
-        console.error("roleUpdate protection error:", e);
-      }
+      } catch (e) { console.error("RoleUpdate handler error", e); }
     });
 
-    // BOT ADD protection (guildMemberAdd with bot)
+    // Bot add protection
     client.on(Events.GuildMemberAdd, async (member) => {
       try {
         const guild = member.guild;
-        const enabled = await db.get(`${guild.id}.protectionEnabled`) ?? DEFAULTS.protectionEnabled;
-        if (!enabled) return;
+        const cfg = await getCfg(guild.id);
+        if (!cfg.protectionEnabled) return;
         if (!member.user.bot) return;
-
-        const audit = await guild.fetchAuditLogs({ limit: 5 }).catch(()=>null);
-        const entry = audit?.entries.find(e => e.targetId === member.user.id);
+        const audit = await guild.fetchAuditLogs({ limit: 6 }).catch(()=>null);
+        const entry = audit?.entries.find(e => e.targetId === member.user.id && e.action === AuditLogEvent.BotAdd);
         const executor = entry?.executor;
-        if (!executor || executor.bot) return;
-
+        if (!executor || executor.id === client.user.id) return;
         const execMember = await guild.members.fetch(executor.id).catch(()=>null);
         if (!execMember) return;
         if (await isExempt(execMember)) return;
-
-        const autoKind = (await db.get(`${guild.id}.autoPunish.botAdd`)) || DEFAULTS.autoPunish.botAdd;
-        const actionResult = await applyPunish(guild, executor.id, autoKind, "Unauthorized bot add - auto protection");
-
-        const embed = new EmbedBuilder()
-          .setTitle("🕳️ Şüpheli Bot Ekleme Tespit Edildi")
-          .setColor("DarkRed")
-          .setDescription(`Bot: <@${member.user.id}>\nEkleyen: <@${executor.id}> (${executor.tag})`)
-          .addFields({ name: "Eylem", value: actionResult.ok ? (actionResult.action || "uygulandı") : "uygulama başarısız" })
-          .setTimestamp();
-
-        await log(guild, embed);
-      } catch (e) {
-        console.error("guildMemberAdd(bot) protection error:", e);
-      }
+        const kind = cfg.autoPunish.botAdd || "ban";
+        const res = await applyPunish(guild, executor.id, kind, "Unauthorized bot add");
+        const log = await getLogChannel(guild);
+        if (log) log.send({ embeds: [ new EmbedBuilder().setTitle("🤖 İzinsiz Bot Ekleme Tespit Edildi").setDescription(`Bot: <@${member.user.id}>\nEkleyen: <@${executor.id}> (${executor.tag})`).addFields({ name:"Eylem", value: res.ok ? res.action : "uygulama başarısız" }).setColor(0x990000).setTimestamp() ] }).catch(()=>{});
+        // ban the added bot as well if possible
+        await guild.members.ban(member.user.id, { reason: "Unauthorized bot" }).catch(()=>{});
+      } catch (e) { console.error("GuildMemberAdd(bot) handler error", e); }
     });
 
-    // periodic cleanup for in-memory counters to avoid memory growth
-    setInterval(() => {
-      const now = Date.now();
-      for (const [key, arr] of actionCounters) {
-        // parse window ms from key? simplistic: clear arrays older than 5min references
-        if (!arr.length) { actionCounters.delete(key); continue; }
-        if (now - arr[arr.length - 1] > 5 * 60 * 1000) actionCounters.delete(key);
-      }
-    }, 60 * 1000);
+    // Mass ban detection
+    client.on(Events.GuildBanAdd, async (guildOrGuild, user) => {
+      try {
+        const guild = guildOrGuild && guildOrGuild.id ? guildOrGuild : null;
+        if (!guild) return;
+        const cfg = await getCfg(guild.id);
+        if (!cfg.protectionEnabled) return;
+        const entry = (await guild.fetchAuditLogs({ type: AuditLogEvent.MemberBanAdd, limit: 5 }).catch(()=>null))?.entries.first();
+        if (!entry) return;
+        const executor = entry.executor;
+        if (!executor || executor.id === client.user.id) return;
+        const member = await guild.members.fetch(executor.id).catch(()=>null);
+        if (!member) return;
+        if (await isExempt(member)) return;
+        const count = pushAction(guild.id, "massBan", executor.id, cfg.thresholds.banWindowMs);
+        const limit = cfg.thresholds.banLimit;
+        const kind = cfg.autoPunish.massBan || "ban";
+        let res = { ok:false };
+        if (count >= limit) res = await applyPunish(guild, executor.id, kind, "Mass ban - protection");
+        else res = await applyPunish(guild, executor.id, "timeout", "Suspicious ban activity");
+        const log = await getLogChannel(guild);
+        if (log) log.send({ embeds: [ new EmbedBuilder().setTitle("🚨 Toplu Ban Tespit Edildi").setDescription(`Fail: <@${executor.id}> (${executor.tag})\nHedef: ${user.tag || user.id}`).addFields({ name:"Eylem", value: res.ok ? res.action : "uygulama başarısız" }, { name:"Sayaç", value: `${count}/${limit}` }).setColor(0x8b0000).setTimestamp() ] }).catch(()=>{});
+      } catch (e) { console.error("GuildBanAdd handler error", e); }
+    });
 
-    console.log("[MODPANEL] Protection events initialized.");
+    console.log("[MODPANEL] protection listeners initialized.");
   }
 };
