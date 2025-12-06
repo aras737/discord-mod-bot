@@ -7,7 +7,6 @@ module.exports = {
         .setDefaultMemberPermissions(PermissionFlagsBits.BanMembers),
 
     async execute(interaction) {
-        // ✅ Herkes görebilir
         await interaction.deferReply({ ephemeral: false });
 
         try {
@@ -15,58 +14,74 @@ module.exports = {
             const totalBans = bans.size;
 
             if (totalBans === 0) {
-                return interaction.editReply({ 
-                    content: 'Bu sunucuda şu anda yasaklı kullanıcı bulunmamaktadır.',
+                return interaction.editReply({
+                    content: '✔ Bu sunucuda banlı kullanıcı bulunmuyor.',
                     ephemeral: false
                 });
             }
 
-            const maxDescriptionLength = 4096; // Discord embed karakter limiti
-            let descriptionContent = `Toplam yasaklı kullanıcı: **${totalBans}**\n\n`;
-            let embeds = [];
-            let counter = 1;
             const now = new Date().toLocaleString('tr-TR');
+            const max = 4096;
 
-            for (const [userId, ban] of bans.entries()) {
-                const userTag = ban.user?.tag || 'Bilinmeyen Kullanıcı';
+            let pages = [];
+            let text = `Toplam yasaklı kullanıcı: **${totalBans}**\n\n`;
+
+            let counter = 1;
+            for (const [userId, ban] of bans) {
+                const tag = ban.user?.tag || 'Bilinmeyen Kullanıcı';
                 const reason = ban.reason || 'Sebep belirtilmedi';
-                
-                const entry = `**${counter}.** ${userTag}\n**ID:** ${userId}\n**Sebep:** ${reason}\n\n`;
 
-                if (descriptionContent.length + entry.length > maxDescriptionLength) {
-                    embeds.push(new EmbedBuilder()
-                        .setColor('Red')
-                        .setTitle('Yasaklı Kullanıcı Listesi')
-                        .setDescription(descriptionContent.trim())
-                        .setFooter({ text: `Sayfa ${embeds.length + 1} | ${now}` })
+                const entry =
+                    `**${counter}.** ${tag}\n` +
+                    `**ID:** ${userId}\n` +
+                    `**Sebep:** ${reason}\n\n`;
+
+                if (text.length + entry.length > max) {
+                    pages.push(
+                        new EmbedBuilder()
+                            .setTitle('🚫 Yasaklı Kullanıcı Listesi')
+                            .setColor('Red')
+                            .setDescription(text.trim())
+                            .setFooter({ text: `Sayfa ${pages.length + 1} | ${now}` })
                     );
-                    descriptionContent = entry;
+
+                    text = entry;
                 } else {
-                    descriptionContent += entry;
+                    text += entry;
                 }
+
                 counter++;
             }
 
-            // Son sayfa ekle
-            if (descriptionContent.length > 0) {
-                embeds.push(new EmbedBuilder()
-                    .setColor('Red')
-                    .setTitle('Yasaklı Kullanıcı Listesi')
-                    .setDescription(descriptionContent.trim())
-                    .setFooter({ text: `Sayfa ${embeds.length + 1} | ${now}` })
+            // SON SAYFA
+            if (text.length > 0) {
+                pages.push(
+                    new EmbedBuilder()
+                        .setTitle('🚫 Yasaklı Kullanıcı Listesi')
+                        .setColor('Red')
+                        .setDescription(text.trim())
+                        .setFooter({ text: `Sayfa ${pages.length + 1} | ${now}` })
                 );
             }
 
-            // Hepsini sırayla gönder
-            await interaction.editReply({ embeds: [embeds[0]] });
-            for (let i = 1; i < embeds.length; i++) {
-                await new Promise(r => setTimeout(r, 1000)); // 1 saniye aralık
-                await interaction.followUp({ embeds: [embeds[i]] });
+            // Eğer hiçbir embed oluşmadıysa güvenlik
+            if (pages.length === 0) {
+                return interaction.editReply("❌ Bir hata oluştu, liste boş görünüyor.");
+            }
+
+            // İlk embed gönder
+            await interaction.editReply({ embeds: [pages[0]] });
+
+            // Diğer sayfalar
+            for (let i = 1; i < pages.length; i++) {
+                await new Promise(r => setTimeout(r, 500)); // Spam koruma
+                await interaction.followUp({ embeds: [pages[i]] });
             }
 
         } catch (err) {
-            console.error('Ban listesi hatası:', err);
-            const msg = `Yasaklı listesini çekerken bir hata oluştu:\n\`\`\`${err.message}\`\`\``;
+            console.error("Ban listesi hatası:", err);
+            const msg = `❌ Ban listesi alınırken bir hata oluştu:\n\`\`\`${err.message}\`\`\``;
+
             if (interaction.deferred || interaction.replied) {
                 await interaction.editReply({ content: msg, ephemeral: false });
             } else {
