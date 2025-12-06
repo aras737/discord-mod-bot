@@ -14,7 +14,7 @@ module.exports = {
 
   async execute(interaction) {
     const username = interaction.options.getString("kullanici");
-    const groupId = 17167324; // Buraya kendi Roblox grup ID’nizi yaz
+    const groupId = 33389098; // Buraya kendi Roblox grup ID’nizi yaz
 
     await interaction.deferReply();
 
