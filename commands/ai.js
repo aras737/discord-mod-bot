@@ -6,13 +6,13 @@ const {
   SlashCommandBuilder, 
   REST, 
   Routes, 
-  Collection,
+  Events,
   PermissionFlagsBits 
 } = require("discord.js");
 const { QuickDB } = require("quick.db");
 require("dotenv").config();
 
-// 🚨 KRİTİK: BigInt Serileştirme Hatası Çözümü
+// 🚨 BigInt Serileştirme Hatası Çözümü
 BigInt.prototype.toJSON = function() { return this.toString(); };
 
 const db = new QuickDB();
@@ -28,14 +28,10 @@ const client = new Client({
 
 // --- AYARLAR ---
 const BOT_TOKEN = process.env.TOKEN;
-const CLIENT_ID = "BOT_ID_YAZIN"; // Botunun ID'sini buraya gir
-
-// Yetkili Rol İsimleri (Bu isimlere sahip herkes sistemi kullanabilir)
 const YETKILI_ROLLER = ["Ordu Generalleri", "Ordu Yönetimi"];
 
 // Yetki Kontrol Fonksiyonu
 function yetkiKontrol(member) {
-  // Yönetici ise veya belirlenen rollerden birine sahipse true döner
   return member.permissions.has(PermissionFlagsBits.Administrator) || 
          member.roles.cache.some(role => YETKILI_ROLLER.includes(role.name));
 }
@@ -47,7 +43,7 @@ const egitimKomutu = new SlashCommandBuilder()
   .setName("egitim")
   .setDescription("Eğitim sistemi yönetimi")
   .addSubcommand(sub =>
-    sub.setName("logs").setDescription("Otomatik kayıt kanalını ayarla (Ordu Yönetimi)").addChannelOption(opt => opt.setName("kanal").setDescription("Kanal seçin").setRequired(true))
+    sub.setName("logs").setDescription("Otomatik kayıt kanalını ayarla").addChannelOption(opt => opt.setName("kanal").setDescription("Kanal seçin").setRequired(true))
   )
   .addSubcommand(sub =>
     sub.setName("liste").setDescription("Eğitmen puanını gösterir").addStringOption(opt => opt.setName("isim").setDescription("Eğitmen adı").setRequired(true))
@@ -56,23 +52,18 @@ const egitimKomutu = new SlashCommandBuilder()
 const commands = [egitimKomutu.toJSON()];
 
 // ----------------------------------------------------------------------
-// --- 2. OTOMATİK KAYIT MANTIĞI (MESSAGE CREATE) ---
+// --- 2. OTOMATİK KAYIT MANTIĞI ---
 // ----------------------------------------------------------------------
-client.on("messageCreate", async (message) => {
+client.on(Events.MessageCreate, async (message) => {
   if (message.author.bot || !message.guild) return;
 
   const guildId = message.guild.id;
   const logChannelId = await db.get(`egitim_${guildId}_kanal`);
 
-  // Sadece ayarlanan log kanalında çalış
   if (message.channel.id !== logChannelId) return;
-
-  // YETKİ KONTROLÜ: Mesajı atan kişi General veya Ordu Yönetimi mi?
   if (!yetkiKontrol(message.member)) return;
 
   const text = message.content;
-  
-  // Regex Kontrolü
   const egitmenMatch = text.match(/İsim:\s*(.*)/i);
   const alanMatch = text.match(/İsmi:\s*(.*)/i);
   const tagMatch = text.match(/<@&(\d+)>/);
@@ -87,36 +78,31 @@ client.on("messageCreate", async (message) => {
 
       const logEmbed = new EmbedBuilder()
         .setTitle("🎖️ Ordu Eğitim Kaydı Onaylandı")
-        .setDescription(`Kayıt, Ordu yetkilisi tarafından sisteme işlendi.`)
         .addFields(
-          { name: "👤 Eğitmen (Yetkili)", value: `\`${egitmenAdi}\``, inline: true },
-          { name: "👤 Eğitim Alan", value: `\`${alanAdi}\``, inline: true },
-          { name: "🏷️ Rütbe/Tag", value: `<@&${tagMatch[1]}>`, inline: true }
+          { name: "👤 Eğitmen", value: `\`${egitmenAdi}\``, inline: true },
+          { name: "👤 Alan", value: `\`${alanAdi}\``, inline: true },
+          { name: "🏷️ Tag", value: `<@&${tagMatch[1]}>`, inline: true }
         )
         .setImage(ssUrl)
-        .setColor(0x1a472a) // Askeri yeşil tonu
+        .setColor(0x1a472a)
         .setFooter({ text: `Kayıt İşlemi: ${message.author.tag}` })
         .setTimestamp();
 
       await message.reply({ embeds: [logEmbed] });
       await message.react("✅");
-
-    } catch (error) {
-      console.error("Kayıt Hatası:", error);
-    }
+    } catch (error) { console.error("Kayıt Hatası:", error); }
   }
 });
 
 // ----------------------------------------------------------------------
 // --- 3. SLASH KOMUT ÇALIŞTIRICI ---
 // ----------------------------------------------------------------------
-client.on("interactionCreate", async (interaction) => {
+client.on(Events.InteractionCreate, async (interaction) => {
   if (!interaction.isChatInputCommand()) return;
 
   if (interaction.commandName === "egitim") {
-    // Yetki Kontrolü
     if (!yetkiKontrol(interaction.member)) {
-      return interaction.reply({ content: "❌ Bu komutu sadece **Ordu Generalleri** ve **Ordu Yönetimi** kullanabilir.", ephemeral: true });
+      return interaction.reply({ content: "❌ Yetkiniz yetersiz.", ephemeral: true });
     }
 
     const sub = interaction.options.getSubcommand();
@@ -131,29 +117,26 @@ client.on("interactionCreate", async (interaction) => {
     if (sub === "liste") {
       const isim = interaction.options.getString("isim");
       const count = (await db.get(`egitim_${guildId}_sayac_${isim}`)) || 0;
-      
-      const listEmbed = new EmbedBuilder()
-        .setTitle("📊 Ordu Eğitim İstatistiği")
-        .setDescription(`**${isim}** için sistemde kayıtlı toplam eğitim: \`${count}\``)
-        .setColor(0xd4af37) // Altın rengi
-        .setTimestamp();
-
-      return interaction.reply({ embeds: [listEmbed], ephemeral: true });
+      return interaction.reply({ content: `📊 **${isim}** toplam **${count}** eğitim vermiş.`, ephemeral: true });
     }
   }
 });
 
 // ----------------------------------------------------------------------
-// --- 4. BOT BAŞLATMA ---
+// --- 4. BOT BAŞLATMA (HATALARIN DÜZELTİLDİĞİ KISIM) ---
 // ----------------------------------------------------------------------
-client.once("ready", async () => {
-  console.log(`🎖️ ${client.user.tag} Ordu Komutanlığı emrinde aktif!`);
+client.once(Events.ClientReady, async (c) => {
+  console.log(`🎖️ ${c.user.tag} Ordu Komutanlığı emrinde aktif!`);
   
+  // REST için bot ID'sini elinle yazmana gerek kalmadan c.user.id ile alıyoruz
   const rest = new REST({ version: "10" }).setToken(BOT_TOKEN);
   try {
-    await rest.put(Routes.applicationCommands(CLIENT_ID), { body: commands });
-    console.log("✅ Komutlar yüklendi.");
-  } catch (error) { console.error(error); }
+    console.log("Slash komutları güncelleniyor...");
+    await rest.put(Routes.applicationCommands(c.user.id), { body: commands });
+    console.log("✅ Komutlar başarıyla yüklendi.");
+  } catch (error) {
+    console.error("Komut yükleme hatası:", error);
+  }
 });
 
 client.login(BOT_TOKEN);
