@@ -11,6 +11,7 @@ module.exports = {
   data: new SlashCommandBuilder()
     .setName("egitim")
     .setDescription("Eğitim log ve kayıt sistemi")
+    .setDefaultMemberPermissions(PermissionFlagsBits.ManageGuild)
 
     // 🔧 KURULUM
     .addSubcommand(sub =>
@@ -20,20 +21,7 @@ module.exports = {
         .addChannelOption(opt =>
           opt
             .setName("logs")
-            .setDescription("Eğitim log kanalı")
-            .setRequired(true)
-        )
-    )
-
-    // 📋 LİSTE
-    .addSubcommand(sub =>
-      sub
-        .setName("liste")
-        .setDescription("Bir eğitmenin verdiği eğitim sayısını gösterir")
-        .addStringOption(opt =>
-          opt
-            .setName("isim")
-            .setDescription("Eğitmen adı")
+            .setDescription("Log kanalı")
             .setRequired(true)
         )
     )
@@ -42,58 +30,69 @@ module.exports = {
     .addSubcommand(sub =>
       sub
         .setName("kayit")
-        .setDescription("Eğitim kaydı oluşturur (SS zorunlu)")
+        .setDescription("Eğitim kaydı alır (SS zorunlu)")
+    )
+
+    // 📋 LİSTE
+    .addSubcommand(sub =>
+      sub
+        .setName("liste")
+        .setDescription("Bir eğitmenin kaç eğitim verdiğini gösterir")
+        .addStringOption(opt =>
+          opt
+            .setName("isim")
+            .setDescription("Eğitmen adı")
+            .setRequired(true)
+        )
     ),
 
   async execute(interaction) {
-    await interaction.deferReply({ ephemeral: true });
-
     const guildId = interaction.guild.id;
     const sub = interaction.options.getSubcommand();
 
-    /* ---------- KUR ---------- */
+    await interaction.deferReply({ ephemeral: true });
+
+    /* ================= KUR ================= */
     if (sub === "kur") {
       const logChannel = interaction.options.getChannel("logs");
       await db.set(`egitim.${guildId}.kanal`, logChannel.id);
 
       return interaction.editReply(
-        `Log kanalı başarıyla ayarlandı: ${logChannel}`
+        `✅ Eğitim log kanalı ayarlandı: ${logChannel}`
       );
     }
 
     const logChannelId = await db.get(`egitim.${guildId}.kanal`);
     if (!logChannelId) {
       return interaction.editReply(
-        "Log kanalı ayarlı değil. Önce `/egitim kur` kullanın."
+        "❌ Log kanalı ayarlı değil. `/egitim kur` kullan."
       );
     }
 
     const logCh = interaction.guild.channels.cache.get(logChannelId);
     if (!logCh) {
-      return interaction.editReply("Log kanalı bulunamadı.");
+      return interaction.editReply("❌ Log kanalı bulunamadı.");
     }
 
-    /* ---------- LİSTE ---------- */
+    /* ================= LİSTE ================= */
     if (sub === "liste") {
       const isim = interaction.options.getString("isim");
-      const count =
-        (await db.get(`egitim.${guildId}.sayac.${isim}`)) || 0;
+      const count = (await db.get(`egitim.${guildId}.sayac.${isim}`)) || 0;
 
       const embed = new EmbedBuilder()
-        .setTitle("Eğitim Sayacı")
-        .setDescription(
-          `**${isim}** tarafından verilen toplam eğitim sayısı:\n\n**${count}**`
-        )
+        .setTitle("📋 Eğitim Sayacı")
+        .setDescription(`**${isim}** tarafından verilen toplam eğitim:`)
+        .addFields({ name: "Toplam", value: `${count}`, inline: true })
         .setColor(0x2f3136)
         .setTimestamp();
 
       return interaction.editReply({ embeds: [embed] });
     }
 
-    /* ---------- KAYIT ---------- */
+    /* ================= KAYIT ================= */
     if (sub === "kayit") {
       await interaction.editReply(
-        "Aşağıdaki formatta mesaj gönderin ve **SS ekleyin**:\n\n" +
+        "📸 **Aşağıdaki formatta mesaj at ve SS ekle:**\n\n" +
         "```\nİsim:\nİsmi:\nSS,Kayıt:\nTag: <@&ROLID>\n```"
       );
 
@@ -104,6 +103,13 @@ module.exports = {
       });
 
       collector.on("collect", async (msg) => {
+        if (msg.attachments.size === 0) {
+          return interaction.followUp({
+            content: "❌ SS yok, kayıt alınmadı.",
+            ephemeral: true
+          });
+        }
+
         const content = msg.content;
 
         if (
@@ -113,14 +119,7 @@ module.exports = {
           !content.includes("Tag:")
         ) {
           return interaction.followUp({
-            content: "Mesaj formatı hatalı. Kayıt alınmadı.",
-            ephemeral: true
-          });
-        }
-
-        if (msg.attachments.size === 0) {
-          return interaction.followUp({
-            content: "SS bulunamadı. Kayıt alınmadı.",
+            content: "❌ Format hatalı, kayıt alınmadı.",
             ephemeral: true
           });
         }
@@ -131,7 +130,7 @@ module.exports = {
 
         if (!isim || !ismi || !tagMatch) {
           return interaction.followUp({
-            content: "Bilgiler eksik veya hatalı.",
+            content: "❌ Bilgiler eksik.",
             ephemeral: true
           });
         }
@@ -139,11 +138,11 @@ module.exports = {
         const ss = msg.attachments.first();
 
         const embed = new EmbedBuilder()
-          .setTitle("Eğitim Log Kaydı")
+          .setTitle("📘 Eğitim Log Kaydı")
           .setColor(0x2f3136)
           .addFields(
-            { name: "İsim", value: isim, inline: true },
-            { name: "İsmi", value: ismi, inline: true },
+            { name: "Eğitmen", value: isim, inline: true },
+            { name: "Eğitilen", value: ismi, inline: true },
             { name: "Tag", value: `<@&${tagMatch[1]}>`, inline: false }
           )
           .setImage(ss.url)
@@ -153,18 +152,9 @@ module.exports = {
         await db.add(`egitim.${guildId}.sayac.${isim}`, 1);
 
         await interaction.followUp({
-          content: "Eğitim kaydı başarıyla alındı.",
+          content: "✅ Eğitim kaydı başarıyla alındı.",
           ephemeral: true
         });
-      });
-
-      collector.on("end", collected => {
-        if (collected.size === 0) {
-          interaction.followUp({
-            content: "Süre doldu, kayıt alınmadı.",
-            ephemeral: true
-          });
-        }
       });
     }
   }
