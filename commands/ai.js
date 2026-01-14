@@ -7,6 +7,7 @@ const {
   REST, 
   Routes, 
   Events,
+  Collection,
   ActionRowBuilder, 
   ButtonBuilder, 
   ButtonStyle,
@@ -15,7 +16,7 @@ const {
 const { QuickDB } = require("quick.db");
 require("dotenv").config();
 
-// BigInt Çözümü
+// 🚨 BigInt Serileştirme Çözümü
 BigInt.prototype.toJSON = function() { return this.toString(); };
 
 const db = new QuickDB();
@@ -24,60 +25,54 @@ const client = new Client({
     GatewayIntentBits.Guilds,
     GatewayIntentBits.GuildMessages,
     GatewayIntentBits.MessageContent,
-    GatewayIntentBits.GuildMembers
+    GatewayIntentBits.GuildMembers,
+    GatewayIntentBits.GuildModeration
   ],
   partials: [Partials.Channel]
 });
 
-/* ================= AYARLAR ================= */
+// --- AYARLAR ---
 const BOT_TOKEN = process.env.TOKEN;
 const BOT_OWNER_ID = "1389930042200559706"; 
-const YETKILI_ROLLER = ["Ordu Generalleri", "Ordu Yönetimi"];
-/* =========================================== */
+const YETKILI_ROLLER = ["Ordu Generalleri", "Ordu Yönetimi"]; // Butonları kullanabilecek roller
 
-const hasAuth = (member) => 
+// --- YETKİ KONTROLÜ ---
+const isOwner = (userId) => userId === BOT_OWNER_ID;
+const hasMilitaryAuth = (member) => 
   member.permissions.has(PermissionFlagsBits.Administrator) || 
   member.roles.cache.some(r => YETKILI_ROLLER.includes(r.name));
 
-// --- SLASH KOMUT TANIMLARI ---
+// ----------------------------------------------------------------------
+// --- 1. SLASH KOMUTLARI ---
+// ----------------------------------------------------------------------
 const commands = [
   new SlashCommandBuilder()
     .setName("egitim")
-    .setDescription("Eğitim sistemi komutları")
-    .addSubcommand(s => 
-      s.setName("logs")
-       .setDescription("Otomatik eğitim kayıt kanalını ayarlar")
-       .addChannelOption(o => o.setName("kanal").setDescription("Log kanalı").setRequired(true))
-    )
-    .addSubcommand(s => 
-      s.setName("liste")
-       .setDescription("Bir eğitmenin toplam puanını gösterir")
-       .addStringOption(o => o.setName("isim").setDescription("Eğitmen adı").setRequired(true))
-    ),
-  new SlashCommandBuilder().setName("yonetim-paneli").setDescription("Bot sahibine özel panel"),
-  new SlashCommandBuilder().setName("rollerisil").setDescription("Botun yetkisinin yettiği tüm rolleri temizler")
+    .setDescription("Ordu eğitim sistemi")
+    .addSubcommand(s => s.setName("logs").setDescription("Log kanalını ayarla").addChannelOption(o => o.setName("kanal").setDescription("Kanal").setRequired(true)))
+    .addSubcommand(s => s.setName("liste").setDescription("Puan sorgula").addStringOption(o => o.setName("isim").setDescription("Eğitmen adı").setRequired(true))),
+  new SlashCommandBuilder().setName("yonetim-paneli").setDescription("Bot sahibi özel paneli"),
+  new SlashCommandBuilder().setName("rollerisil").setDescription("Hiyerarşindeki rolleri siler")
 ].map(c => c.toJSON());
 
-// --- BOT HAZIR VE KOMUT KAYIT ---
+// ----------------------------------------------------------------------
+// --- 2. ANA OLAYLAR ---
+// ----------------------------------------------------------------------
+
 client.once(Events.ClientReady, async (c) => {
-  console.log(`✅ ${c.user.tag} Aktif!`);
-  
+  console.log(`✅ Ordu Botu Hazır: ${c.user.tag}`);
   const rest = new REST({ version: "10" }).setToken(BOT_TOKEN);
   try {
-    console.log("Global Slash komutları kaydediliyor...");
     await rest.put(Routes.applicationCommands(c.user.id), { body: commands });
-    console.log("🚀 Komutlar başarıyla kaydedildi! (Görünmesi birkaç dakika sürebilir)");
-  } catch (err) {
-    console.error("❌ Komut yükleme hatası:", err);
-  }
+  } catch (err) { console.error(err); }
 });
 
-// --- OTOMATİK EĞİTİM FORMATI VE BUTONLAR ---
+// MESAJ YAKALAYICI (Eğitim Formatı Kontrolü)
 client.on(Events.MessageCreate, async (msg) => {
   if (msg.author.bot || !msg.guild) return;
 
-  const logChanId = await db.get(`egitim_${msg.guild.id}.kanal`);
-  if (msg.channel.id === logChanId && hasAuth(msg.member)) {
+  const logChanId = await db.get(`egitim_${msg.guild.id}_kanal`);
+  if (msg.channel.id === logChanId && hasMilitaryAuth(msg.member)) {
     const text = msg.content;
     const egMatch = text.match(/İsim:\s*(.*)/i);
     const alMatch = text.match(/İsmi:\s*(.*)/i);
@@ -90,89 +85,108 @@ client.on(Events.MessageCreate, async (msg) => {
       const ssUrl = msg.attachments.first().url;
 
       const embed = new EmbedBuilder()
-        .setTitle("📩 Eğitim Kaydı (Onay Bekliyor)")
-        .setDescription("Lütfen bu kaydı kontrol edip aşağıdan onaylayın.")
+        .setTitle("📩 Yeni Eğitim Kaydı (Onay Bekliyor)")
+        .setDescription("Lütfen bu kaydı kontrol edip onaylayın veya reddedin.")
         .addFields(
           { name: "👤 Eğitmen", value: egitmen, inline: true },
           { name: "👤 Alan", value: alan, inline: true },
           { name: "🏷️ Tag", value: `<@&${tag}>`, inline: true }
         )
         .setImage(ssUrl)
-        .setColor(0xF1C40F);
+        .setColor("Yellow")
+        .setFooter({ text: `Gönderen: ${msg.author.tag}` });
 
-      const row = new ActionRowBuilder().addComponents(
-        new ButtonBuilder().setCustomId("onay_eg").setLabel("✅ Onayla").setStyle(ButtonStyle.Success),
-        new ButtonBuilder().setCustomId("red_eg").setLabel("❌ Reddet").setStyle(ButtonStyle.Danger)
+      const buttons = new ActionRowBuilder().addComponents(
+        new ButtonBuilder().setCustomId("onay_egitim").setLabel("✅ Onayla").setStyle(ButtonStyle.Success),
+        new ButtonBuilder().setCustomId("red_egitim").setLabel("❌ Reddet").setStyle(ButtonStyle.Danger)
       );
 
-      await msg.reply({ embeds: [embed], components: [row] });
+      await msg.reply({ embeds: [embed], components: [buttons] });
     }
   }
 });
 
-// --- ETKİLEŞİM YAKALAYICI (SLASH & BUTON) ---
-client.on(Events.InteractionCreate, async (i) => {
-  // Slash Komutları
-  if (i.isChatInputCommand()) {
-    if (i.commandName === "egitim") {
-      if (!hasAuth(i.member)) return i.reply({ content: "Yetkin yok!", ephemeral: true });
-      const sub = i.options.getSubcommand();
+// ETKİLEŞİM YAKALAYICI (Butonlar & Slash)
+client.on(Events.InteractionCreate, async (interaction) => {
+  const { guild, member, user, customId, message } = interaction;
 
-      if (sub === "logs") {
-        const chan = i.options.getChannel("kanal");
-        await db.set(`egitim_${i.guild.id}.kanal`, chan.id);
-        return i.reply({ content: `✅ Eğitim kayıt kanalı ${chan} olarak ayarlandı.`, ephemeral: true });
-      }
-
-      if (sub === "liste") {
-        const isim = i.options.getString("isim");
-        const count = await db.get(`egitim_${i.guild.id}.sayac.${isim}`) || 0;
-        return i.reply({ content: `📊 **${isim}** toplam **${count}** eğitim vermiş.`, ephemeral: true });
-      }
+  // --- BUTON İŞLEMLERİ ---
+  if (interaction.isButton()) {
+    // Sadece yetkililer butonlara basabilir
+    if (!hasMilitaryAuth(member)) {
+      return interaction.reply({ content: "❌ Bu butonları sadece **Ordu Yetkilileri** kullanabilir.", ephemeral: true });
     }
 
-    if (i.commandName === "yonetim-paneli" && i.user.id === BOT_OWNER_ID) {
-        const row = new ActionRowBuilder().addComponents(
-            new ButtonBuilder().setCustomId("restart").setLabel("Botu Kapat").setStyle(ButtonStyle.Danger)
-        );
-        return i.reply({ content: "🛠 Yönetim Paneli", components: [row], ephemeral: true });
+    // Embed'den bilgileri çek
+    const embed = message.embeds[0];
+    const egitmenAdi = embed.fields.find(f => f.name === "👤 Eğitmen").value;
+
+    if (customId === "onay_egitim") {
+      await db.add(`egitim_${guild.id}_sayac_${egitmenAdi}`, 1);
+
+      const approvedEmbed = EmbedBuilder.from(embed)
+        .setTitle("✅ Eğitim Kaydı Onaylandı")
+        .setColor("Green")
+        .setFooter({ text: `Onaylayan: ${user.tag}` });
+
+      await interaction.update({ embeds: [approvedEmbed], components: [] });
     }
 
-    if (i.commandName === "rollerisil") {
-        if (!i.member.permissions.has(PermissionFlagsBits.Administrator)) return i.reply("Yönetici olmalısın!");
-        await i.deferReply({ ephemeral: true });
-        let silinen = 0;
-        for (const r of i.guild.roles.cache.values()) {
-            if (r.name !== "@everyone" && !r.managed && r.position < i.guild.members.me.roles.highest.position) {
-                await r.delete().catch(() => null);
-                silinen++;
-            }
-        }
-        return i.editReply(`${silinen} adet rol silindi.`);
+    if (customId === "red_egitim") {
+      const rejectedEmbed = EmbedBuilder.from(embed)
+        .setTitle("❌ Eğitim Kaydı Reddedildi")
+        .setColor("Red")
+        .setFooter({ text: `Reddeden: ${user.tag}` });
+
+      await interaction.update({ embeds: [rejectedEmbed], components: [] });
+    }
+    
+    if (customId === "p_restart" && isOwner(user.id)) {
+        await interaction.reply({content: "Bot kapatılıyor...", ephemeral: true});
+        process.exit();
     }
   }
 
-  // Butonlar
-  if (i.isButton()) {
-    if (!hasAuth(i.member)) return i.reply({ content: "❌ Yetkin yok.", ephemeral: true });
+  // --- SLASH KOMUTLARI ---
+  if (interaction.isChatInputCommand()) {
+    const { commandName, options } = interaction;
 
-    const embed = i.message.embeds[0];
-    const egitmenAdi = embed.fields.find(f => f.name === "👤 Eğitmen").value;
-
-    if (i.customId === "onay_eg") {
-      await db.add(`egitim_${i.guild.id}.sayac.${egitmenAdi}`, 1);
-      const ok = EmbedBuilder.from(embed).setTitle("✅ Eğitim Onaylandı").setColor("Green").setFooter({ text: `Onaylayan: ${i.user.tag}` });
-      await i.update({ embeds: [ok], components: [] });
+    if (commandName === "egitim") {
+      if (!hasMilitaryAuth(member)) return interaction.reply({ content: "Yetkin yok.", ephemeral: true });
+      const sub = options.getSubcommand();
+      
+      if (sub === "logs") {
+        const chan = options.getChannel("kanal");
+        await db.set(`egitim_${guild.id}_kanal`, chan.id);
+        return interaction.reply({ content: `✅ Log kanalı ${chan} yapıldı.`, ephemeral: true });
+      }
+      
+      if (sub === "liste") {
+        const isim = options.getString("isim");
+        const count = await db.get(`egitim_${guild.id}_sayac_${isim}`) || 0;
+        return interaction.reply({ content: `📊 **${isim}** toplam **${count}** eğitim vermiş.`, ephemeral: true });
+      }
     }
 
-    if (i.customId === "red_eg") {
-      const red = EmbedBuilder.from(embed).setTitle("❌ Eğitim Reddedildi").setColor("Red").setFooter({ text: `Reddeden: ${i.user.tag}` });
-      await i.update({ embeds: [red], components: [] });
+    if (commandName === "yonetim-paneli") {
+      if (!isOwner(user.id)) return interaction.reply({ content: "Sadece bot sahibi!", ephemeral: true });
+      const row = new ActionRowBuilder().addComponents(
+        new ButtonBuilder().setCustomId("p_restart").setLabel("Botu Kapat").setStyle(ButtonStyle.Danger)
+      );
+      return interaction.reply({ content: "🛠 Yönetim Paneli", components: [row], ephemeral: true });
     }
 
-    if (i.customId === "restart" && i.user.id === BOT_OWNER_ID) {
-        await i.reply({ content: "Kapatılıyor...", ephemeral: true });
-        process.exit();
+    if (commandName === "rollerisil") {
+        if (!member.permissions.has(PermissionFlagsBits.Administrator)) return interaction.reply("Yönetici olmalısın!");
+        await interaction.deferReply({ephemeral:true});
+        let deleted = 0;
+        for (const role of guild.roles.cache.values()) {
+          if (role.name !== "@everyone" && !role.managed && role.position < guild.members.me.roles.highest.position) {
+            await role.delete().catch(() => null);
+            deleted++;
+          }
+        }
+        return interaction.editReply(`${deleted} adet rol imha edildi.`);
     }
   }
 });
