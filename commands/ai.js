@@ -1,160 +1,159 @@
-const {
-  SlashCommandBuilder,
-  EmbedBuilder,
-  PermissionFlagsBits
+const { 
+  Client, 
+  GatewayIntentBits, 
+  Partials, 
+  EmbedBuilder, 
+  SlashCommandBuilder, 
+  REST, 
+  Routes, 
+  Collection,
+  PermissionFlagsBits 
 } = require("discord.js");
-
 const { QuickDB } = require("quick.db");
+require("dotenv").config();
+
+// 🚨 KRİTİK: BigInt Serileştirme Hatası Çözümü
+BigInt.prototype.toJSON = function() { return this.toString(); };
+
 const db = new QuickDB();
+const client = new Client({
+  intents: [
+    GatewayIntentBits.Guilds,
+    GatewayIntentBits.GuildMessages,
+    GatewayIntentBits.MessageContent,
+    GatewayIntentBits.GuildMembers
+  ],
+  partials: [Partials.Channel]
+});
 
-/* ===== AYARLAR ===== */
-const YETKILI_ROL_ID = "253"; // sadece BU rol ve ÜSTÜ
-/* =================== */
+// --- AYARLAR ---
+const BOT_TOKEN = process.env.TOKEN;
+const CLIENT_ID = "BOT_ID_YAZIN"; // Botunun ID'sini buraya gir
 
-module.exports = {
-  data: new SlashCommandBuilder()
-    .setName("egitim")
-    .setDescription("Eğitim log ve kayıt sistemi")
+// Yetkili Rol İsimleri (Bu isimlere sahip herkes sistemi kullanabilir)
+const YETKILI_ROLLER = ["Ordu Generalleri", "Ordu Yönetimi"];
 
-    .addSubcommand(sub =>
-      sub
-        .setName("logs")
-        .setDescription("Eğitim log kanalını ayarla")
-        .addChannelOption(opt =>
-          opt
-            .setName("kanal")
-            .setDescription("Log kanalı")
-            .setRequired(true)
+// Yetki Kontrol Fonksiyonu
+function yetkiKontrol(member) {
+  // Yönetici ise veya belirlenen rollerden birine sahipse true döner
+  return member.permissions.has(PermissionFlagsBits.Administrator) || 
+         member.roles.cache.some(role => YETKILI_ROLLER.includes(role.name));
+}
+
+// ----------------------------------------------------------------------
+// --- 1. SLASH KOMUT TANIMLARI ---
+// ----------------------------------------------------------------------
+const egitimKomutu = new SlashCommandBuilder()
+  .setName("egitim")
+  .setDescription("Eğitim sistemi yönetimi")
+  .addSubcommand(sub =>
+    sub.setName("logs").setDescription("Otomatik kayıt kanalını ayarla (Ordu Yönetimi)").addChannelOption(opt => opt.setName("kanal").setDescription("Kanal seçin").setRequired(true))
+  )
+  .addSubcommand(sub =>
+    sub.setName("liste").setDescription("Eğitmen puanını gösterir").addStringOption(opt => opt.setName("isim").setDescription("Eğitmen adı").setRequired(true))
+  );
+
+const commands = [egitimKomutu.toJSON()];
+
+// ----------------------------------------------------------------------
+// --- 2. OTOMATİK KAYIT MANTIĞI (MESSAGE CREATE) ---
+// ----------------------------------------------------------------------
+client.on("messageCreate", async (message) => {
+  if (message.author.bot || !message.guild) return;
+
+  const guildId = message.guild.id;
+  const logChannelId = await db.get(`egitim_${guildId}_kanal`);
+
+  // Sadece ayarlanan log kanalında çalış
+  if (message.channel.id !== logChannelId) return;
+
+  // YETKİ KONTROLÜ: Mesajı atan kişi General veya Ordu Yönetimi mi?
+  if (!yetkiKontrol(message.member)) return;
+
+  const text = message.content;
+  
+  // Regex Kontrolü
+  const egitmenMatch = text.match(/İsim:\s*(.*)/i);
+  const alanMatch = text.match(/İsmi:\s*(.*)/i);
+  const tagMatch = text.match(/<@&(\d+)>/);
+
+  if (egitmenMatch && alanMatch && tagMatch && message.attachments.size > 0) {
+    const egitmenAdi = egitmenMatch[1].trim();
+    const alanAdi = alanMatch[1].trim();
+    const ssUrl = message.attachments.first().url;
+
+    try {
+      await db.add(`egitim_${guildId}_sayac_${egitmenAdi}`, 1);
+
+      const logEmbed = new EmbedBuilder()
+        .setTitle("🎖️ Ordu Eğitim Kaydı Onaylandı")
+        .setDescription(`Kayıt, Ordu yetkilisi tarafından sisteme işlendi.`)
+        .addFields(
+          { name: "👤 Eğitmen (Yetkili)", value: `\`${egitmenAdi}\``, inline: true },
+          { name: "👤 Eğitim Alan", value: `\`${alanAdi}\``, inline: true },
+          { name: "🏷️ Rütbe/Tag", value: `<@&${tagMatch[1]}>`, inline: true }
         )
-    )
+        .setImage(ssUrl)
+        .setColor(0x1a472a) // Askeri yeşil tonu
+        .setFooter({ text: `Kayıt İşlemi: ${message.author.tag}` })
+        .setTimestamp();
 
-    .addSubcommand(sub =>
-      sub
-        .setName("liste")
-        .setDescription("Bir kişinin verdiği eğitim sayısını gösterir")
-        .addStringOption(opt =>
-          opt
-            .setName("isim")
-            .setDescription("Eğitmen adı")
-            .setRequired(true)
-        )
-    ),
+      await message.reply({ embeds: [logEmbed] });
+      await message.react("✅");
 
-  async execute(interaction) {
-    await interaction.deferReply({ ephemeral: true });
+    } catch (error) {
+      console.error("Kayıt Hatası:", error);
+    }
+  }
+});
 
-    const member = interaction.member;
+// ----------------------------------------------------------------------
+// --- 3. SLASH KOMUT ÇALIŞTIRICI ---
+// ----------------------------------------------------------------------
+client.on("interactionCreate", async (interaction) => {
+  if (!interaction.isChatInputCommand()) return;
 
-    /* === ROL YETKİ KONTROL === */
-    const hasAuth = member.roles.cache.some(r =>
-      BigInt(r.id) >= BigInt(YETKILI_ROL_ID)
-    );
-
-    if (!hasAuth) {
-      return interaction.editReply(
-        "Bu komutu kullanmak için yetkin yok."
-      );
+  if (interaction.commandName === "egitim") {
+    // Yetki Kontrolü
+    if (!yetkiKontrol(interaction.member)) {
+      return interaction.reply({ content: "❌ Bu komutu sadece **Ordu Generalleri** ve **Ordu Yönetimi** kullanabilir.", ephemeral: true });
     }
 
-    const guildId = interaction.guild.id;
     const sub = interaction.options.getSubcommand();
+    const guildId = interaction.guild.id;
 
-    /* ===== LOG KANALI AYAR ===== */
     if (sub === "logs") {
       const kanal = interaction.options.getChannel("kanal");
-      await db.set(`egitim.${guildId}.kanal`, kanal.id);
-
-      return interaction.editReply(
-        `Eğitim log kanalı ayarlandı: ${kanal}`
-      );
+      await db.set(`egitim_${guildId}_kanal`, kanal.id);
+      return interaction.reply({ content: `✅ Eğitim kayıt kanalı ${kanal} olarak ayarlandı.`, ephemeral: true });
     }
 
-    const logChannelId = await db.get(`egitim.${guildId}.kanal`);
-    if (!logChannelId) {
-      return interaction.editReply(
-        "Log kanalı ayarlı değil. `/egitim logs` ile ayarla."
-      );
-    }
-
-    const logChannel =
-      interaction.guild.channels.cache.get(logChannelId);
-
-    if (!logChannel) {
-      return interaction.editReply("Log kanalı bulunamadı.");
-    }
-
-    /* ===== LİSTE ===== */
     if (sub === "liste") {
       const isim = interaction.options.getString("isim");
-      const count =
-        (await db.get(`egitim.${guildId}.sayac.${isim}`)) || 0;
-
-      const embed = new EmbedBuilder()
-        .setTitle("Eğitim Sayacı")
-        .setDescription(
-          `**${isim}** tarafından verilen toplam eğitim:\n\n**${count}**`
-        )
-        .setColor(0x2f3136)
+      const count = (await db.get(`egitim_${guildId}_sayac_${isim}`)) || 0;
+      
+      const listEmbed = new EmbedBuilder()
+        .setTitle("📊 Ordu Eğitim İstatistiği")
+        .setDescription(`**${isim}** için sistemde kayıtlı toplam eğitim: \`${count}\``)
+        .setColor(0xd4af37) // Altın rengi
         .setTimestamp();
 
-      return interaction.editReply({ embeds: [embed] });
+      return interaction.reply({ embeds: [listEmbed], ephemeral: true });
     }
-
-    /* ===== KAYIT BİLGİLENDİRME ===== */
-    await interaction.editReply(
-      "Belirlenen **log kanalına**, **SS ekleyerek** formatta mesaj at."
-    );
-
-    /* ===== MESAJ DİNLE ===== */
-    const collector = logChannel.createMessageCollector({
-      filter: m => m.author.id === interaction.user.id,
-      time: 5 * 60 * 1000
-    });
-
-    collector.on("collect", async (msg) => {
-      if (msg.attachments.size === 0) return;
-
-      const text = msg.content;
-
-      if (
-        !text.includes("İsim:") ||
-        !text.includes("İsmi:") ||
-        !text.includes("SS,Kayıt:") ||
-        !text.includes("Tag:")
-      ) return;
-
-      const isim =
-        text.split("İsim:")[1]?.split("\n")[0]?.trim();
-      const ismi =
-        text.split("İsmi:")[1]?.split("\n")[0]?.trim();
-      const tagMatch = text.match(/<@&(\d+)>/);
-
-      if (!isim || !ismi || !tagMatch) return;
-
-      const ss = msg.attachments.first();
-
-      /* === EMBED LOG === */
-      const embed = new EmbedBuilder()
-        .setTitle("Eğitim Log Kaydı")
-        .addFields(
-          { name: "Eğitmen", value: isim },
-          { name: "Eğitim Alan", value: ismi },
-          { name: "Tag", value: `<@&${tagMatch[1]}>` }
-        )
-        .setImage(ss.url)
-        .setColor(0x2f3136)
-        .setTimestamp();
-
-      await logChannel.send({ embeds: [embed] });
-
-      await db.add(`egitim.${guildId}.sayac.${isim}`, 1);
-
-      await interaction.followUp({
-        content: "Eğitim kaydı alındı.",
-        ephemeral: true
-      });
-
-      collector.stop();
-    });
   }
-};
+});
+
+// ----------------------------------------------------------------------
+// --- 4. BOT BAŞLATMA ---
+// ----------------------------------------------------------------------
+client.once("ready", async () => {
+  console.log(`🎖️ ${client.user.tag} Ordu Komutanlığı emrinde aktif!`);
+  
+  const rest = new REST({ version: "10" }).setToken(BOT_TOKEN);
+  try {
+    await rest.put(Routes.applicationCommands(CLIENT_ID), { body: commands });
+    console.log("✅ Komutlar yüklendi.");
+  } catch (error) { console.error(error); }
+});
+
+client.login(BOT_TOKEN);
