@@ -64,7 +64,8 @@ client.once(Events.ClientReady, async (c) => {
   const rest = new REST({ version: "10" }).setToken(BOT_TOKEN);
   try {
     await rest.put(Routes.applicationCommands(c.user.id), { body: commands });
-  } catch (err) { console.error(err); }
+    console.log("✅ Slash komutları yüklendi");
+  } catch (err) { console.error("❌ Komut yükleme hatası:", err); }
 });
 
 // MESAJ YAKALAYICI (Eğitim Formatı Kontrolü)
@@ -143,7 +144,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
     
     if (customId === "p_restart" && isOwner(user.id)) {
         await interaction.reply({content: "Bot kapatılıyor...", ephemeral: true});
-        process.exit();
+        setTimeout(() => process.exit(0), 1000);
     }
   }
 
