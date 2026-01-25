@@ -1,230 +1,164 @@
 const {
+  Client,
+  GatewayIntentBits,
   SlashCommandBuilder,
   PermissionFlagsBits,
   EmbedBuilder,
   Events
 } = require("discord.js");
-
 const { QuickDB } = require("quick.db");
+const express = require("express"); // Railway uyumu için
+
 const db = new QuickDB();
+const app = express();
+const client = new Client({
+  intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildMembers],
+});
 
-/* =========================
-   SLASH KOMUT
-========================= */
-const data = new SlashCommandBuilder()
+// 🌐 Railway Port Ayarı (Botun "Crashed" vermesini engeller)
+const PORT = process.env.PORT || 3000;
+app.get("/", (req, res) => res.send("🚀 Bot Roket Gibi Çalışıyor!"));
+app.listen(PORT, () => console.log(`📡 Web Sunucusu ${PORT} portunda aktif.`));
+
+/* =======================
+   SLASH KOMUT TANIMI
+======================= */
+const yetkiCommand = new SlashCommandBuilder()
   .setName("yetki")
-  .setDescription("Rol ve komut yetki sistemi")
-  .setDefaultMemberPermissions(PermissionFlagsBits.Administrator)
-
-  // ROL AYAR
+  .setDescription("Yetki yönetim sistemi")
   .addSubcommand(sub =>
-    sub
-      .setName("rol")
-      .setDescription("Role yetki seviyesi ver")
-      .addRoleOption(o =>
-        o.setName("rol").setDescription("Rol").setRequired(true)
-      )
-      .addIntegerOption(o =>
-        o.setName("seviye").setDescription("Yetki seviyesi").setRequired(true)
-      )
+    sub.setName("rol").setDescription("Role yetki ver")
+      .addRoleOption(o => o.setName("rol").setDescription("Rol").setRequired(true))
+      .addIntegerOption(o => o.setName("seviye").setDescription("Yetki seviyesi").setRequired(true))
   )
-
-  // KOMUT AYAR
   .addSubcommand(sub =>
-    sub
-      .setName("komut")
-      .setDescription("Komuta yetki seviyesi ver")
-      .addStringOption(o =>
-        o.setName("komut").setDescription("Komut adı").setRequired(true)
-      )
-      .addIntegerOption(o =>
-        o.setName("seviye").setDescription("Gerekli seviye").setRequired(true)
-      )
+    sub.setName("komut").setDescription("Komuta yetki ver")
+      .addStringOption(o => o.setName("isim").setDescription("Komut adı").setRequired(true))
+      .addIntegerOption(o => o.setName("seviye").setDescription("Yetki seviyesi").setRequired(true))
   )
-
-  // YETKİ SİL
   .addSubcommand(sub =>
-    sub
-      .setName("sil")
-      .setDescription("Rol veya komut yetkisini sil")
-      .addStringOption(o =>
-        o.setName("tip")
-          .setDescription("rol / komut")
-          .setRequired(true)
-          .addChoices(
-            { name: "Rol", value: "rol" },
-            { name: "Komut", value: "komut" }
-          )
-      )
-      .addStringOption(o =>
-        o.setName("isim")
-          .setDescription("Rol ID veya komut adı")
-          .setRequired(true)
-      )
+    sub.setName("sil").setDescription("Yetki sil")
+      .addStringOption(o => o.setName("tur").setDescription("Yetki türü").setRequired(true)
+        .addChoices({ name: "Rol", value: "rol" }, { name: "Komut", value: "komut" }))
+      .addStringOption(o => o.setName("id").setDescription("Rol ID / Komut adı").setRequired(true))
   )
-
-  // YETKİ LİSTE
+  .addSubcommand(sub => sub.setName("liste").setDescription("Yetki listesini gösterir"))
   .addSubcommand(sub =>
-    sub
-      .setName("liste")
-      .setDescription("Tüm yetki ayarlarını listeler")
-  )
-
-  // LOG KANALI
-  .addChannelOption(o =>
-    o
-      .setName("log")
-      .setDescription("Yetki log kanalı")
-      .setRequired(false)
+    sub.setName("log").setDescription("Yetki log kanalı ayarla")
+      .addChannelOption(o => o.setName("kanal").setDescription("Log kanalı").setRequired(true))
   );
 
-/* =========================
-   EXECUTE
-========================= */
-async function execute(interaction) {
+/* =======================
+   BOT READY
+======================= */
+client.once(Events.ClientReady, async () => {
+  console.log(`✅ Bot aktif: ${client.user.tag}`);
+  
+  // Global Komut Kaydı (Railway'de roket hızında yüklenmesi için)
+  try {
+    await client.application.commands.set([yetkiCommand.toJSON()]);
+    console.log("✅ Slash komutları başarıyla güncellendi.");
+  } catch (err) {
+    console.error("❌ Komut yükleme hatası:", err);
+  }
+});
+
+/* =======================
+   YETKİ SEVİYESİ BUL
+======================= */
+async function getUserLevel(member, guildId) {
+  if (member.permissions.has(PermissionFlagsBits.Administrator)) return 100; // Admin her zaman en üst seviye
+  let level = 0;
+  const roles = await db.get(`yetki.${guildId}.roller`) || {};
+  
+  member.roles.cache.forEach(role => {
+    if (roles[role.id] && roles[role.id] > level) level = roles[role.id];
+  });
+  return level;
+}
+
+/* =======================
+   INTERACTION
+======================= */
+client.on(Events.InteractionCreate, async interaction => {
+  if (!interaction.isChatInputCommand()) return;
+  if (interaction.commandName !== "yetki") return;
+
   const guildId = interaction.guild.id;
   const sub = interaction.options.getSubcommand();
 
-  // LOG KANAL AYARI
-  const logChannel = interaction.options.getChannel("log");
-  if (logChannel) {
-    await db.set(`yetki.log.${guildId}`, logChannel.id);
+  // Railway'de zaman aşımını önlemek için deferReply
+  await interaction.deferReply({ ephemeral: true });
+
+  const userLevel = await getUserLevel(interaction.member, guildId);
+  
+  // Yetki Kontrolü (Komutu kullanmak için seviye 3 veya admin lazım)
+  if (userLevel < 3) {
+    return interaction.editReply("❌ Bu sistem üzerinde yetkiniz bulunmuyor (Seviye 3+ gerekli).");
   }
 
-  const logId = await db.get(`yetki.log.${guildId}`);
-  const logCh = logId
-    ? interaction.guild.channels.cache.get(logId)
-    : null;
+  const logId = await db.get(`yetki.${guildId}.log`);
+  const logChannel = logId ? interaction.guild.channels.cache.get(logId) : null;
 
-  /* ---------- ROL ---------- */
+  if (sub === "log") {
+    const kanal = interaction.options.getChannel("kanal");
+    await db.set(`yetki.${guildId}.log`, kanal.id);
+    return interaction.editReply(`✅ Log kanalı ayarlandı: ${kanal}`);
+  }
+
   if (sub === "rol") {
-    const role = interaction.options.getRole("rol");
-    const level = interaction.options.getInteger("seviye");
+    const rol = interaction.options.getRole("rol");
+    const seviye = interaction.options.getInteger("seviye");
 
-    await db.set(`yetki.roles.${guildId}.${role.id}`, level);
+    await db.set(`yetki.${guildId}.roller.${rol.id}`, seviye);
 
-    if (logCh)
-      logCh.send({
-        embeds: [
-          new EmbedBuilder()
-            .setTitle("Yetki Rol Ayarlandı")
-            .setDescription(`${role} → Seviye ${level}`)
-            .setColor("Green")
-            .setTimestamp()
-        ]
-      });
-
-    return interaction.reply({ content: "Rol yetkisi ayarlandı.", ephemeral: true });
-  }
-
-  /* ---------- KOMUT ---------- */
-  if (sub === "komut") {
-    const command = interaction.options.getString("komut");
-    const level = interaction.options.getInteger("seviye");
-
-    await db.set(`yetki.commands.${guildId}.${command}`, level);
-
-    if (logCh)
-      logCh.send({
-        embeds: [
-          new EmbedBuilder()
-            .setTitle("Yetki Komut Ayarlandı")
-            .setDescription(`/${command} → Seviye ${level}`)
-            .setColor("Blue")
-            .setTimestamp()
-        ]
-      });
-
-    return interaction.reply({ content: "Komut yetkisi ayarlandı.", ephemeral: true });
-  }
-
-  /* ---------- SİL ---------- */
-  if (sub === "sil") {
-    const tip = interaction.options.getString("tip");
-    const isim = interaction.options.getString("isim");
-
-    if (tip === "rol") {
-      await db.delete(`yetki.roles.${guildId}.${isim}`);
-    } else {
-      await db.delete(`yetki.commands.${guildId}.${isim}`);
+    if (logChannel) {
+        const logEmbed = new EmbedBuilder()
+            .setTitle("🔒 Yetki Güncellendi")
+            .setDescription(`**${interaction.user.tag}** bir role yetki tanımladı.`)
+            .addFields(
+                { name: "Rol", value: `${rol}`, inline: true },
+                { name: "Yeni Seviye", value: `${seviye}`, inline: true }
+            )
+            .setColor("Blue").setTimestamp();
+        logChannel.send({ embeds: [logEmbed] }).catch(() => null);
     }
 
-    if (logCh)
-      logCh.send({
-        embeds: [
-          new EmbedBuilder()
-            .setTitle("Yetki Silindi")
-            .setDescription(`${tip.toUpperCase()} → ${isim}`)
-            .setColor("Red")
-            .setTimestamp()
-        ]
-      });
-
-    return interaction.reply({ content: "Yetki silindi.", ephemeral: true });
+    return interaction.editReply(`✅ **${rol.name}** artık **Seviye ${seviye}** yetkisine sahip.`);
   }
 
-  /* ---------- LİSTE ---------- */
+  if (sub === "komut") {
+    const isim = interaction.options.getString("isim");
+    const seviye = interaction.options.getInteger("seviye");
+    await db.set(`yetki.${guildId}.komutlar.${isim}`, seviye);
+    return interaction.editReply(`✅ **${isim}** komutu artık **Seviye ${seviye}** ve üzeri tarafından kullanılabilir.`);
+  }
+
+  if (sub === "sil") {
+    const tur = interaction.options.getString("tur");
+    const id = interaction.options.getString("id");
+    await db.delete(`yetki.${guildId}.${tur === "rol" ? "roller" : "komutlar"}.${id}`);
+    return interaction.editReply("✅ Kayıt başarıyla silindi.");
+  }
+
   if (sub === "liste") {
-    const roles = (await db.get(`yetki.roles.${guildId}`)) || {};
-    const commands = (await db.get(`yetki.commands.${guildId}`)) || {};
+    const roller = await db.get(`yetki.${guildId}.roller`) || {};
+    const komutlar = await db.get(`yetki.${guildId}.komutlar`) || {};
 
-    const roleList = Object.entries(roles)
-      .map(([id, lvl]) => `<@&${id}> → ${lvl}`)
-      .join("\n") || "Yok";
+    const roleList = Object.entries(roller).map(([r, l]) => `<@&${r}> → \`Seviye ${l}\``).join("\n") || "Yok";
+    const commandList = Object.entries(komutlar).map(([k, l]) => `\`/${k}\` → \`Seviye ${l}\``).join("\n") || "Yok";
 
-    const commandList = Object.entries(commands)
-      .map(([cmd, lvl]) => `/${cmd} → ${lvl}`)
-      .join("\n") || "Yok";
+    const embed = new EmbedBuilder()
+      .setTitle("🎖️ Ordu Yetki Hiyerarşisi")
+      .addFields(
+        { name: "Rol Yetkileri", value: roleList },
+        { name: "Komut Kısıtlamaları", value: commandList }
+      )
+      .setColor("Green").setTimestamp();
 
-    return interaction.reply({
-      embeds: [
-        new EmbedBuilder()
-          .setTitle("Yetki Listesi")
-          .addFields(
-            { name: "Roller", value: roleList },
-            { name: "Komutlar", value: commandList }
-          )
-          .setColor("DarkGrey")
-      ],
-      ephemeral: true
-    });
+    return interaction.editReply({ embeds: [embed] });
   }
-}
+});
 
-/* =========================
-   EVENT (KORUMA)
-========================= */
-async function interactionEvent(interaction) {
-  if (!interaction.isChatInputCommand()) return;
-
-  const guildId = interaction.guild.id;
-  const requiredLevel = await db.get(
-    `yetki.commands.${guildId}.${interaction.commandName}`
-  );
-  if (!requiredLevel) return;
-
-  let userLevel = 0;
-  for (const role of interaction.member.roles.cache.values()) {
-    const lvl = await db.get(`yetki.roles.${guildId}.${role.id}`);
-    if (lvl && lvl > userLevel) userLevel = lvl;
-  }
-
-  if (userLevel < requiredLevel) {
-    return interaction.reply({
-      content: "Bu komutu kullanmak için yetkin yok.",
-      ephemeral: true
-    });
-  }
-}
-
-/* =========================
-   EXPORT
-========================= */
-module.exports = {
-  data,
-  execute,
-  name: Events.InteractionCreate,
-  async run(interaction) {
-    await interactionEvent(interaction);
-  }
-};
+// Railway'de TOKEN'i "Variables" kısmına eklemeyi unutma!
+client.login(process.env.TOKEN);
