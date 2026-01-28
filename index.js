@@ -31,7 +31,7 @@ const commands = [];
 // 🔒 Sadece bu iki kullanıcı komut kullanabilir
 const ALLOWED_USERS = [
   "1389930042200559706", // Kullanıcı 2
-  "1336374889447293000" // Kullanıcı 3
+  "1385277307106885722" // Kullanıcı 3
 ];
 
 // Komutları yükle
