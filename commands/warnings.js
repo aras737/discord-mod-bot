@@ -1,132 +1,110 @@
-const {
-  Client,
-  GatewayIntentBits,
-  SlashCommandBuilder,
-  Routes,
-  REST,
-  EmbedBuilder,
-  PermissionFlagsBits
+const { 
+  Client, 
+  GatewayIntentBits, 
+  SlashCommandBuilder, 
+  EmbedBuilder, 
+  REST, 
+  Routes, 
+  PermissionFlagsBits 
 } = require("discord.js");
 require("dotenv").config();
-
-const TOKEN = process.env.TOKEN;
-const CLIENT_ID = process.env.CLIENT_ID;
 
 const client = new Client({
   intents: [
     GatewayIntentBits.Guilds,
     GatewayIntentBits.GuildMembers,
-    GatewayIntentBits.GuildBans // Ban kontrolü için şart
+    GatewayIntentBits.GuildBans 
   ]
 });
 
-/* ---------------- SLASH KOMUTLAR ---------------- */
-
+/* ================= KOMUT TANIMLARI ================= */
 const commands = [
   new SlashCommandBuilder()
     .setName("ban")
-    .setDescription("Bir kullanıcıyı banlar")
-    .setDefaultMemberPermissions(PermissionFlagsBits.BanMembers) // Sadece yetkisi olanlar komutu görebilir
-    .addUserOption(opt => opt.setName("kullanici").setDescription("Banlanacak kişi").setRequired(true))
-    .addStringOption(opt => opt.setName("sebep").setDescription("Ban sebebi").setRequired(false)),
+    .setDescription("Bir kullanıcıyı sunucudan yasaklar.")
+    .setDefaultMemberPermissions(PermissionFlagsBits.BanMembers)
+    .addUserOption(o => o.setName("kullanici").setDescription("Yasaklanacak kişi").setRequired(true))
+    .addStringOption(o => o.setName("sebep").setDescription("Yasaklama sebebi").setRequired(false)),
 
   new SlashCommandBuilder()
     .setName("unban")
-    .setDescription("Bir kullanıcının banını açar")
+    .setDescription("Bir kullanıcının yasaklamasını kaldırır.")
     .setDefaultMemberPermissions(PermissionFlagsBits.BanMembers)
-    .addStringOption(opt => opt.setName("id").setDescription("Banı açılacak kullanıcı ID").setRequired(true))
-].map(cmd => cmd.toJSON());
+    .addStringOption(o => o.setName("id").setDescription("Yasağı kaldırılacak kullanıcı ID").setRequired(true)),
 
-/* ---------------- KOMUT YÜKLEME ---------------- */
+  new SlashCommandBuilder()
+    .setName("ban-listesi")
+    .setDescription("Sunucudaki yasaklı kullanıcıları listeler.")
+    .setDefaultMemberPermissions(PermissionFlagsBits.BanMembers)
+].map(c => c.toJSON());
 
+/* ================= BOT READY ================= */
 client.once("ready", async () => {
-  const rest = new REST({ version: "10" }).setToken(TOKEN);
+  const rest = new REST({ version: "10" }).setToken(process.env.TOKEN);
   try {
-    await rest.put(Routes.applicationCommands(CLIENT_ID), { body: commands });
-    console.log(`✅ ${client.user.tag} Aktif ve Komutlar Yüklendi!`);
-  } catch (e) { console.error(e); }
+    await rest.put(Routes.applicationCommands(client.user.id), { body: commands });
+    console.log(`✅ ${client.user.tag} Yasaklama ve Liste sistemi aktif!`);
+  } catch (err) { console.error(err); }
 });
 
-/* ---------------- INTERACTION ---------------- */
-
-client.on("interactionCreate", async interaction => {
+/* ================= INTERACTION ÇALIŞTIRICI ================= */
+client.on("interactionCreate", async (interaction) => {
   if (!interaction.isChatInputCommand()) return;
 
-  // BAN KOMUTU
-  if (interaction.commandName === "ban") {
-    await interaction.deferReply(); // "Uygulama yanıt vermedi" hatasını önler
-
-    const user = interaction.options.getUser("kullanici");
-    const reason = interaction.options.getString("sebep") || "Sebep belirtilmedi";
-    const targetMember = await interaction.guild.members.fetch(user.id).catch(() => null);
-
-    // 1. Yetki Kontrolü
-    if (!interaction.member.permissions.has(PermissionFlagsBits.BanMembers)) 
-      return interaction.editReply("❌ Bu komutu kullanmak için `Üyeleri Yasakla` yetkin olmalı.");
-
-    // 2. Botun Yetki Kontrolü
-    if (!interaction.guild.members.me.permissions.has(PermissionFlagsBits.BanMembers))
-      return interaction.editReply("❌ Benim üyeleri yasaklama yetkim yok!");
-
-    if (targetMember) {
-      // 3. Hiyerarşi Kontrolü (Botun rolü üyenin üstünde mi?)
-      if (!targetMember.bannable) 
-        return interaction.editReply("❌ Bu kullanıcıyı banlayamıyorum. Rolü benden yüksek veya eşit.");
-      
-      // 4. Kullanıcıyı banlayan kişi ile hedef arasındaki hiyerarşi
-      if (targetMember.roles.highest.position >= interaction.member.roles.highest.position)
-        return interaction.editReply("❌ Senle aynı veya senden üst rütbedeki birini banlayamazsın!");
-    }
+  // --- BAN LİSTESİ KOMUTU ---
+  if (interaction.commandName === "ban-listesi") {
+    await interaction.deferReply();
 
     try {
-      await interaction.guild.members.ban(user.id, { reason });
+      const bans = await interaction.guild.bans.fetch();
+      if (bans.size === 0) return interaction.editReply("📂 Sunucuda yasaklı kullanıcı bulunmuyor.");
+
+      // Banlıları listele (İlk 20 kişiyi gösterir, karakter sınırı için)
+      const list = bans.map(b => `**${b.user.tag}** (\`${b.user.id}\`)`).join("\n");
+      const shortList = list.length > 2000 ? list.substring(0, 1900) + "..." : list;
+
       const embed = new EmbedBuilder()
-        .setTitle("🚫 Kullanıcı Yasaklandı")
-        .addFields(
-          { name: "Kullanıcı", value: `\`${user.tag}\` (${user.id})`, inline: true },
-          { name: "Yetkili", value: `${interaction.user}`, inline: true },
-          { name: "Sebep", value: `\`${reason}\`` }
-        )
-        .setColor("Red").setTimestamp();
+        .setTitle("🚫 Sunucu Yasaklılar Listesi")
+        .setDescription(shortList)
+        .setColor("Yellow")
+        .setFooter({ text: `Toplam ${bans.size} yasaklı bulunuyor.` })
+        .setTimestamp();
 
       await interaction.editReply({ embeds: [embed] });
     } catch (err) {
-      await interaction.editReply("❌ Ban atılırken bir hata oluştu.");
+      console.error(err);
+      await interaction.editReply("❌ Ban listesi alınırken bir hata oluştu.");
     }
   }
 
-  // UNBAN KOMUTU
+  // --- BAN KOMUTU ---
+  if (interaction.commandName === "ban") {
+    await interaction.deferReply();
+    const targetUser = interaction.options.getUser("kullanici");
+    const reason = interaction.options.getString("sebep") || "Sebep belirtilmedi.";
+    const targetMember = await interaction.guild.members.fetch(targetUser.id).catch(() => null);
+
+    if (!interaction.guild.members.me.permissions.has(PermissionFlagsBits.BanMembers)) 
+        return interaction.editReply("❌ Benim yetkim yok!");
+
+    if (targetMember && !targetMember.bannable) 
+        return interaction.editReply("❌ Bu kullanıcıyı banlayamam, yetkim yetmiyor.");
+
+    try {
+      await interaction.guild.members.ban(targetUser.id, { reason });
+      await interaction.editReply(`✅ **${targetUser.tag}** yasaklandı. Sebep: \`${reason}\``);
+    } catch (err) { await interaction.editReply("❌ Hata oluştu."); }
+  }
+
+  // --- UNBAN KOMUTU ---
   if (interaction.commandName === "unban") {
     await interaction.deferReply();
-    const id = interaction.options.getString("id");
-
+    const userId = interaction.options.getString("id");
     try {
-      await interaction.guild.bans.remove(id);
-      const embed = new EmbedBuilder()
-        .setTitle("✅ Yasak Kaldırıldı")
-        .setDescription(`ID: \`${id}\` kullanıcısının yasaklaması kaldırıldı.`)
-        .setColor("Green").setTimestamp();
-      await interaction.editReply({ embeds: [embed] });
-    } catch {
-      await interaction.editReply("❌ Bu ID'ye sahip bir yasaklama bulunamadı.");
-    }
+      await interaction.guild.bans.remove(userId);
+      await interaction.editReply(`✅ \`${userId}\` ID'li kullanıcının yasağı kaldırıldı.`);
+    } catch (err) { await interaction.editReply("❌ Yasak bulunamadı."); }
   }
 });
 
-/* ---------------- OTOMATİK KORUMA ---------------- */
-
-client.on("guildMemberAdd", async member => {
-  // Kullanıcı sunucuya girdiğinde banlı mı diye tekil kontrol (Daha hızlı)
-  const isBanned = await member.guild.bans.fetch(member.id).catch(() => null);
-  
-  if (isBanned) {
-    try {
-      await member.send(`⚠️ **${member.guild.name}** sunucusunda banlı olduğunuz için otomatik olarak tekrar yasaklandınız.`).catch(() => null);
-      await member.ban({ reason: "Yasaklı hesap otomatik koruma." });
-    } catch (err) {
-      console.error("Oto-ban hatası:", err);
-    }
-  }
-});
-
-client.login(TOKEN);
+client.login(process.env.TOKEN);
