@@ -101,7 +101,7 @@ client.on(Events.InteractionCreate, async interaction => {
       ephemeral: true
     });
   }
-
+ 
   try {
     console.log(`✅ Komut kullanıldı: ${interaction.user.tag} /${interaction.commandName}`);
     await command.execute(interaction, client);
