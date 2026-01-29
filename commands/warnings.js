@@ -1,130 +1,96 @@
-const { 
-  Client, 
-  GatewayIntentBits, 
-  SlashCommandBuilder, 
-  EmbedBuilder, 
-  REST, 
-  Routes, 
-  PermissionFlagsBits 
-} = require("discord.js");
+const { Client, GatewayIntentBits, EmbedBuilder, SlashCommandBuilder, REST, Routes, PermissionFlagsBits } = require("discord.js");
 require("dotenv").config();
 
 const client = new Client({
   intents: [
-    GatewayIntentBits.Guilds,
-    GatewayIntentBits.GuildMembers,
-    GatewayIntentBits.GuildBans 
+    GatewayIntentBits.Guilds, 
+    GatewayIntentBits.GuildMembers, 
+    GatewayIntentBits.GuildBans
   ]
 });
 
-/* ================= KOMUT TANIMLARI ================= */
+// --- KOMUTLAR ---
 const commands = [
   new SlashCommandBuilder()
     .setName("ban")
-    .setDescription("Bir kullanıcıyı sunucudan yasaklar.")
-    .setDefaultMemberPermissions(PermissionFlagsBits.BanMembers)
-    .addUserOption(o => o.setName("kullanici").setDescription("Yasaklanacak kişi").setRequired(true))
-    .addStringOption(o => o.setName("sebep").setDescription("Yasaklama sebebi").setRequired(false)),
-
-  new SlashCommandBuilder()
-    .setName("unban")
-    .setDescription("Bir kullanıcının yasaklamasını kaldırır.")
-    .setDefaultMemberPermissions(PermissionFlagsBits.BanMembers)
-    .addStringOption(o => o.setName("id").setDescription("Yasağı kaldırılacak kullanıcı ID").setRequired(true)),
-
+    .setDescription("Kullanıcıyı sunucudan yasaklar")
+    .addUserOption(o => o.setName("kullanici").setDescription("Yasaklanacak üye").setRequired(true))
+    .addStringOption(o => o.setName("sebep").setDescription("Yasaklama sebebi").setRequired(true)),
   new SlashCommandBuilder()
     .setName("ban-listesi")
-    .setDescription("Sunucudaki yasaklı kullanıcıları listeler.")
-    .setDefaultMemberPermissions(PermissionFlagsBits.BanMembers)
+    .setDescription("Discord sistemindeki yasaklıları listeler")
 ].map(c => c.toJSON());
 
-/* ================= BOT HAZIR ================= */
 client.once("ready", async () => {
   const rest = new REST({ version: "10" }).setToken(process.env.TOKEN);
   try {
     await rest.put(Routes.applicationCommands(client.user.id), { body: commands });
-    console.log(`✅ ${client.user.tag} Yasaklama Sistemi Yayında!`);
+    console.log("✅ Akademi Yasaklama Sistemi Aktif!");
   } catch (err) { console.error(err); }
 });
 
-/* ================= KOMUT ÇALIŞTIRICI ================= */
 client.on("interactionCreate", async (interaction) => {
   if (!interaction.isChatInputCommand()) return;
 
-  // --- BAN LİSTESİ (EMBEDLİ) ---
+  // --- BAN LİSTESİ (Discord Sisteminden Çeker) ---
   if (interaction.commandName === "ban-listesi") {
-    await interaction.deferReply();
+    // Önce gizlice yanıt ver (Kimin kullandığı görünmesin diye)
+    await interaction.reply({ content: "Veriler çekiliyor...", ephemeral: true });
 
     try {
-      const bans = await interaction.guild.bans.fetch();
+      // Discord'un kendi yasaklar sisteminden verileri çekiyoruz
+      const fetchBans = await interaction.guild.bans.fetch();
       
-      if (bans.size === 0) {
-        return interaction.editReply({ 
-          embeds: [new EmbedBuilder().setColor("Yellow").setDescription("📂 Sunucuda yasaklı kullanıcı bulunmuyor.")] 
-        });
-      }
-
-      // Banlıları şık bir şekilde listele
-      const list = bans.map(b => `👤 **${b.user.tag}** \n🆔 \`${b.user.id}\` \n📄 Sebep: *${b.reason || "Belirtilmemiş"}*`).join("\n\n");
-      
-      // Discord 4096 karakter sınırı kontrolü
-      const cleanList = list.length > 3900 ? list.substring(0, 3900) + "..." : list;
-
       const embed = new EmbedBuilder()
-        .setTitle("🚫 Sunucu Yasaklılar Listesi")
-        .setAuthor({ name: interaction.guild.name, iconURL: interaction.guild.iconURL() })
-        .setDescription(cleanList)
-        .setColor("#ff0000")
-        .setFooter({ text: `Toplam ${bans.size} yasaklı kayıtlı.`, iconURL: client.user.displayAvatarURL() })
+        .setColor("#2f3136") // Discord koyu tema rengi
+        .setTitle("🔨 Yasaklar") // Attığın görseldeki başlık
         .setTimestamp();
 
-      await interaction.editReply({ embeds: [embed] });
+      if (fetchBans.size === 0) {
+        embed.setDescription("Sunucuda aktif bir yasaklama bulunmuyor.");
+      } else {
+        // Discord'un tanıdığı verileri (User + Reason) sıralıyoruz
+        const banList = fetchBans.map(ban => `• **${ban.user.tag}**\n  └ ID: \`${ban.user.id}\`\n  └ Sebep: *${ban.reason || "Sebep girilmemiş"}*`).join("\n\n");
+        
+        embed.setDescription(banList.length > 4000 ? banList.substring(0, 3950) + "..." : banList);
+      }
+
+      // Ana mesajı kanala isimsiz at
+      await interaction.channel.send({ embeds: [embed] });
+      
+      // Kullanıcı bilgisini (Aras kullandı vs.) siler
+      return interaction.deleteReply();
     } catch (err) {
       console.error(err);
-      await interaction.editReply("❌ Ban listesi yüklenirken bir hata oluştu.");
+      return interaction.editReply("❌ Yasaklar listesine erişilemedi. Yetkilerimi kontrol et.");
     }
   }
 
-  // --- BAN KOMUTU (EMBEDLİ) ---
+  // --- BAN KOMUTU ---
   if (interaction.commandName === "ban") {
-    await interaction.deferReply();
-    const user = interaction.options.getUser("kullanici");
-    const reason = interaction.options.getString("sebep") || "Sebep belirtilmedi.";
-    const member = await interaction.guild.members.fetch(user.id).catch(() => null);
+    if (!interaction.member.permissions.has(PermissionFlagsBits.BanMembers)) 
+        return interaction.reply({ content: "Yetkin yok.", ephemeral: true });
 
-    if (member && !member.bannable) return interaction.editReply("❌ Bu kullanıcıyı banlamaya yetkim yetmiyor.");
+    const target = interaction.options.getUser("kullanici");
+    const reason = interaction.options.getString("sebep");
 
-    try {
-      await interaction.guild.members.ban(user.id, { reason });
-      const embed = new EmbedBuilder()
-        .setTitle("🚫 Kullanıcı Yasaklandı")
-        .addFields(
-          { name: "Kullanıcı", value: `${user.tag}`, inline: true },
-          { name: "Yetkili", value: `${interaction.user}`, inline: true },
-          { name: "Sebep", value: `\`${reason}\`` }
-        )
-        .setColor("Red")
-        .setThumbnail(user.displayAvatarURL())
-        .setTimestamp();
-
-      await interaction.editReply({ embeds: [embed] });
-    } catch { await interaction.editReply("❌ Ban atılamadı."); }
-  }
-
-  // --- UNBAN KOMUTU (EMBEDLİ) ---
-  if (interaction.commandName === "unban") {
-    await interaction.deferReply();
-    const id = interaction.options.getString("id");
+    await interaction.reply({ content: "Yasaklanıyor...", ephemeral: true });
 
     try {
-      await interaction.guild.bans.remove(id);
-      const embed = new EmbedBuilder()
-        .setTitle("✅ Yasak Kaldırıldı")
-        .setDescription(`\`${id}\` ID'li kullanıcının yasağı başarıyla açıldı.`)
-        .setColor("Green")
+      // Discord sistemine banı işler
+      await interaction.guild.members.ban(target.id, { reason });
+
+      const successEmbed = new EmbedBuilder()
+        .setColor("#ff0000")
+        .setAuthor({ name: "Akademi Başkanlığı | Bilgi", iconURL: "https://i.ibb.co/L6vVv9N/akademi-logo.png" })
+        .setDescription(`✅ **${target.tag}**, Discord yasaklar sistemine işlendi.\n**Sebep:** ${reason}`)
         .setTimestamp();
-      await interaction.editReply({ embeds: [embed] });
-    } catch { await interaction.editReply("❌ Bu ID'ye ait bir yasaklama bulunamadı."); }
+
+      await interaction.channel.send({ embeds: [successEmbed] });
+      return interaction.deleteReply();
+    } catch (err) {
+      return interaction.editReply("❌ Hata: Bu kişiyi yasaklayamıyorum (Rütbesi benden yüksek olabilir).");
+    }
   }
 });
 
