@@ -1,67 +1,142 @@
-const { SlashCommandBuilder, EmbedBuilder } = require("discord.js");
+const {
+  Client,
+  GatewayIntentBits,
+  SlashCommandBuilder,
+  Routes,
+  REST,
+  EmbedBuilder,
+  PermissionFlagsBits
+} = require("discord.js");
 
-module.exports = {
-  data: new SlashCommandBuilder()
-    .setName("roblox")
-    .setDescription("Roblox kontrol sistemi")
+const TOKEN = process.env.TOKEN;
+const CLIENT_ID = process.env.CLIENT_ID;
 
-    .addSubcommand(sub =>
-      sub
-        .setName("grup-sorgu")
-        .setDescription("Roblox grup kontrolü yapar")
-        .addStringOption(opt =>
-          opt
-            .setName("kullanici")
-            .setDescription("Roblox kullanıcı adı")
-            .setRequired(true)
-        )
+const client = new Client({
+  intents: [
+    GatewayIntentBits.Guilds,
+    GatewayIntentBits.GuildMembers
+  ]
+});
+
+/* ---------------- SLASH KOMUTLAR ---------------- */
+
+const commands = [
+  new SlashCommandBuilder()
+    .setName("ban")
+    .setDescription("Bir kullanıcıyı banlar")
+    .addUserOption(opt =>
+      opt.setName("kullanici")
+        .setDescription("Banlanacak kişi")
+        .setRequired(true)
     )
-
-    .addSubcommand(sub =>
-      sub
-        .setName("kara-liste-ekle")
-        .setDescription("Kara listeye ekler")
-        .addStringOption(opt =>
-          opt
-            .setName("kullanici")
-            .setDescription("Roblox kullanıcı adı")
-            .setRequired(true)
-        )
-    )
-
-    .addSubcommand(sub =>
-      sub
-        .setName("kara-liste-sil")
-        .setDescription("Kara listeden siler")
-        .addStringOption(opt =>
-          opt
-            .setName("kullanici")
-            .setDescription("Roblox kullanıcı adı")
-            .setRequired(true)
-        )
+    .addStringOption(opt =>
+      opt.setName("sebep")
+        .setDescription("Ban sebebi")
+        .setRequired(false)
     ),
 
-  async execute(interaction) {
-    const sub = interaction.options.getSubcommand();
-    const isim = interaction.options.getString("kullanici");
+  new SlashCommandBuilder()
+    .setName("unban")
+    .setDescription("Bir kullanıcının banını açar")
+    .addStringOption(opt =>
+      opt.setName("id")
+        .setDescription("Banı açılacak kullanıcı ID")
+        .setRequired(true)
+    )
+].map(cmd => cmd.toJSON());
 
-    if (sub === "grup-sorgu") {
-      return interaction.reply({
-        embeds: [
-          new EmbedBuilder()
-            .setTitle("Roblox Grup Sorgu")
-            .setDescription(`Kullanıcı: **${isim}**`)
-            .setColor(0x2b2d31)
-        ]
-      });
+/* ---------------- KOMUT YÜKLEME ---------------- */
+
+client.once("ready", async () => {
+  const rest = new REST({ version: "10" }).setToken(TOKEN);
+
+  try {
+    await rest.put(
+      Routes.applicationCommands(CLIENT_ID),
+      { body: commands }
+    );
+    console.log("Slash komutlar yüklendi");
+  } catch (e) {
+    console.error(e);
+  }
+
+  console.log(`Bot aktif: ${client.user.tag}`);
+});
+
+/* ---------------- INTERACTION ---------------- */
+
+client.on("interactionCreate", async interaction => {
+  if (!interaction.isChatInputCommand()) return;
+
+  if (interaction.commandName === "ban") {
+    if (!interaction.member.permissions.has(PermissionFlagsBits.BanMembers)) {
+      return interaction.reply({ content: "Yetkin yok.", ephemeral: true });
     }
 
-    if (sub === "kara-liste-ekle") {
-      return interaction.reply(`Kara listeye eklendi: ${isim}`);
+    const user = interaction.options.getUser("kullanici");
+    const reason = interaction.options.getString("sebep") || "Sebep belirtilmedi";
+
+    const member = interaction.guild.members.cache.get(user.id);
+    if (!member) {
+      return interaction.reply({ content: "Kullanıcı sunucuda değil.", ephemeral: true });
     }
 
-    if (sub === "kara-liste-sil") {
-      return interaction.reply(`Kara listeden silindi: ${isim}`);
+    await member.ban({ reason });
+
+    const embed = new EmbedBuilder()
+      .setTitle("Kullanıcı Banlandı")
+      .addFields(
+        { name: "Kullanıcı", value: `${user.tag}` },
+        { name: "Sebep", value: reason }
+      )
+      .setColor(0xff0000)
+      .setTimestamp();
+
+    await interaction.reply({ embeds: [embed] });
+  }
+
+  if (interaction.commandName === "unban") {
+    if (!interaction.member.permissions.has(PermissionFlagsBits.BanMembers)) {
+      return interaction.reply({ content: "Yetkin yok.", ephemeral: true });
+    }
+
+    const id = interaction.options.getString("id");
+
+    try {
+      await interaction.guild.bans.remove(id);
+
+      const embed = new EmbedBuilder()
+        .setTitle("Ban Kaldırıldı")
+        .setDescription(`ID: ${id}`)
+        .setColor(0x00ff00)
+        .setTimestamp();
+
+      await interaction.reply({ embeds: [embed] });
+    } catch {
+      await interaction.reply({ content: "Ban bulunamadı.", ephemeral: true });
     }
   }
-};
+});
+
+/* ---------------- BANLI GİRERSE DM + OTOMATİK BAN ---------------- */
+
+client.on("guildMemberAdd", async member => {
+  try {
+    const bans = await member.guild.bans.fetch();
+    if (!bans.has(member.id)) return;
+
+    try {
+      await member.send(
+        `Bu sunucuda banlısın.\nBanın kaldırılmadan tekrar katılamazsın.\nSunucu: ${member.guild.name}`
+      );
+    } catch {}
+
+    await member.ban({
+      reason: "Banlı olduğu halde sunucuya girmeye çalıştı"
+    });
+  } catch (err) {
+    console.error("Oto-ban hatası:", err);
+  }
+});
+
+client.login(TOKEN);
