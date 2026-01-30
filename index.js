@@ -1,3 +1,4 @@
+/* ================= IMPORTS ================= */
 const { QuickDB } = require("quick.db");
 const fs = require("fs");
 const path = require("path");
@@ -18,7 +19,6 @@ const {
 const noblox = require("noblox.js");
 
 /* ================= CLIENT ================= */
-
 const client = new Client({
   intents: [
     GatewayIntentBits.Guilds,
@@ -34,7 +34,6 @@ client.commands = new Collection();
 const commands = [];
 
 /* ================= AYARLAR ================= */
-
 const ALLOWED_USERS = [
   "1389930042200559706",
   "1385277307106885722"
@@ -42,9 +41,8 @@ const ALLOWED_USERS = [
 
 const GUILD_ID = process.env.GUILD_ID;
 
-/* ================= SLASH KOMUT (BURASI ÖNEMLİ) ================= */
-
-// 🔥 KOMUTU ELLE EKLİYORUZ
+/* ================= SLASH KOMUT ÖRNEĞİ ================= */
+// Örnek: bilgi komutu
 const bilgiCommand = new SlashCommandBuilder()
   .setName("bilgi")
   .setDescription("Bot bilgilerini gösterir");
@@ -54,45 +52,60 @@ client.commands.set("bilgi", {
   async execute(interaction) {
     const embed = new EmbedBuilder()
       .setTitle("TFA | İttifak Ordusu")
-      .setDescription("Slash komut sistemi çalışıyor.")
+      .setDescription("Slash komut sistemi çalışıyor ✅")
       .setColor(0x2f3136)
       .setTimestamp();
 
     await interaction.reply({ embeds: [embed] });
   }
 });
-
 commands.push(bilgiCommand.toJSON());
 
 /* ================= READY ================= */
-
 client.once(Events.ClientReady, async () => {
   console.log(`✅ Bot aktif: ${client.user.tag}`);
 
   const rest = new REST({ version: "10" }).setToken(process.env.TOKEN);
 
   try {
+    // 🧹 Eski slash komutları sil
+    await rest.put(
+      Routes.applicationGuildCommands(client.user.id, GUILD_ID),
+      { body: [] }
+    );
+    console.log("🧹 Eski slash komutlar silindi");
+
+    // ❌ Eğer komut yoksa hata
+    if (commands.length === 0) {
+      console.error("❌ HATA: Yüklenecek HİÇBİR slash komut yok!");
+      return;
+    }
+
+    // ✅ Yeni komutları yükle
     await rest.put(
       Routes.applicationGuildCommands(client.user.id, GUILD_ID),
       { body: commands }
     );
-    console.log("🚀 Slash komutlar sunucuya yüklendi");
+
+    console.log("🚀 Slash komutlar yüklendi:");
+    commands.forEach(cmd => console.log(`   ➜ /${cmd.name}`));
+
   } catch (err) {
-    console.error("❌ Slash yükleme hatası:", err);
+    console.error("❌ Slash komut yükleme hatası:", err);
   }
 
+  // Roblox giriş (opsiyonel)
   if (process.env.ROBLOX_COOKIE) {
     try {
       const user = await noblox.setCookie(process.env.ROBLOX_COOKIE);
       console.log(`🟢 Roblox giriş başarılı: ${user.UserName}`);
     } catch {
-      console.log("⚠️ Roblox cookie geçersiz");
+      console.log("⚠️ Roblox cookie geçersiz, atlandı");
     }
   }
 });
 
 /* ================= INTERACTION ================= */
-
 client.on(Events.InteractionCreate, async interaction => {
   if (!interaction.isChatInputCommand()) return;
 
@@ -108,19 +121,24 @@ client.on(Events.InteractionCreate, async interaction => {
 
   try {
     await command.execute(interaction, client);
-    console.log(`✅ /${interaction.commandName} kullanıldı`);
+    console.log(`✅ Komut kullanıldı: /${interaction.commandName} | ${interaction.user.tag}`);
   } catch (err) {
     console.error("Komut hatası:", err);
-    await interaction.reply({ content: "❌ Komut hatası.", ephemeral: true });
+
+    if (interaction.replied || interaction.deferred) {
+      await interaction.followUp({ content: "❌ Komut hatası.", ephemeral: true });
+    } else {
+      await interaction.reply({ content: "❌ Komut hatası.", ephemeral: true });
+    }
   }
 });
 
 /* ================= HATALAR ================= */
-
 process.on("unhandledRejection", err => console.error("Promise:", err));
 process.on("uncaughtException", err => {
   console.error("Exception:", err);
   process.exit(1);
 });
 
+/* ================= LOGIN ================= */
 client.login(process.env.TOKEN);
