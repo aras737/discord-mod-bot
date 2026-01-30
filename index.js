@@ -1,144 +1,135 @@
-/* ================= IMPORTS ================= */
 const { QuickDB } = require("quick.db");
 const fs = require("fs");
 const path = require("path");
 require("dotenv").config();
-
-const {
-  Client,
-  Collection,
-  GatewayIntentBits,
-  Partials,
-  Events,
-  REST,
+const { 
+  Client, 
+  Collection, 
+  GatewayIntentBits, 
+  Partials, 
+  Events, 
+  REST, 
   Routes,
-  SlashCommandBuilder,
-  EmbedBuilder
+  PermissionFlagsBits // Yetkiler için eklendi
 } = require("discord.js");
-
 const noblox = require("noblox.js");
 
-/* ================= CLIENT ================= */
+// Discord Client
 const client = new Client({
   intents: [
     GatewayIntentBits.Guilds,
-    GatewayIntentBits.GuildMembers,
     GatewayIntentBits.GuildMessages,
-    GatewayIntentBits.MessageContent
+    GatewayIntentBits.GuildMembers,
+    GatewayIntentBits.MessageContent,
+    GatewayIntentBits.GuildBans // Ban sistemi için şart
   ],
-  partials: [Partials.Channel]
+  partials: [Partials.Channel],
 });
 
 client.db = new QuickDB();
 client.commands = new Collection();
 const commands = [];
 
-/* ================= AYARLAR ================= */
+// 🔒 Sadece bu iki kullanıcı komut kullanabilir
 const ALLOWED_USERS = [
-  "1389930042200559706",
-  "1385277307106885722"
+  "1389930042200559706", 
+  "1385277307106885722" 
 ];
 
-const GUILD_ID = process.env.GUILD_ID;
+// --- KOMUTLARI YÜKLE ---
+const commandsPath = path.join(__dirname, "commands");
+if (fs.existsSync(commandsPath)) {
+  const commandFiles = fs.readdirSync(commandsPath).filter(file => file.endsWith(".js"));
 
-/* ================= SLASH KOMUT ÖRNEĞİ ================= */
-// Örnek: bilgi komutu
-const bilgiCommand = new SlashCommandBuilder()
-  .setName("bilgi")
-  .setDescription("Bot bilgilerini gösterir");
-
-client.commands.set("bilgi", {
-  data: bilgiCommand,
-  async execute(interaction) {
-    const embed = new EmbedBuilder()
-      .setTitle("TFA | İttifak Ordusu")
-      .setDescription("Slash komut sistemi çalışıyor ✅")
-      .setColor(0x2f3136)
-      .setTimestamp();
-
-    await interaction.reply({ embeds: [embed] });
+  for (const file of commandFiles) {
+    const command = require(path.join(commandsPath, file));
+    if ("data" in command && "execute" in command) {
+      client.commands.set(command.data.name, command);
+      commands.push(command.data.toJSON());
+      console.log(`📡 Komut belleğe alındı: ${command.data.name}`);
+    }
   }
-});
-commands.push(bilgiCommand.toJSON());
+}
 
-/* ================= READY ================= */
+// --- OLAYLARI YÜKLE ---
+const eventsPath = path.join(__dirname, "events");
+if (fs.existsSync(eventsPath)) {
+  const eventFiles = fs.readdirSync(eventsPath).filter(file => file.endsWith(".js"));
+  for (const file of eventFiles) {
+    const event = require(path.join(eventsPath, file));
+    if (event.name) {
+      if (event.once) client.once(event.name, (...args) => event.execute(...args, client));
+      else client.on(event.name, (...args) => event.execute(...args, client));
+    }
+  }
+}
+
+// --- BOT HAZIR OLDUĞUNDA ---
 client.once(Events.ClientReady, async () => {
   console.log(`✅ Bot aktif: ${client.user.tag}`);
 
   const rest = new REST({ version: "10" }).setToken(process.env.TOKEN);
 
   try {
-    // 🧹 Eski slash komutları sil
+    console.log("🔄 Eski komutlar temizleniyor ve yenileri yükleniyor...");
+    
+    // Global komutları tamamen temizleyip yeniden yükler (Net çözüm)
     await rest.put(
-      Routes.applicationGuildCommands(client.user.id, GUILD_ID),
-      { body: [] }
-    );
-    console.log("🧹 Eski slash komutlar silindi");
-
-    // ❌ Eğer komut yoksa hata
-    if (commands.length === 0) {
-      console.error("❌ HATA: Yüklenecek HİÇBİR slash komut yok!");
-      return;
-    }
-
-    // ✅ Yeni komutları yükle
-    await rest.put(
-      Routes.applicationGuildCommands(client.user.id, GUILD_ID),
+      Routes.applicationCommands(client.user.id),
       { body: commands }
     );
-
-    console.log("🚀 Slash komutlar yüklendi:");
-    commands.forEach(cmd => console.log(`   ➜ /${cmd.name}`));
-
+    
+    console.log("🚀 Tüm Slash komutları başarıyla güncellendi.");
   } catch (err) {
-    console.error("❌ Slash komut yükleme hatası:", err);
+    console.error("❌ Komut yükleme hatası:", err);
   }
 
-  // Roblox giriş (opsiyonel)
+  // Roblox girişi
   if (process.env.ROBLOX_COOKIE) {
     try {
-      const user = await noblox.setCookie(process.env.ROBLOX_COOKIE);
-      console.log(`🟢 Roblox giriş başarılı: ${user.UserName}`);
-    } catch {
-      console.log("⚠️ Roblox cookie geçersiz, atlandı");
+      const currentUser = await noblox.setCookie(process.env.ROBLOX_COOKIE);
+      console.log(`🟦 Roblox: ${currentUser.UserName} olarak giriş yapıldı.`);
+    } catch (err) {
+      console.error("🟥 Roblox hatası:", err.message);
     }
   }
 });
 
-/* ================= INTERACTION ================= */
+// --- INTERACTION HANDLING ---
 client.on(Events.InteractionCreate, async interaction => {
   if (!interaction.isChatInputCommand()) return;
 
   const command = client.commands.get(interaction.commandName);
   if (!command) return;
 
+  // 🚫 YETKİ KONTROLÜ
   if (!ALLOWED_USERS.includes(interaction.user.id)) {
     return interaction.reply({
-      content: "❌ Bu komutu kullanamazsın.",
+      content: "❌ Bu botun komutlarını kullanmaya yetkin yok kanka.",
       ephemeral: true
     });
   }
-
+ 
   try {
+    // Ban komutu veya ban-listesi gibi işlemlerde 'Uygulama yanıt vermedi' hatasını önlemek için
+    // Eğer komutun içinde deferReply yoksa buradan da yönetebilirsin ama 
+    // en iyisi komut dosyalarının içinde interaction.deferReply() kullanmaktır.
+    
     await command.execute(interaction, client);
-    console.log(`✅ Komut kullanıldı: /${interaction.commandName} | ${interaction.user.tag}`);
   } catch (err) {
-    console.error("Komut hatası:", err);
-
+    console.error(`💥 Hata (${interaction.commandName}):`, err);
+    const errorMsg = "Komut çalıştırılırken teknik bir sorun çıktı.";
+    
     if (interaction.replied || interaction.deferred) {
-      await interaction.followUp({ content: "❌ Komut hatası.", ephemeral: true });
+      await interaction.followUp({ content: errorMsg, ephemeral: true }).catch(() => null);
     } else {
-      await interaction.reply({ content: "❌ Komut hatası.", ephemeral: true });
+      await interaction.reply({ content: errorMsg, ephemeral: true }).catch(() => null);
     }
   }
 });
 
-/* ================= HATALAR ================= */
-process.on("unhandledRejection", err => console.error("Promise:", err));
-process.on("uncaughtException", err => {
-  console.error("Exception:", err);
-  process.exit(1);
-});
+// Hata yakalama (Botun kapanmaması için)
+process.on('unhandledRejection', error => console.error('Görünmeyen Hata:', error));
+process.on('uncaughtException', error => console.error('Kritik Hata:', error));
 
-/* ================= LOGIN ================= */
 client.login(process.env.TOKEN);
