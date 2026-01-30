@@ -2,124 +2,148 @@ const { QuickDB } = require("quick.db");
 const fs = require("fs");
 const path = require("path");
 require("dotenv").config();
-const { 
-  Client, 
-  Collection, 
-  GatewayIntentBits, 
-  Partials, 
-  Events, 
-  REST, 
+
+const {
+  Client,
+  Collection,
+  GatewayIntentBits,
+  Partials,
+  Events,
+  REST,
   Routes
 } = require("discord.js");
+
 const noblox = require("noblox.js");
 
-// Discord Client
+/* ================= CLIENT ================= */
+
 const client = new Client({
   intents: [
     GatewayIntentBits.Guilds,
-    GatewayIntentBits.GuildMessages,
     GatewayIntentBits.GuildMembers,
-    GatewayIntentBits.MessageContent,
+    GatewayIntentBits.GuildMessages,
+    GatewayIntentBits.MessageContent
   ],
-  partials: [Partials.Channel],
+  partials: [Partials.Channel]
 });
 
 client.db = new QuickDB();
 client.commands = new Collection();
 const commands = [];
 
-// 🔒 Sadece bu iki kullanıcı komut kullanabilir
+/* ================= AYARLAR ================= */
+
+// ❗ SADECE BU KULLANICILAR
 const ALLOWED_USERS = [
-  "1389930042200559706", // Kullanıcı 2
-  "1385277307106885722" // Kullanıcı 3
+  "1389930042200559706",
+  "1385277307106885722"
 ];
 
-// Komutları yükle
+// ❗ TEST SUNUCU ID (ÇOK ÖNEMLİ)
+const GUILD_ID = process.env.GUILD_ID;
+
+/* ================= KOMUTLAR ================= */
+
 const commandsPath = path.join(__dirname, "commands");
-const commandFiles = fs.readdirSync(commandsPath).filter(file => file.endsWith(".js"));
+if (fs.existsSync(commandsPath)) {
+  const commandFiles = fs.readdirSync(commandsPath).filter(f => f.endsWith(".js"));
 
-for (const file of commandFiles) {
-  const command = require(path.join(commandsPath, file));
-  if ("data" in command && "execute" in command) {
-    client.commands.set(command.data.name, command);
-    commands.push(command.data.toJSON());
-    console.log(`Komut yüklendi: ${command.data.name}`);
-  } else {
-    console.log(`Komut eksik veya hatalı: ${file}`);
+  for (const file of commandFiles) {
+    const command = require(path.join(commandsPath, file));
+    if (command?.data && command?.execute) {
+      client.commands.set(command.data.name, command);
+      commands.push(command.data.toJSON());
+      console.log(`✅ Komut yüklendi: ${command.data.name}`);
+    }
   }
 }
 
-// Olayları yükle
+/* ================= EVENTS ================= */
+
 const eventsPath = path.join(__dirname, "events");
-const eventFiles = fs.readdirSync(eventsPath).filter(file => file.endsWith(".js"));
+if (fs.existsSync(eventsPath)) {
+  const eventFiles = fs.readdirSync(eventsPath).filter(f => f.endsWith(".js"));
 
-for (const file of eventFiles) {
-  const event = require(path.join(eventsPath, file));
-  if (event.name) {
-    if (event.once) client.once(event.name, (...args) => event.execute(...args, client));
-    else client.on(event.name, (...args) => event.execute(...args, client));
-    console.log(`Olay yüklendi: ${event.name}${event.once ? " (Bir Kez)" : ""}`);
-  } else {
-    console.log(`Olay eksik veya hatalı: ${file}`);
+  for (const file of eventFiles) {
+    const event = require(path.join(eventsPath, file));
+    if (!event?.name) continue;
+
+    if (event.once) {
+      client.once(event.name, (...args) => event.execute(...args, client));
+    } else {
+      client.on(event.name, (...args) => event.execute(...args, client));
+    }
+
+    console.log(`📌 Event yüklendi: ${event.name}`);
   }
 }
 
-// Bot hazır olduğunda
+/* ================= READY ================= */
+
 client.once(Events.ClientReady, async () => {
   console.log(`✅ Bot aktif: ${client.user.tag}`);
 
   const rest = new REST({ version: "10" }).setToken(process.env.TOKEN);
 
   try {
-    await rest.put(Routes.applicationCommands(client.user.id), { body: commands });
-    console.log("Slash komutları başarıyla yüklendi.");
+    // 🔥 GUILD SLASH (ANINDA GÖZÜKÜR)
+    await rest.put(
+      Routes.applicationGuildCommands(client.user.id, GUILD_ID),
+      { body: commands }
+    );
+    console.log("🚀 Slash komutlar sunucuya yüklendi");
   } catch (err) {
-    console.error("Komut yükleme hatası:", err);
+    console.error("❌ Slash yükleme hatası:", err);
   }
 
-  // Roblox girişi
-  try {
-    const currentUser = await noblox.setCookie(process.env.ROBLOX_COOKIE);
-    console.log(`Roblox giriş başarılı: ${currentUser.UserName} (ID: ${currentUser.UserID})`);
-  } catch (err) {
-    console.error("Roblox giriş başarısız:", err.message);
+  // Roblox girişi (OPSİYONEL)
+  if (process.env.ROBLOX_COOKIE) {
+    try {
+      const user = await noblox.setCookie(process.env.ROBLOX_COOKIE);
+      console.log(`🟢 Roblox giriş başarılı: ${user.UserName}`);
+    } catch (err) {
+      console.log("⚠️ Roblox cookie geçersiz, atlandı");
+    }
+  } else {
+    console.log("⚠️ Roblox cookie yok, atlandı");
   }
 });
 
-// Slash komut işlemleri
+/* ================= INTERACTION ================= */
+
 client.on(Events.InteractionCreate, async interaction => {
   if (!interaction.isChatInputCommand()) return;
 
   const command = client.commands.get(interaction.commandName);
   if (!command) return;
 
-  // 🚫 Sadece belirli kullanıcılar komut kullanabilir
+  // 🔒 Yetki kontrolü
   if (!ALLOWED_USERS.includes(interaction.user.id)) {
-    console.log(`Yetkisiz kullanıcı komut denedi: ${interaction.user.tag}`);
     return interaction.reply({
-      content: "❌ Bu botun komutlarını sadece belirli kullanıcılar kullanabilir.",
+      content: "❌ Bu komutu kullanamazsın.",
       ephemeral: true
     });
   }
- 
+
   try {
-    console.log(`✅ Komut kullanıldı: ${interaction.user.tag} /${interaction.commandName}`);
     await command.execute(interaction, client);
+    console.log(`✅ Komut: /${interaction.commandName} | ${interaction.user.tag}`);
   } catch (err) {
-    console.error(`Komut hatası (${interaction.commandName}):`, err);
-    const msg = "Komut çalıştırılırken bir hata oluştu.";
+    console.error("Komut hatası:", err);
+
     if (interaction.replied || interaction.deferred) {
-      await interaction.followUp({ content: msg, ephemeral: true });
+      await interaction.followUp({ content: "❌ Komut hatası.", ephemeral: true });
     } else {
-      await interaction.reply({ content: msg, ephemeral: true });
+      await interaction.reply({ content: "❌ Komut hatası.", ephemeral: true });
     }
   }
 });
 
-// Hata yakalama
-process.on('unhandledRejection', error => console.error('Promise hatası:', error));
-process.on('uncaughtException', error => {
-  console.error('Exception:', error);
+/* ================= HATALAR ================= */
+
+process.on("unhandledRejection", err => console.error("Promise:", err));
+process.on("uncaughtException", err => {
+  console.error("Exception:", err);
   process.exit(1);
 });
 
