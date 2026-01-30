@@ -10,7 +10,9 @@ const {
   Partials,
   Events,
   REST,
-  Routes
+  Routes,
+  SlashCommandBuilder,
+  EmbedBuilder
 } = require("discord.js");
 
 const noblox = require("noblox.js");
@@ -33,50 +35,34 @@ const commands = [];
 
 /* ================= AYARLAR ================= */
 
-// ❗ SADECE BU KULLANICILAR
 const ALLOWED_USERS = [
   "1389930042200559706",
   "1385277307106885722"
 ];
 
-// ❗ TEST SUNUCU ID (ÇOK ÖNEMLİ)
 const GUILD_ID = process.env.GUILD_ID;
 
-/* ================= KOMUTLAR ================= */
+/* ================= SLASH KOMUT (BURASI ÖNEMLİ) ================= */
 
-const commandsPath = path.join(__dirname, "commands");
-if (fs.existsSync(commandsPath)) {
-  const commandFiles = fs.readdirSync(commandsPath).filter(f => f.endsWith(".js"));
+// 🔥 KOMUTU ELLE EKLİYORUZ
+const bilgiCommand = new SlashCommandBuilder()
+  .setName("bilgi")
+  .setDescription("Bot bilgilerini gösterir");
 
-  for (const file of commandFiles) {
-    const command = require(path.join(commandsPath, file));
-    if (command?.data && command?.execute) {
-      client.commands.set(command.data.name, command);
-      commands.push(command.data.toJSON());
-      console.log(`✅ Komut yüklendi: ${command.data.name}`);
-    }
+client.commands.set("bilgi", {
+  data: bilgiCommand,
+  async execute(interaction) {
+    const embed = new EmbedBuilder()
+      .setTitle("TFA | İttifak Ordusu")
+      .setDescription("Slash komut sistemi çalışıyor.")
+      .setColor(0x2f3136)
+      .setTimestamp();
+
+    await interaction.reply({ embeds: [embed] });
   }
-}
+});
 
-/* ================= EVENTS ================= */
-
-const eventsPath = path.join(__dirname, "events");
-if (fs.existsSync(eventsPath)) {
-  const eventFiles = fs.readdirSync(eventsPath).filter(f => f.endsWith(".js"));
-
-  for (const file of eventFiles) {
-    const event = require(path.join(eventsPath, file));
-    if (!event?.name) continue;
-
-    if (event.once) {
-      client.once(event.name, (...args) => event.execute(...args, client));
-    } else {
-      client.on(event.name, (...args) => event.execute(...args, client));
-    }
-
-    console.log(`📌 Event yüklendi: ${event.name}`);
-  }
-}
+commands.push(bilgiCommand.toJSON());
 
 /* ================= READY ================= */
 
@@ -86,7 +72,6 @@ client.once(Events.ClientReady, async () => {
   const rest = new REST({ version: "10" }).setToken(process.env.TOKEN);
 
   try {
-    // 🔥 GUILD SLASH (ANINDA GÖZÜKÜR)
     await rest.put(
       Routes.applicationGuildCommands(client.user.id, GUILD_ID),
       { body: commands }
@@ -96,16 +81,13 @@ client.once(Events.ClientReady, async () => {
     console.error("❌ Slash yükleme hatası:", err);
   }
 
-  // Roblox girişi (OPSİYONEL)
   if (process.env.ROBLOX_COOKIE) {
     try {
       const user = await noblox.setCookie(process.env.ROBLOX_COOKIE);
       console.log(`🟢 Roblox giriş başarılı: ${user.UserName}`);
-    } catch (err) {
-      console.log("⚠️ Roblox cookie geçersiz, atlandı");
+    } catch {
+      console.log("⚠️ Roblox cookie geçersiz");
     }
-  } else {
-    console.log("⚠️ Roblox cookie yok, atlandı");
   }
 });
 
@@ -117,7 +99,6 @@ client.on(Events.InteractionCreate, async interaction => {
   const command = client.commands.get(interaction.commandName);
   if (!command) return;
 
-  // 🔒 Yetki kontrolü
   if (!ALLOWED_USERS.includes(interaction.user.id)) {
     return interaction.reply({
       content: "❌ Bu komutu kullanamazsın.",
@@ -127,15 +108,10 @@ client.on(Events.InteractionCreate, async interaction => {
 
   try {
     await command.execute(interaction, client);
-    console.log(`✅ Komut: /${interaction.commandName} | ${interaction.user.tag}`);
+    console.log(`✅ /${interaction.commandName} kullanıldı`);
   } catch (err) {
     console.error("Komut hatası:", err);
-
-    if (interaction.replied || interaction.deferred) {
-      await interaction.followUp({ content: "❌ Komut hatası.", ephemeral: true });
-    } else {
-      await interaction.reply({ content: "❌ Komut hatası.", ephemeral: true });
-    }
+    await interaction.reply({ content: "❌ Komut hatası.", ephemeral: true });
   }
 });
 
