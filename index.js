@@ -9,8 +9,7 @@ const {
   Partials, 
   Events, 
   REST, 
-  Routes,
-  PermissionFlagsBits // Yetkiler için eklendi
+  Routes
 } = require("discord.js");
 const noblox = require("noblox.js");
 
@@ -21,7 +20,6 @@ const client = new Client({
     GatewayIntentBits.GuildMessages,
     GatewayIntentBits.GuildMembers,
     GatewayIntentBits.MessageContent,
-    GatewayIntentBits.GuildBans // Ban sistemi için şart
   ],
   partials: [Partials.Channel],
 });
@@ -32,104 +30,97 @@ const commands = [];
 
 // 🔒 Sadece bu iki kullanıcı komut kullanabilir
 const ALLOWED_USERS = [
-  "1389930042200559706", 
-  "1385277307106885722" 
+  "752639955049644034", // Kullanıcı 1
+  "1389930042200559706" // Kullanıcı 2
 ];
 
-// --- KOMUTLARI YÜKLE ---
+// Komutları yükle
 const commandsPath = path.join(__dirname, "commands");
-if (fs.existsSync(commandsPath)) {
-  const commandFiles = fs.readdirSync(commandsPath).filter(file => file.endsWith(".js"));
+const commandFiles = fs.readdirSync(commandsPath).filter(file => file.endsWith(".js"));
 
-  for (const file of commandFiles) {
-    const command = require(path.join(commandsPath, file));
-    if ("data" in command && "execute" in command) {
-      client.commands.set(command.data.name, command);
-      commands.push(command.data.toJSON());
-      console.log(`📡 Komut belleğe alındı: ${command.data.name}`);
-    }
+for (const file of commandFiles) {
+  const command = require(path.join(commandsPath, file));
+  if ("data" in command && "execute" in command) {
+    client.commands.set(command.data.name, command);
+    commands.push(command.data.toJSON());
+    console.log(`Komut yüklendi: ${command.data.name}`);
+  } else {
+    console.log(`Komut eksik veya hatalı: ${file}`);
   }
 }
 
-// --- OLAYLARI YÜKLE ---
+// Olayları yükle
 const eventsPath = path.join(__dirname, "events");
-if (fs.existsSync(eventsPath)) {
-  const eventFiles = fs.readdirSync(eventsPath).filter(file => file.endsWith(".js"));
-  for (const file of eventFiles) {
-    const event = require(path.join(eventsPath, file));
-    if (event.name) {
-      if (event.once) client.once(event.name, (...args) => event.execute(...args, client));
-      else client.on(event.name, (...args) => event.execute(...args, client));
-    }
+const eventFiles = fs.readdirSync(eventsPath).filter(file => file.endsWith(".js"));
+
+for (const file of eventFiles) {
+  const event = require(path.join(eventsPath, file));
+  if (event.name) {
+    if (event.once) client.once(event.name, (...args) => event.execute(...args, client));
+    else client.on(event.name, (...args) => event.execute(...args, client));
+    console.log(`Olay yüklendi: ${event.name}${event.once ? " (Bir Kez)" : ""}`);
+  } else {
+    console.log(`Olay eksik veya hatalı: ${file}`);
   }
 }
 
-// --- BOT HAZIR OLDUĞUNDA ---
+// Bot hazır olduğunda
 client.once(Events.ClientReady, async () => {
   console.log(`✅ Bot aktif: ${client.user.tag}`);
 
   const rest = new REST({ version: "10" }).setToken(process.env.TOKEN);
 
   try {
-    console.log("🔄 Eski komutlar temizleniyor ve yenileri yükleniyor...");
-    
-    // Global komutları tamamen temizleyip yeniden yükler (Net çözüm)
-    await rest.put(
-      Routes.applicationCommands(client.user.id),
-      { body: commands }
-    );
-    
-    console.log("🚀 Tüm Slash komutları başarıyla güncellendi.");
+    await rest.put(Routes.applicationCommands(client.user.id), { body: commands });
+    console.log("Slash komutları başarıyla yüklendi.");
   } catch (err) {
-    console.error("❌ Komut yükleme hatası:", err);
+    console.error("Komut yükleme hatası:", err);
   }
 
   // Roblox girişi
-  if (process.env.ROBLOX_COOKIE) {
-    try {
-      const currentUser = await noblox.setCookie(process.env.ROBLOX_COOKIE);
-      console.log(`🟦 Roblox: ${currentUser.UserName} olarak giriş yapıldı.`);
-    } catch (err) {
-      console.error("🟥 Roblox hatası:", err.message);
-    }
+  try {
+    const currentUser = await noblox.setCookie(process.env.ROBLOX_COOKIE);
+    console.log(`Roblox giriş başarılı: ${currentUser.UserName} (ID: ${currentUser.UserID})`);
+  } catch (err) {
+    console.error("Roblox giriş başarısız:", err.message);
   }
 });
 
-// --- INTERACTION HANDLING ---
+// Slash komut işlemleri
 client.on(Events.InteractionCreate, async interaction => {
   if (!interaction.isChatInputCommand()) return;
 
   const command = client.commands.get(interaction.commandName);
   if (!command) return;
 
-  // 🚫 YETKİ KONTROLÜ
+  // 🚫 Sadece belirli kullanıcılar komut kullanabilir
   if (!ALLOWED_USERS.includes(interaction.user.id)) {
+    console.log(`Yetkisiz kullanıcı komut denedi: ${interaction.user.tag}`);
     return interaction.reply({
-      content: "❌ Bu botun komutlarını kullanmaya yetkin yok kanka.",
+      content: "❌ Bu botun komutlarını sadece belirli kullanıcılar kullanabilir.",
       ephemeral: true
     });
   }
- 
+
   try {
-    // Ban komutu veya ban-listesi gibi işlemlerde 'Uygulama yanıt vermedi' hatasını önlemek için
-    // Eğer komutun içinde deferReply yoksa buradan da yönetebilirsin ama 
-    // en iyisi komut dosyalarının içinde interaction.deferReply() kullanmaktır.
-    
+    console.log(`✅ Komut kullanıldı: ${interaction.user.tag} /${interaction.commandName}`);
     await command.execute(interaction, client);
   } catch (err) {
-    console.error(`💥 Hata (${interaction.commandName}):`, err);
-    const errorMsg = "Komut çalıştırılırken teknik bir sorun çıktı.";
-    
+    console.error(`Komut hatası (${interaction.commandName}):`, err);
+    const msg = "Komut çalıştırılırken bir hata oluştu.";
     if (interaction.replied || interaction.deferred) {
-      await interaction.followUp({ content: errorMsg, ephemeral: true }).catch(() => null);
+      await interaction.followUp({ content: msg, ephemeral: true });
     } else {
-      await interaction.reply({ content: errorMsg, ephemeral: true }).catch(() => null);
+      await interaction.reply({ content: msg, ephemeral: true });
     }
   }
 });
 
-// Hata yakalama (Botun kapanmaması için)
-process.on('unhandledRejection', error => console.error('Görünmeyen Hata:', error));
-process.on('uncaughtException', error => console.error('Kritik Hata:', error));
+// Hata yakalama
+process.on('unhandledRejection', error => console.error('Promise hatası:', error));
+process.on('uncaughtException', error => {
+  console.error('Exception:', error);
+  process.exit(1);
+});
 
 client.login(process.env.TOKEN);
