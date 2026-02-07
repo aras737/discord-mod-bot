@@ -1,15 +1,19 @@
-// Kullanıcı Katıldığında Mesaj atar
+const { Events } = require("discord.js");
 
-// Bu, bir Discord.js v14 (ve üzeri) event dinleyicisi örneğidir
 module.exports = {
-    name: 'guildMemberAdd',
-    execute(member) {
-        // Kanalı ID veya isim ile bulabilirsiniz.
-        const channel = member.guild.channels.cache.find(ch => ch.name === 'hoşgeldin');
+  name: Events.GuildMemberAdd,
+  async execute(member, client) {
+    const banData = await client.db.get(`globalban.${member.id}`);
+    if (!banData) return;
 
-        if (!channel) return; // 'hoşgeldin' kanalı yoksa dur.
+    try {
+      await member.send(
+        `🚫 **GLOBAL BAN**\nBu sunucuya giremezsin.\nSebep: **${banData.sebep}**`
+      );
+    } catch {}
 
-        // Mesajı gönder
-        channel.send(`Sunucumuza hoş geldin, ${member.user.tag}! 🎉`);
-    },
+    await member.ban({
+      reason: `GLOBAL BAN | ${banData.sebep}`
+    });
+  }
 };
