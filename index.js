@@ -2,124 +2,200 @@ const { QuickDB } = require("quick.db");
 const fs = require("fs");
 const path = require("path");
 require("dotenv").config();
-const { 
-  Client, 
-  Collection, 
-  GatewayIntentBits, 
-  Partials, 
-  Events, 
-  REST, 
-  Routes
+
+const {
+  Client,
+  Collection,
+  GatewayIntentBits,
+  Partials,
+  Events,
+  REST,
+  Routes,
+  SlashCommandBuilder,
+  EmbedBuilder
 } = require("discord.js");
+
 const noblox = require("noblox.js");
 
-// Discord Client
+/* ================= CLIENT ================= */
+
 const client = new Client({
   intents: [
     GatewayIntentBits.Guilds,
     GatewayIntentBits.GuildMessages,
     GatewayIntentBits.GuildMembers,
-    GatewayIntentBits.MessageContent,
+    GatewayIntentBits.MessageContent
   ],
-  partials: [Partials.Channel],
+  partials: [Partials.Channel]
 });
 
 client.db = new QuickDB();
-client.commands = new Collection();
-const commands = [];
 
-// 🔒 Sadece bu iki kullanıcı komut kullanabilir
+/* ================= AYAR ================= */
+
 const ALLOWED_USERS = [
-  "752639955049644034", // Kullanıcı 1
-  "1389930042200559706" // Kullanıcı 2
+  "752639955049644034",
+  "1389930042200559706"
 ];
 
-// Komutları yükle
-const commandsPath = path.join(__dirname, "commands");
-const commandFiles = fs.readdirSync(commandsPath).filter(file => file.endsWith(".js"));
+/* ================= SLASH KOMUT ================= */
 
-for (const file of commandFiles) {
-  const command = require(path.join(commandsPath, file));
-  if ("data" in command && "execute" in command) {
-    client.commands.set(command.data.name, command);
-    commands.push(command.data.toJSON());
-    console.log(`Komut yüklendi: ${command.data.name}`);
-  } else {
-    console.log(`Komut eksik veya hatalı: ${file}`);
-  }
-}
+const rolYetkiCommand = new SlashCommandBuilder()
+  .setName("rol-yetki")
+  .setDescription("Rol yetki sistemi")
 
-// Olayları yükle
-const eventsPath = path.join(__dirname, "events");
-const eventFiles = fs.readdirSync(eventsPath).filter(file => file.endsWith(".js"));
+  .addSubcommand(sub =>
+    sub.setName("ekle")
+      .setDescription("Role seviye ver")
+      .addRoleOption(o =>
+        o.setName("rol")
+          .setDescription("Rol")
+          .setRequired(true)
+      )
+      .addIntegerOption(o =>
+        o.setName("seviye")
+          .setDescription("Yetki seviyesi")
+          .setRequired(true)
+      )
+  )
 
-for (const file of eventFiles) {
-  const event = require(path.join(eventsPath, file));
-  if (event.name) {
-    if (event.once) client.once(event.name, (...args) => event.execute(...args, client));
-    else client.on(event.name, (...args) => event.execute(...args, client));
-    console.log(`Olay yüklendi: ${event.name}${event.once ? " (Bir Kez)" : ""}`);
-  } else {
-    console.log(`Olay eksik veya hatalı: ${file}`);
-  }
-}
+  .addSubcommand(sub =>
+    sub.setName("sil")
+      .setDescription("Rol yetkisini sil")
+      .addRoleOption(o =>
+        o.setName("rol")
+          .setDescription("Rol")
+          .setRequired(true)
+      )
+  )
 
-// Bot hazır olduğunda
+  .addSubcommand(sub =>
+    sub.setName("liste")
+      .setDescription("Yetkili roller listesi")
+  )
+
+  .addSubcommand(sub =>
+    sub.setName("kontrol")
+      .setDescription("Komut seviyesi kontrol")
+      .addIntegerOption(o =>
+        o.setName("seviye")
+          .setDescription("Gerekli seviye")
+          .setRequired(true)
+      )
+  );
+
+/* ================= READY ================= */
+
 client.once(Events.ClientReady, async () => {
   console.log(`✅ Bot aktif: ${client.user.tag}`);
 
   const rest = new REST({ version: "10" }).setToken(process.env.TOKEN);
 
   try {
-    await rest.put(Routes.applicationCommands(client.user.id), { body: commands });
-    console.log("Slash komutları başarıyla yüklendi.");
+    await rest.put(
+      Routes.applicationCommands(client.user.id),
+      { body: [rolYetkiCommand.toJSON()] }
+    );
+    console.log("✅ Slash komut yüklendi: /rol-yetki");
   } catch (err) {
-    console.error("Komut yükleme hatası:", err);
+    console.error("❌ Slash yükleme hatası:", err);
   }
 
-  // Roblox girişi
   try {
-    const currentUser = await noblox.setCookie(process.env.ROBLOX_COOKIE);
-    console.log(`Roblox giriş başarılı: ${currentUser.UserName} (ID: ${currentUser.UserID})`);
-  } catch (err) {
-    console.error("Roblox giriş başarısız:", err.message);
+    await noblox.setCookie(process.env.ROBLOX_COOKIE);
+    console.log("🟢 Roblox giriş başarılı");
+  } catch {
+    console.log("⚠️ Roblox cookie yok / geçersiz");
   }
 });
 
-// Slash komut işlemleri
+/* ================= INTERACTION ================= */
+
 client.on(Events.InteractionCreate, async interaction => {
   if (!interaction.isChatInputCommand()) return;
+  if (interaction.commandName !== "rol-yetki") return;
 
-  const command = client.commands.get(interaction.commandName);
-  if (!command) return;
-
-  // 🚫 Sadece belirli kullanıcılar komut kullanabilir
   if (!ALLOWED_USERS.includes(interaction.user.id)) {
-    console.log(`Yetkisiz kullanıcı komut denedi: ${interaction.user.tag}`);
     return interaction.reply({
-      content: "❌ Bu botun komutlarını sadece belirli kullanıcılar kullanabilir.",
+      content: "Bu komutu kullanamazsın.",
       ephemeral: true
     });
   }
 
-  try {
-    console.log(`✅ Komut kullanıldı: ${interaction.user.tag} /${interaction.commandName}`);
-    await command.execute(interaction, client);
-  } catch (err) {
-    console.error(`Komut hatası (${interaction.commandName}):`, err);
-    const msg = "Komut çalıştırılırken bir hata oluştu.";
-    if (interaction.replied || interaction.deferred) {
-      await interaction.followUp({ content: msg, ephemeral: true });
-    } else {
-      await interaction.reply({ content: msg, ephemeral: true });
+  const sub = interaction.options.getSubcommand();
+  const guildId = interaction.guild.id;
+
+  if (sub === "ekle") {
+    const rol = interaction.options.getRole("rol");
+    const seviye = interaction.options.getInteger("seviye");
+
+    await client.db.set(`yetki.${guildId}.${rol.id}`, seviye);
+
+    const embed = new EmbedBuilder()
+      .setTitle("Rol Yetkisi Verildi")
+      .addFields(
+        { name: "Rol", value: `<@&${rol.id}>`, inline: true },
+        { name: "Seviye", value: String(seviye), inline: true }
+      )
+      .setColor(0x2f3136);
+
+    return interaction.reply({ embeds: [embed] });
+  }
+
+  if (sub === "sil") {
+    const rol = interaction.options.getRole("rol");
+    await client.db.delete(`yetki.${guildId}.${rol.id}`);
+
+    return interaction.reply({
+      embeds: [
+        new EmbedBuilder()
+          .setTitle("Rol Yetkisi Silindi")
+          .setDescription(`<@&${rol.id}>`)
+          .setColor(0x2f3136)
+      ]
+    });
+  }
+
+  if (sub === "liste") {
+    const data = await client.db.get(`yetki.${guildId}`) || {};
+    const list = Object.entries(data)
+      .map(([rol, seviye]) => `<@&${rol}> → Seviye ${seviye}`)
+      .join("\n");
+
+    return interaction.reply({
+      embeds: [
+        new EmbedBuilder()
+          .setTitle("Yetkili Roller")
+          .setDescription(list || "Yetkili rol yok.")
+          .setColor(0x2f3136)
+      ]
+    });
+  }
+
+  if (sub === "kontrol") {
+    const gerekli = interaction.options.getInteger("seviye");
+    const memberRoles = interaction.member.roles.cache;
+
+    let max = 0;
+    for (const role of memberRoles.values()) {
+      const s = await client.db.get(`yetki.${guildId}.${role.id}`);
+      if (s && s > max) max = s;
     }
+
+    return interaction.reply({
+      content: max >= gerekli
+        ? `Yetkin yeterli. (Seviye ${max})`
+        : `Yetkin yetersiz. (Sen: ${max} | Gerekli: ${gerekli})`,
+      ephemeral: true
+    });
   }
 });
 
-// Hata yakalama
-process.on('unhandledRejection', error => console.error('Promise hatası:', error));
-process.on('uncaughtException', error => {
-  console.error('Exception:', error);
+/* ================= HATALAR ================= */
+
+process.on("unhandledRejection", err => console.error(err));
+process.on("uncaughtException", err => {
+  console.error(err);
   process.exit(1);
 });
 
