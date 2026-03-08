@@ -30,8 +30,15 @@ const commands = [];
 
 // 🔒 Sadece bu iki kullanıcı komut kullanabilir
 const ALLOWED_USERS = [
-  "752639955049644034", // Kullanıcı 1
-  "1389930042200559706" // Kullanıcı 2
+  "752639955049644034",
+  "1389930042200559706"
+];
+
+// 🔒 Yetkili Rol ID'leri (BURAYA ROL ID KOY)
+const ALLOWED_ROLES = [
+  "1465758739645731022",
+  "1465761516405133559",
+  "1465762912219037926"
 ];
 
 // Komutları yükle
@@ -93,11 +100,14 @@ client.on(Events.InteractionCreate, async interaction => {
   const command = client.commands.get(interaction.commandName);
   if (!command) return;
 
-  // 🚫 Sadece belirli kullanıcılar komut kullanabilir
-  if (!ALLOWED_USERS.includes(interaction.user.id)) {
+  // 🚫 Kullanıcı veya rol yetki kontrolü
+  const hasUserPermission = ALLOWED_USERS.includes(interaction.user.id);
+  const hasRolePermission = interaction.member.roles.cache.some(role => ALLOWED_ROLES.includes(role.id));
+
+  if (!hasUserPermission && !hasRolePermission) {
     console.log(`Yetkisiz kullanıcı komut denedi: ${interaction.user.tag}`);
     return interaction.reply({
-      content: "❌ Bu botun komutlarını sadece belirli kullanıcılar kullanabilir.",
+      content: "❌ Bu botun komutlarını sadece yetkili kişiler kullanabilir.",
       ephemeral: true
     });
   }
