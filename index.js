@@ -1,4 +1,5 @@
-const { QuickDB } = require("quick.db");
+// quick.db yerine kurulumu sorunsuz olan croxydb kullanıyoruz
+const db = require("croxydb"); 
 const fs = require("fs");
 const path = require("path");
 require("dotenv").config();
@@ -21,19 +22,20 @@ const client = new Client({
     GatewayIntentBits.GuildMessages,
     GatewayIntentBits.GuildMembers,
     GatewayIntentBits.MessageContent,
-    GatewayIntentBits.GuildBans // Yasaklar listesi için şart
+    GatewayIntentBits.GuildBans
   ],
   partials: [Partials.Channel],
 });
 
-client.db = new QuickDB();
+// Veritabanını tanımla
+client.db = db; 
 client.commands = new Collection();
 const commands = [];
 
 // 🔒 AYARLAR
 const ALLOWED_USERS = ["752639955049644034", "1389930042200559706"];
 const ALLOWED_ROLES = ["1465758739645731022", "1465761516405133559", "1465762912219037926"];
-const GUILD_ID = "BURAYA_SUNUCU_ID_YAZ"; // Komutların anında düşmesi için sunucu ID'si
+const GUILD_ID = "BURAYA_SUNUCU_ID_YAZ"; // Sunucu ID'ni buraya yazmayı unutma!
 
 // Komutları yükle
 const commandsPath = path.join(__dirname, "commands");
@@ -69,7 +71,6 @@ client.once(Events.ClientReady, async () => {
 
   try {
     console.log("🔄 Komutlar senkronize ediliyor...");
-    // applicationGuildCommands kullanarak komutları sadece senin sunucuna anında yükler
     await rest.put(Routes.applicationGuildCommands(client.user.id, GUILD_ID), { body: commands });
     console.log("🚀 Slash komutları başarıyla sunucuya işlendi.");
   } catch (err) { console.error("Komut yükleme hatası:", err); }
@@ -80,14 +81,13 @@ client.once(Events.ClientReady, async () => {
   } catch (err) { console.error("🟥 Roblox girişi başarısız."); }
 });
 
-// Slash komut işlemleri
+// Interaction İşlemleri
 client.on(Events.InteractionCreate, async interaction => {
   if (!interaction.isChatInputCommand()) return;
 
   const command = client.commands.get(interaction.commandName);
   if (!command) return;
 
-  // 🚫 Yetki kontrolü
   const hasUserPermission = ALLOWED_USERS.includes(interaction.user.id);
   const hasRolePermission = interaction.member.roles.cache.some(role => ALLOWED_ROLES.includes(role.id));
 
@@ -96,8 +96,6 @@ client.on(Events.InteractionCreate, async interaction => {
   }
 
   try {
-    // Tüm komutlar için deferReply: "Uygulama yanıt vermedi" hatasını kökten çözer
-    // Eğer komut kendi içinde reply yapıyorsa bu kısmı command.execute içine de taşıyabilirsin
     await command.execute(interaction, client);
   } catch (err) {
     console.error(`💥 Hata: ${interaction.commandName}`, err);
