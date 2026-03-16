@@ -1,13 +1,11 @@
-require("dotenv").config();
+require("dotenv").config()
 
 const {
 Client,
 GatewayIntentBits,
 EmbedBuilder,
 PermissionsBitField
-} = require("discord.js");
-
-const fs = require("fs");
+} = require("discord.js")
 
 const client = new Client({
 intents:[
@@ -15,202 +13,231 @@ GatewayIntentBits.Guilds,
 GatewayIntentBits.GuildMessages,
 GatewayIntentBits.GuildMembers,
 GatewayIntentBits.MessageContent
-]});
+]})
 
-const prefix = "tfa!";
+const prefix="tfa!"
 
-let yetkiler = {};
+const commands=[
+"ban",
+"kick",
+"mute",
+"unmute",
+"clear",
+"kilit",
+"aç",
+"slowmode",
+"görevli",
+"yardım"
+]
 
-if(fs.existsSync("./yetkiler.json")){
-yetkiler = JSON.parse(fs.readFileSync("./yetkiler.json"));
+function embed(color,text){
+return new EmbedBuilder().setColor(color).setDescription(text)
 }
 
-function saveYetki(){
-fs.writeFileSync("./yetkiler.json",JSON.stringify(yetkiler,null,2));
-}
+client.once("ready",()=>{
+console.log("✅ Bot aktif:",client.user.tag)
+})
 
-function hataEmbed(hata){
-
-return new EmbedBuilder()
-.setColor("Red")
-.setTitle("❌ Bot Hatası")
-.setDescription(`\`\`\`${hata}\`\`\``)
-.setFooter({text:"TFA Bot Hata Sistemi"});
-}
-
-
-// BOT BAŞLADIĞINDA
-client.once("ready",async ()=>{
-
-console.log(`✅ ${client.user.tag} aktif`);
-
-client.guilds.cache.forEach(guild=>{
-
-console.log(`Sunucu kontrol: ${guild.name}`);
-
-guild.channels.cache.forEach(channel=>{
-
-console.log(`✔ Kanal: ${channel.name}`);
-
-});
-
-});
-
-});
-
-
-// MESAJ KOMUTLARI
 client.on("messageCreate",async message=>{
 
-if(message.author.bot) return;
-if(!message.content.startsWith(prefix)) return;
+if(message.author.bot) return
 
-const args = message.content.slice(prefix.length).trim().split(/ +/);
-const cmd = args.shift().toLowerCase();
+const content=message.content.toLowerCase()
 
+if(!content.startsWith(prefix)) return
 
-// GÖREVLİ YETKİ SİSTEMİ
-if(cmd === "görevli"){
+const args=content.slice(prefix.length).split(" ")
+const cmd=args.shift()
 
-if(!message.member.permissions.has(PermissionsBitField.Flags.Administrator))
-return message.reply("❌ Yetkin yok");
-
-const sub = args[0];
-
-if(sub === "ayarla"){
-
-const komut = args[1];
-const rol = message.mentions.roles.first();
-
-if(!komut || !rol)
-return message.channel.send({
-embeds:[
-new EmbedBuilder()
-.setColor("Yellow")
-.setDescription("⚠️ Kullanım: `tfa!görevli ayarla ban @rol`")
-]});
-
-yetkiler[komut] = rol.id;
-
-saveYetki();
-
-message.channel.send({
-embeds:[
-new EmbedBuilder()
-.setColor("Green")
-.setDescription(`✅ ${komut} komutu ${rol.name} rolüne verildi`)
-]});
-
-}
+const logChannel=message.guild.channels.cache.get(process.env.LOG_CHANNEL)
 
 
-if(sub === "liste"){
+// YARDIM
 
-let text = "";
+if(cmd==="yardım"){
 
-for(const k in yetkiler){
-text += `🔹 ${k} → <@&${yetkiler[k]}>\n`;
-}
+const e=new EmbedBuilder()
 
-message.channel.send({
-embeds:[
-new EmbedBuilder()
 .setColor("Blue")
-.setTitle("🛡️ Yetki Listesi")
-.setDescription(text || "Yetki ayarlanmamış")
-]});
+.setTitle("🤖 TFA Moderasyon Bot")
 
-}
+.addFields(
+
+{name:"🛡 Moderasyon",
+value:"tfa!ban\n tfa!kick\n tfa!mute\n tfa!unmute\n tfa!clear"},
+
+{name:"⚙ Yönetim",
+value:"tfa!kilit\n tfa!aç\n tfa!slowmode"},
+
+{name:"👮 Yetki",
+value:"tfa!görevli ayarla\n tfa!görevli liste"}
+
+)
+
+return message.channel.send({embeds:[e]})
 
 }
 
 
 // BAN
-if(cmd === "ban"){
 
-try{
+if(cmd==="ban"){
 
-const user = message.mentions.members.first();
+if(!message.member.permissions.has(PermissionsBitField.Flags.BanMembers))
+return message.reply("❌ Yetkin yok")
 
-if(!user)
-return message.reply("❌ Kullanıcı etiketle");
+const user=message.mentions.members.first()
 
-await user.ban();
+if(!user) return message.reply("❌ Kullanıcı etiketle")
+
+await user.ban()
 
 message.channel.send({
-embeds:[
-new EmbedBuilder()
-.setColor("Red")
-.setDescription(`🔨 ${user.user.tag} banlandı`)
-]});
+embeds:[embed("Red",`🔨 ${user.user.tag} banlandı`)]
+})
 
-}catch(err){
-
-message.channel.send({embeds:[hataEmbed(err)]});
-
-}
+if(logChannel)
+logChannel.send({
+embeds:[embed("Red",`📊 BAN LOG\n👤 ${user.user.tag}\n👮 ${message.author.tag}`)]
+})
 
 }
 
 
 // KICK
-if(cmd === "kick"){
 
-try{
+if(cmd==="kick"){
 
-const user = message.mentions.members.first();
+const user=message.mentions.members.first()
 
-await user.kick();
+await user.kick()
 
 message.channel.send({
-embeds:[
-new EmbedBuilder()
-.setColor("Orange")
-.setDescription(`👢 ${user.user.tag} kicklendi`)
-]});
+embeds:[embed("Orange",`👢 ${user.user.tag} kicklendi`)]
+})
 
-}catch(err){
-
-message.channel.send({embeds:[hataEmbed(err)]});
+if(logChannel)
+logChannel.send({
+embeds:[embed("Orange",`📊 KICK LOG\n👤 ${user.user.tag}\n👮 ${message.author.tag}`)]
+})
 
 }
+
+
+// MUTE
+
+if(cmd==="mute"){
+
+const user=message.mentions.members.first()
+
+await user.timeout(10*60*1000)
+
+message.channel.send({
+embeds:[embed("Yellow",`🔇 ${user.user.tag} mute aldı`)]
+})
+
+if(logChannel)
+logChannel.send({
+embeds:[embed("Yellow",`📊 MUTE LOG\n👤 ${user.user.tag}`)]
+})
+
+}
+
+
+// UNMUTE
+
+if(cmd==="unmute"){
+
+const user=message.mentions.members.first()
+
+await user.timeout(null)
+
+message.channel.send({
+embeds:[embed("Green",`🔊 ${user.user.tag} unmute`)]
+})
 
 }
 
 
 // CLEAR
-if(cmd === "clear"){
 
-try{
+if(cmd==="clear"){
 
-const amount = args[0];
+const amount=args[0]
 
-await message.channel.bulkDelete(amount);
+await message.channel.bulkDelete(amount)
 
 message.channel.send({
+embeds:[embed("Purple",`🧹 ${amount} mesaj silindi`)]
+})
+
+if(logChannel)
+logChannel.send({
+embeds:[embed("Purple",`📊 CLEAR LOG\n${amount} mesaj silindi`)]
+})
+
+}
+
+
+// KİLİT
+
+if(cmd==="kilit"){
+
+await message.channel.permissionOverwrites.edit(
+message.guild.roles.everyone,
+{SendMessages:false}
+)
+
+message.channel.send({
+embeds:[embed("Grey","🔒 Kanal kilitlendi")]
+})
+
+}
+
+
+// AÇ
+
+if(cmd==="aç"){
+
+await message.channel.permissionOverwrites.edit(
+message.guild.roles.everyone,
+{SendMessages:true}
+)
+
+message.channel.send({
+embeds:[embed("Green","🔓 Kanal açıldı")]
+})
+
+}
+
+
+// SLOWMODE
+
+if(cmd==="slowmode"){
+
+const time=args[0]
+
+await message.channel.setRateLimitPerUser(time)
+
+message.channel.send({
+embeds:[embed("Blue",`🐢 Slowmode ${time} saniye`)]
+})
+
+}
+
+
+// HATALI KOMUT
+
+if(!commands.includes(cmd)){
+
+return message.channel.send({
 embeds:[
-new EmbedBuilder()
-.setColor("Purple")
-.setDescription(`🧹 ${amount} mesaj silindi`)
-]});
-
-}catch(err){
-
-message.channel.send({embeds:[hataEmbed(err)]});
+embed("Yellow",`❓ Komut bulunamadı`)
+]
+})
 
 }
 
-}
+})
 
-});
-
-
-// GLOBAL HATA SİSTEMİ
-process.on("unhandledRejection",error=>{
-
-console.log("Bot hata:",error);
-
-});
-
-
-client.login(process.env.TOKEN);
+client.login(process.env.TOKEN)
