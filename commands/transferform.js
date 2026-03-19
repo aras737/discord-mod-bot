@@ -1,10 +1,15 @@
 require("dotenv").config()
-const { Client, GatewayIntentBits, SlashCommandBuilder } = require("discord.js")
+const { 
+Client, 
+GatewayIntentBits, 
+SlashCommandBuilder 
+} = require("discord.js")
+
 const db = require("croxydb")
 const fs = require("fs")
 
 const client = new Client({
-  intents: [
+  intents:[
     GatewayIntentBits.Guilds,
     GatewayIntentBits.GuildMessages,
     GatewayIntentBits.MessageContent
@@ -12,176 +17,125 @@ const client = new Client({
 })
 
 /* =========================
-   YETKİ SİSTEMİ (ERENSİ)
+   YETKİ (ERENSİ SİSTEM)
 ========================= */
-function yetkiliMi(member){
+function yetkili(member){
   return member.permissions.has("ManageMessages") || 
          member.permissions.has("Administrator")
 }
 
 /* =========================
-   READY + SLASH
+   READY + SLASH YÜKLEME
 ========================= */
 client.once("ready", async () => {
 
-  console.log("✅ TFA Tutanak Aktif")
+console.log("✅ Sicil sistemi aktif")
 
-  await client.application.commands.set([
-    new SlashCommandBuilder()
-    .setName("liste")
-    .setDescription("Kayıtları gösterir")
-    .addStringOption(o=>o.setName("isim").setRequired(true)),
+await client.application.commands.set([
+  new SlashCommandBuilder()
+  .setName("dosya")
+  .setDescription("Sicil dosyası gönderir")
+  .addStringOption(o=>o.setName("isim").setRequired(true))
+])
 
-    new SlashCommandBuilder()
-    .setName("dosya")
-    .setDescription("TXT dosya gönderir")
-    .addStringOption(o=>o.setName("isim").setRequired(true))
-  ])
 })
 
 /* =========================
-   MESAJ OKUMA (ANA SİSTEM)
+   MESAJ OKUMA (TUTANAK)
 ========================= */
 client.on("messageCreate", async message => {
 
 if(message.author.bot || !message.guild) return
-
-// ❌ yetki yoksa çık
-if(!yetkiliMi(message.member)) return
+if(!yetkili(message.member)) return
 
 const text = message.content
 
-// 📌 FORMAT KONTROL
-const gerekli = [
-"Tutanak tutan:",
-"Tutanak tutulan kişi:",
-"Sebep:",
-"Verilecek ceza miktarı:",
-"Tag:"
-]
-
-const doğruFormat = gerekli.every(x => text.includes(x))
-
-if(!doğruFormat){
-  return message.reply("❌ Format hatalı!\nDoğru formatı kullan.")
-}
-
-// 📸 FOTO KONTROL
-if(message.attachments.size === 0){
-  return message.reply("❌ Fotoğraf zorunlu!")
-}
+// sadece bu satır varsa çalışır
+if(!text.includes("Tutanak tutulan kişi:")) return
 
 try{
 
-// 📌 VERİ PARSE
-const tutan = text.split("Tutanak tutan:")[1].split("\n")[0].trim()
 const kişi = text.split("Tutanak tutulan kişi:")[1].split("\n")[0].trim()
-const sebep = text.split("Sebep:")[1].split("\n")[0].trim()
-const ceza = text.split("Verilecek ceza miktarı:")[1].split("\n")[0].trim()
-const tag = text.split("Tag:")[1].split("\n")[0].trim()
 
-const foto = message.attachments.first().url
+const sebep = text.includes("Sebep:")
+  ? text.split("Sebep:")[1].split("\n")[0].trim()
+  : "Belirtilmedi"
+
+const ceza = text.includes("Verilecek ceza miktarı:")
+  ? text.split("Verilecek ceza miktarı:")[1].split("\n")[0].trim()
+  : "Yok"
+
+const tutan = text.includes("Tutanak tutan:")
+  ? text.split("Tutanak tutan:")[1].split("\n")[0].trim()
+  : message.author.tag
+
 const tarih = new Date().toLocaleString("tr-TR")
 
-// 📂 KAYIT
-let kayıt = db.get(`dosya_${kişi}`) || []
+// 📂 SİCİL
+let kayıt = db.get(`sicil_${kişi}`) || []
 
 kayıt.push({
-tutan,
 sebep,
 ceza,
-tarih,
-tag,
-foto
+tutan,
+tarih
 })
 
-db.set(`dosya_${kişi}`, kayıt)
+db.set(`sicil_${kişi}`, kayıt)
 
-// ✅ TEPKİ
+// ✅ tik
 message.react("✅")
 
-// 🔥 ONAY MESAJI
-message.reply(`✅ Tutanak kaydedildi
-👮 Tutan: ${tutan}
-👤 Kişi: ${kişi}`)
-
 }catch(err){
-console.log(err)
-message.reply("❌ Veri okunamadı")
+console.log("Hata:", err)
 }
 
 })
 
 /* =========================
-   SLASH KOMUTLAR
+   SLASH KOMUT (/dosya)
 ========================= */
 client.on("interactionCreate", async interaction => {
 
 if(!interaction.isChatInputCommand()) return
 
-// ❌ yetki kontrol
-if(!yetkiliMi(interaction.member)){
+if(!yetkili(interaction.member)){
   return interaction.reply({content:"❌ Yetkin yok", ephemeral:true})
 }
 
-// =================
-// LİSTE
-// =================
-if(interaction.commandName === "liste"){
-
-const isim = interaction.options.getString("isim")
-const kayıt = db.get(`dosya_${isim}`)
-
-if(!kayıt || kayıt.length === 0){
-return interaction.reply("❌ Kayıt yok")
-}
-
-let text = ""
-
-kayıt.forEach((x,i)=>{
-text += `${i+1}) ${x.sebep} | ${x.ceza} | ${x.tarih}\n`
-})
-
-interaction.reply(text.slice(0,2000))
-}
-
-// =================
-// DOSYA (TXT)
-// =================
 if(interaction.commandName === "dosya"){
 
 const isim = interaction.options.getString("isim")
-const kayıt = db.get(`dosya_${isim}`)
+const kayıt = db.get(`sicil_${isim}`)
 
 if(!kayıt || kayıt.length === 0){
-return interaction.reply("❌ Kayıt yok")
+  return interaction.reply("❌ Sicil yok")
 }
 
-let text = `DOSYA: ${isim}\n\n`
+let text = `SİCİL: ${isim}\n\n`
 
 kayıt.forEach((x,i)=>{
 text += `
 ${i+1})
-Tutan: ${x.tutan}
 Sebep: ${x.sebep}
 Ceza: ${x.ceza}
-Tag: ${x.tag}
+Veren: ${x.tutan}
 Tarih: ${x.tarih}
-Foto: ${x.foto}
-------------------
+----------------
 `
 })
 
-// 📁 DOSYA OLUŞTUR
+// TXT oluştur
 const path = `./${isim}.txt`
 fs.writeFileSync(path, text)
 
-// 📩 DM GÖNDER
-interaction.user.send({
+// DM gönder
+await interaction.user.send({
 files:[path]
 }).catch(()=>{})
 
-interaction.reply("📁 Dosya DM gönderildi")
+interaction.reply("📁 Sicil DM gönderildi")
+
 }
 
 })
