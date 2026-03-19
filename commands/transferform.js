@@ -1,143 +1,133 @@
-const { 
-Client, 
-GatewayIntentBits, 
-EmbedBuilder, 
-SlashCommandBuilder 
-} = require("discord.js")
-
+require("dotenv").config()
+const { Client, GatewayIntentBits } = require("discord.js")
 const db = require("croxydb")
+const fs = require("fs")
 
 const client = new Client({
-intents:[GatewayIntentBits.Guilds]
+  intents:[
+    GatewayIntentBits.Guilds,
+    GatewayIntentBits.GuildMessages,
+    GatewayIntentBits.MessageContent
+  ]
 })
 
-// ==================
-// SLASH KOMUTLAR
-// ==================
+// 🔒 ADMIN ROL ID
+const ADMIN_ROLE = "1465758739645731022"
 
-client.commands = [
-new SlashCommandBuilder()
-.setName("tutanak")
-.setDescription("Tutanak oluşturur")
-.addStringOption(o=>o.setName("tutanak_tutan").setRequired(true))
-.addStringOption(o=>o.setName("roblox_ad").setRequired(true))
-.addStringOption(o=>o.setName("sebep").setRequired(true))
-.addStringOption(o=>o.setName("ceza").setRequired(true))
-.addStringOption(o=>o.setName("tag").setRequired(true))
-.addAttachmentOption(o=>o.setName("foto").setRequired(true)),
+// =================
+// MESAJ OKUMA
+// =================
+client.on("messageCreate", async message => {
 
-new SlashCommandBuilder()
-.setName("dosya")
-.setDescription("Kullanıcı dosyasını gösterir")
-.addStringOption(o=>o.setName("roblox_ad").setRequired(true))
-]
+if(message.author.bot) return
+if(!message.guild) return
 
-// ==================
-// READY
-// ==================
+// sadece admin
+if(!message.member.roles.cache.has(ADMIN_ROLE)) return
 
-client.once("ready", async () => {
+const content = message.content
 
-console.log("✅ Tutanak sistemi aktif")
+// FORMAT KONTROL
+if(
+content.includes("Tutanak tutan:") &&
+content.includes("Tutanak tutulan kişi:") &&
+content.includes("Sebep:") &&
+content.includes("Verilecek ceza miktarı:")
+){
 
-await client.application.commands.set(client.commands)
+try{
 
-})
-
-// ==================
-// KOMUTLAR
-// ==================
-
-client.on("interactionCreate", async interaction => {
-
-if(!interaction.isChatInputCommand()) return
-
-// ==================
-// TUTANAK
-// ==================
-
-if(interaction.commandName === "tutanak"){
-
-const tutan = interaction.options.getString("tutanak_tutan")
-const roblox = interaction.options.getString("roblox_ad")
-const sebep = interaction.options.getString("sebep")
-const ceza = interaction.options.getString("ceza")
-const tag = interaction.options.getString("tag")
-const foto = interaction.options.getAttachment("foto")
+// VERİ ÇEK
+const tutan = content.split("Tutanak tutan:")[1].split("\n")[0].trim()
+const kişi = content.split("Tutanak tutulan kişi:")[1].split("\n")[0].trim()
+const sebep = content.split("Sebep:")[1].split("\n")[0].trim()
+const ceza = content.split("Verilecek ceza miktarı:")[1].split("\n")[0].trim()
 
 const tarih = new Date().toLocaleString("tr-TR")
 
-// ✔️ ceza varsa tik
-const tik = ceza && ceza !== "yok" ? "✅" : "❌"
-
-// EMBED
-const embed = new EmbedBuilder()
-.setColor("DarkBlue")
-.setTitle("📄 TUTANAK KAYDI")
-.setDescription(`
-👮 **Tutanak tutan:** ${tutan}
-👤 **Tutanak tutulan:** ${roblox}
-
-📌 **Sebep:** ${sebep}
-⚖️ **Ceza:** ${ceza} ${tik}
-🏷 **Tag:** ${tag}
-
-🕒 **Tarih:** ${tarih}
-`)
-.setImage(foto.url)
-.setFooter({text:"TFA Tutanak Sistemi"})
-
-// DB KAYIT
-let kayıt = db.get(`dosya_${roblox}`) || []
+// KAYDET
+let kayıt = db.get(`dosya_${kişi}`) || []
 
 kayıt.push({
 tutan,
 sebep,
 ceza,
-tarih,
-tag,
-foto: foto.url
+tarih
 })
 
-db.set(`dosya_${roblox}`, kayıt)
+db.set(`dosya_${kişi}`, kayıt)
 
-// GÖNDER
-interaction.reply({embeds:[embed]})
+// ✅ TEPKİ
+message.react("✅")
+
+// BOT MESAJI
+message.reply(`✅ Tutanak onaylandı\n👮 ${tutan}`)
+
+}catch(err){
+console.log(err)
+}
 
 }
 
-// ==================
-// DOSYA
-// ==================
+})
 
-if(interaction.commandName === "dosya"){
+// =================
+// LİSTE KOMUTU
+// =================
+client.on("interactionCreate", async interaction => {
 
-const roblox = interaction.options.getString("roblox_ad")
+if(!interaction.isChatInputCommand()) return
 
-const kayıt = db.get(`dosya_${roblox}`)
+// /liste
+if(interaction.commandName === "liste"){
 
-if(!kayıt || kayıt.length === 0){
-return interaction.reply("❌ Bu kişiye ait kayıt yok")
-}
+const isim = interaction.options.getString("isim")
+const kayıt = db.get(`dosya_${isim}`)
 
-// LİSTE OLUŞTUR
+if(!kayıt) return interaction.reply("❌ Kayıt yok")
+
 let text = ""
 
 kayıt.forEach((x,i)=>{
-text += `
-${i+1}) 👮 ${x.tutan}
-📌 ${x.sebep}
-⚖️ ${x.ceza}
-🕒 ${x.tarih}
-\n`
+text += `${i+1}) ${x.sebep} | ${x.ceza} | ${x.tarih}\n`
 })
 
-const embed = new EmbedBuilder()
-.setColor("Purple")
-.setTitle(`📂 ${roblox} Dosyası`)
-.setDescription(text.slice(0,4000))
+interaction.reply(text.slice(0,2000))
 
-interaction.reply({embeds:[embed]})
+}
+
+// =================
+// DOSYA (TXT)
+// =================
+if(interaction.commandName === "dosya"){
+
+const isim = interaction.options.getString("isim")
+const kayıt = db.get(`dosya_${isim}`)
+
+if(!kayıt) return interaction.reply("❌ Kayıt yok")
+
+let text = `DOSYA: ${isim}\n\n`
+
+kayıt.forEach((x,i)=>{
+text += `
+${i+1})
+Tutan: ${x.tutan}
+Sebep: ${x.sebep}
+Ceza: ${x.ceza}
+Tarih: ${x.tarih}
+------------------
+`
+})
+
+// TXT oluştur
+fs.writeFileSync(`./${isim}.txt`, text)
+
+// DM gönder
+interaction.user.send({
+files:[`./${isim}.txt`]
+}).catch(()=>{})
+
+interaction.reply("📁 Dosya DM gönderildi")
 
 }
 
