@@ -1,10 +1,5 @@
 require("dotenv").config()
-const { 
-Client, 
-GatewayIntentBits, 
-SlashCommandBuilder 
-} = require("discord.js")
-
+const { Client, GatewayIntentBits, SlashCommandBuilder } = require("discord.js")
 const db = require("croxydb")
 const fs = require("fs")
 
@@ -17,7 +12,7 @@ const client = new Client({
 })
 
 /* =========================
-   YETKİ (ERENSİ SİSTEM)
+   YETKİ
 ========================= */
 function yetkili(member){
   return member.permissions.has("ManageMessages") || 
@@ -25,23 +20,49 @@ function yetkili(member){
 }
 
 /* =========================
-   READY + SLASH YÜKLEME
+   READY
 ========================= */
-client.once("ready", async () => {
+client.once("clientReady", async () => {
 
-console.log("✅ Sicil sistemi aktif")
+console.log("✅ Tutanak sistemi aktif")
 
 await client.application.commands.set([
   new SlashCommandBuilder()
-  .setName("dosya")
-  .setDescription("Sicil dosyası gönderir")
-  .addStringOption(o=>o.setName("isim").setRequired(true))
+  .setName("log-ayarla")
+  .setDescription("Tutanak log kanalını ayarlar")
+  .addChannelOption(o =>
+    o.setName("kanal")
+    .setDescription("Log kanalı")
+    .setRequired(true)
+  )
 ])
 
 })
 
 /* =========================
-   MESAJ OKUMA (TUTANAK)
+   LOG AYARLAMA
+========================= */
+client.on("interactionCreate", async interaction => {
+
+if(!interaction.isChatInputCommand()) return
+
+if(interaction.commandName === "log-ayarla"){
+
+if(!yetkili(interaction.member)){
+return interaction.reply({content:"❌ Yetki yok", ephemeral:true})
+}
+
+const kanal = interaction.options.getChannel("kanal")
+
+db.set(`log_${interaction.guild.id}`, kanal.id)
+
+interaction.reply(`✅ Log kanalı ayarlandı: ${kanal}`)
+}
+
+})
+
+/* =========================
+   TUTANAK SİSTEMİ (OTOMATİK)
 ========================= */
 client.on("messageCreate", async message => {
 
@@ -50,92 +71,84 @@ if(!yetkili(message.member)) return
 
 const text = message.content
 
-// sadece bu satır varsa çalışır
+// sadece bu varsa çalışır
 if(!text.includes("Tutanak tutulan kişi:")) return
+
+// 📸 foto kontrol
+if(message.attachments.size === 0){
+return message.reply("❌ Fotoğraf zorunlu")
+}
 
 try{
 
 const kişi = text.split("Tutanak tutulan kişi:")[1].split("\n")[0].trim()
 
 const sebep = text.includes("Sebep:")
-  ? text.split("Sebep:")[1].split("\n")[0].trim()
-  : "Belirtilmedi"
+? text.split("Sebep:")[1].split("\n")[0].trim()
+: "Belirtilmedi"
 
 const ceza = text.includes("Verilecek ceza miktarı:")
-  ? text.split("Verilecek ceza miktarı:")[1].split("\n")[0].trim()
-  : "Yok"
+? text.split("Verilecek ceza miktarı:")[1].split("\n")[0].trim()
+: "Yok"
 
 const tutan = text.includes("Tutanak tutan:")
-  ? text.split("Tutanak tutan:")[1].split("\n")[0].trim()
-  : message.author.tag
+? text.split("Tutanak tutan:")[1].split("\n")[0].trim()
+: message.author.tag
 
 const tarih = new Date().toLocaleString("tr-TR")
 
-// 📂 SİCİL
+const foto = message.attachments.first().url
+
+// 📂 SICIL
 let kayıt = db.get(`sicil_${kişi}`) || []
 
 kayıt.push({
 sebep,
 ceza,
 tutan,
-tarih
+tarih,
+foto
 })
 
 db.set(`sicil_${kişi}`, kayıt)
 
-// ✅ tik
-message.react("✅")
-
-}catch(err){
-console.log("Hata:", err)
-}
-
-})
-
-/* =========================
-   SLASH KOMUT (/dosya)
-========================= */
-client.on("interactionCreate", async interaction => {
-
-if(!interaction.isChatInputCommand()) return
-
-if(!yetkili(interaction.member)){
-  return interaction.reply({content:"❌ Yetkin yok", ephemeral:true})
-}
-
-if(interaction.commandName === "dosya"){
-
-const isim = interaction.options.getString("isim")
-const kayıt = db.get(`sicil_${isim}`)
-
-if(!kayıt || kayıt.length === 0){
-  return interaction.reply("❌ Sicil yok")
-}
-
-let text = `SİCİL: ${isim}\n\n`
+// 📁 TXT GÜNCELLE
+let txt = `SİCİL: ${kişi}\n\n`
 
 kayıt.forEach((x,i)=>{
-text += `
+txt += `
 ${i+1})
 Sebep: ${x.sebep}
 Ceza: ${x.ceza}
 Veren: ${x.tutan}
 Tarih: ${x.tarih}
+Foto: ${x.foto}
 ----------------
 `
 })
 
-// TXT oluştur
-const path = `./${isim}.txt`
-fs.writeFileSync(path, text)
+fs.writeFileSync(`./${kişi}.txt`, txt)
 
-// DM gönder
-await interaction.user.send({
-files:[path]
-}).catch(()=>{})
+// 📤 LOG KANALI
+const logID = db.get(`log_${message.guild.id}`)
+const logKanal = message.guild.channels.cache.get(logID)
 
-interaction.reply("📁 Sicil DM gönderildi")
+if(logKanal){
 
+const logMsg = await logKanal.send({
+content: message.content,
+files: [foto]
+})
+
+logMsg.react("✅")
+}
+
+// ✅ TİK (ORİJİNAL MESAJA)
+message.react("✅")
+
+}catch(err){
+console.log(err)
+message.reply("❌ Hata oluştu")
 }
 
 })
