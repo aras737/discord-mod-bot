@@ -2,6 +2,11 @@ const { QuickDB } = require("quick.db");
 const fs = require("fs");
 const path = require("path");
 require("dotenv").config();
+const express = require("express");
+const session = require("express-session");
+const passport = require("passport");
+const DiscordStrategy = require("passport-discord").Strategy;
+
 const { 
   Client, 
   Collection, 
@@ -11,9 +16,35 @@ const {
   REST, 
   Routes
 } = require("discord.js");
+
 const noblox = require("noblox.js");
 
-// Discord Client
+// ================= WEB =================
+const app = express();
+app.use(express.urlencoded({ extended: true }));
+
+passport.serializeUser((user, done) => done(null, user));
+passport.deserializeUser((obj, done) => done(null, obj));
+
+passport.use(new DiscordStrategy({
+  clientID: process.env.CLIENT_ID,
+  clientSecret: process.env.CLIENT_SECRET,
+  callbackURL: process.env.CALLBACK_URL,
+  scope: ["identify", "guilds"]
+}, (accessToken, refreshToken, profile, done) => {
+  return done(null, profile);
+}));
+
+app.use(session({
+  secret: "tfa_secret",
+  resave: false,
+  saveUninitialized: false
+}));
+
+app.use(passport.initialize());
+app.use(passport.session());
+
+// ================= DISCORD BOT =================
 const client = new Client({
   intents: [
     GatewayIntentBits.Guilds,
@@ -28,19 +59,18 @@ client.db = new QuickDB();
 client.commands = new Collection();
 const commands = [];
 
-// 🔒 Sadece bu iki kullanıcı komut kullanabilir
+// 🔒 Kullanıcı / Rol yetki
 const ALLOWED_USERS = [
   "752639955049644034",
   "1389930042200559706"
 ];
 
-// 🔒 Yetkili Rol ID'leri (BURAYA ROL ID KOY)
 const ALLOWED_ROLES = [
   "ROL_ID_1",
   "ROL_ID_2"
 ];
 
-// Komutları yükle
+// ================= KOMUT YÜKLE =================
 const commandsPath = path.join(__dirname, "commands");
 const commandFiles = fs.readdirSync(commandsPath).filter(file => file.endsWith(".js"));
 
@@ -55,7 +85,7 @@ for (const file of commandFiles) {
   }
 }
 
-// Olayları yükle
+// ================= EVENT YÜKLE =================
 const eventsPath = path.join(__dirname, "events");
 const eventFiles = fs.readdirSync(eventsPath).filter(file => file.endsWith(".js"));
 
@@ -64,13 +94,13 @@ for (const file of eventFiles) {
   if (event.name) {
     if (event.once) client.once(event.name, (...args) => event.execute(...args, client));
     else client.on(event.name, (...args) => event.execute(...args, client));
-    console.log(`Olay yüklendi: ${event.name}${event.once ? " (Bir Kez)" : ""}`);
+    console.log(`Olay yüklendi: ${event.name}`);
   } else {
     console.log(`Olay eksik veya hatalı: ${file}`);
   }
 }
 
-// Bot hazır olduğunda
+// ================= READY =================
 client.once(Events.ClientReady, async () => {
   console.log(`✅ Bot aktif: ${client.user.tag}`);
 
@@ -78,55 +108,94 @@ client.once(Events.ClientReady, async () => {
 
   try {
     await rest.put(Routes.applicationCommands(client.user.id), { body: commands });
-    console.log("Slash komutları başarıyla yüklendi.");
+    console.log("Slash komutları yüklendi.");
   } catch (err) {
-    console.error("Komut yükleme hatası:", err);
+    console.error("Komut hatası:", err);
   }
 
-  // Roblox girişi
+  // Roblox
   try {
     const currentUser = await noblox.setCookie(process.env.ROBLOX_COOKIE);
-    console.log(`Roblox giriş başarılı: ${currentUser.UserName} (ID: ${currentUser.UserID})`);
+    console.log(`Roblox giriş: ${currentUser.UserName}`);
   } catch (err) {
-    console.error("Roblox giriş başarısız:", err.message);
+    console.error("Roblox hata:", err.message);
   }
 });
 
-// Slash komut işlemleri
+// ================= SLASH =================
 client.on(Events.InteractionCreate, async interaction => {
   if (!interaction.isChatInputCommand()) return;
 
   const command = client.commands.get(interaction.commandName);
   if (!command) return;
 
-  // 🚫 Kullanıcı veya rol yetki kontrolü
   const hasUserPermission = ALLOWED_USERS.includes(interaction.user.id);
   const hasRolePermission = interaction.member.roles.cache.some(role => ALLOWED_ROLES.includes(role.id));
 
   if (!hasUserPermission && !hasRolePermission) {
-    console.log(`Yetkisiz kullanıcı komut denedi: ${interaction.user.tag}`);
     return interaction.reply({
-      content: "❌ Bu botun komutlarını sadece yetkili kişiler kullanabilir.",
+      content: "❌ Yetki yok",
       ephemeral: true
     });
   }
 
   try {
-    console.log(`✅ Komut kullanıldı: ${interaction.user.tag} /${interaction.commandName}`);
     await command.execute(interaction, client);
   } catch (err) {
-    console.error(`Komut hatası (${interaction.commandName}):`, err);
-    const msg = "Komut çalıştırılırken bir hata oluştu.";
-    if (interaction.replied || interaction.deferred) {
-      await interaction.followUp({ content: msg, ephemeral: true });
-    } else {
-      await interaction.reply({ content: msg, ephemeral: true });
-    }
+    console.error(err);
+    interaction.reply({ content: "❌ Hata oluştu", ephemeral: true });
   }
 });
 
-// Hata yakalama
-process.on('unhandledRejection', error => console.error('Promise hatası:', error));
+// ================= WEB ROUTES =================
+
+// ANA SAYFA
+app.get("/", (req, res) => {
+  res.sendFile(__dirname + "/index.html");
+});
+
+// LOGIN
+app.get("/login", passport.authenticate("discord"));
+
+app.get("/callback",
+  passport.authenticate("discord", { failureRedirect: "/" }),
+  (req, res) => res.redirect("/")
+);
+
+app.get("/logout", (req, res) => {
+  req.logout(()=>{});
+  res.redirect("/");
+});
+
+// API USER
+app.get("/api/user", (req, res) => {
+  if(!req.user) return res.json({ login:false });
+
+  res.json({
+    login:true,
+    username:req.user.username,
+    avatar:`https://cdn.discordapp.com/avatars/${req.user.id}/${req.user.avatar}.png`,
+    guilds:req.user.guilds.filter(g => (g.permissions & 0x20) === 0x20)
+  });
+});
+
+// LOG AYAR
+app.post("/api/log", (req, res) => {
+  if(!req.user) return res.json({ ok:false });
+
+  client.db.set(`log_${req.body.guild}`, req.body.channel);
+
+  res.json({ ok:true });
+});
+
+// ================= PORT =================
+const PORT = process.env.PORT || 3000;
+app.listen(PORT, () => {
+  console.log("🌐 Panel aktif:", PORT);
+});
+
+// ================= HATALAR =================
+process.on('unhandledRejection', error => console.error('Promise:', error));
 process.on('uncaughtException', error => {
   console.error('Exception:', error);
   process.exit(1);
