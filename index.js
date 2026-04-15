@@ -14,7 +14,8 @@ const {
   Partials, 
   Events, 
   REST, 
-  Routes
+  Routes,
+  PermissionsBitField
 } = require("discord.js");
 
 const noblox = require("noblox.js");
@@ -113,7 +114,6 @@ client.once(Events.ClientReady, async () => {
     console.error("Komut hatası:", err);
   }
 
-  // Roblox
   try {
     const currentUser = await noblox.setCookie(process.env.ROBLOX_COOKIE);
     console.log(`Roblox giriş: ${currentUser.UserName}`);
@@ -126,13 +126,37 @@ client.once(Events.ClientReady, async () => {
 client.on(Events.InteractionCreate, async interaction => {
   if (!interaction.isChatInputCommand()) return;
 
+  // ❌ DM ENGEL
+  if (!interaction.inGuild()) {
+    return interaction.reply({
+      content: "❌ Bu komut sadece sunucuda kullanılabilir.",
+      ephemeral: true
+    });
+  }
+
   const command = client.commands.get(interaction.commandName);
   if (!command) return;
 
-  const hasUserPermission = ALLOWED_USERS.includes(interaction.user.id);
-  const hasRolePermission = interaction.member.roles.cache.some(role => ALLOWED_ROLES.includes(role.id));
+  const member = interaction.member;
 
-  if (!hasUserPermission && !hasRolePermission) {
+  // 🔒 Kullanıcı yetki
+  const hasUserPermission = ALLOWED_USERS.includes(interaction.user.id);
+
+  // 🔒 Rol yetki (CRASH FIX)
+  let hasRolePermission = false;
+
+  if (member && member.roles && member.roles.cache) {
+    hasRolePermission = member.roles.cache.some(role =>
+      ALLOWED_ROLES.includes(role.id)
+    );
+  }
+
+  // 🔥 PERMISSION fallback (PRO)
+  const hasDiscordPermission =
+    member.permissions.has(PermissionsBitField.Flags.Administrator) ||
+    member.permissions.has(PermissionsBitField.Flags.ManageGuild);
+
+  if (!hasUserPermission && !hasRolePermission && !hasDiscordPermission) {
     return interaction.reply({
       content: "❌ Yetki yok",
       ephemeral: true
@@ -143,18 +167,19 @@ client.on(Events.InteractionCreate, async interaction => {
     await command.execute(interaction, client);
   } catch (err) {
     console.error(err);
-    interaction.reply({ content: "❌ Hata oluştu", ephemeral: true });
+    if (interaction.replied || interaction.deferred) {
+      interaction.followUp({ content: "❌ Hata oluştu", ephemeral: true });
+    } else {
+      interaction.reply({ content: "❌ Hata oluştu", ephemeral: true });
+    }
   }
 });
 
 // ================= WEB ROUTES =================
-
-// ANA SAYFA
 app.get("/", (req, res) => {
   res.sendFile(__dirname + "/index.html");
 });
 
-// LOGIN
 app.get("/login", passport.authenticate("discord"));
 
 app.get("/callback",
@@ -167,7 +192,6 @@ app.get("/logout", (req, res) => {
   res.redirect("/");
 });
 
-// API USER
 app.get("/api/user", (req, res) => {
   if(!req.user) return res.json({ login:false });
 
@@ -179,7 +203,6 @@ app.get("/api/user", (req, res) => {
   });
 });
 
-// LOG AYAR
 app.post("/api/log", (req, res) => {
   if(!req.user) return res.json({ ok:false });
 
