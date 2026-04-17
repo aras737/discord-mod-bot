@@ -60,116 +60,110 @@ client.db = new QuickDB();
 client.commands = new Collection();
 const commands = [];
 
-// ================= KOMUT YÜKLEME (HANDLER) =================
+// ================= KOMUT HANDLER =================
 const commandsPath = path.join(__dirname, "commands");
-const commandFiles = fs.readdirSync(commandsPath).filter(file => file.endsWith(".js"));
-
-for (const file of commandFiles) {
-  const command = require(path.join(commandsPath, file));
-  if ("data" in command && "execute" in command) {
-    client.commands.set(command.data.name, command);
-    commands.push(command.data.toJSON());
-    console.log(`📡 Komut yüklendi: ${command.data.name}`);
-  }
+if (fs.existsSync(commandsPath)) {
+    const commandFiles = fs.readdirSync(commandsPath).filter(file => file.endsWith(".js"));
+    for (const file of commandFiles) {
+      const command = require(path.join(commandsPath, file));
+      if ("data" in command && "execute" in command) {
+        client.commands.set(command.data.name, command);
+        commands.push(command.data.toJSON());
+        console.log(`📡 Komut yüklendi: ${command.data.name}`);
+      }
+    }
 }
 
-// ================= EVENT YÜKLEME =================
+// ================= EVENT HANDLER =================
 const eventsPath = path.join(__dirname, "events");
-const eventFiles = fs.readdirSync(eventsPath).filter(file => file.endsWith(".js"));
-
-for (const file of eventFiles) {
-  const event = require(path.join(eventsPath, file));
-  if (event.name) {
-    if (event.once) client.once(event.name, (...args) => event.execute(...args, client));
-    else client.on(event.name, (...args) => event.execute(...args, client));
-  }
+if (fs.existsSync(eventsPath)) {
+    const eventFiles = fs.readdirSync(eventsPath).filter(file => file.endsWith(".js"));
+    for (const file of eventFiles) {
+      const event = require(path.join(eventsPath, file));
+      if (event.name) {
+        if (event.once) client.once(event.name, (...args) => event.execute(...args, client));
+        else client.on(event.name, (...args) => event.execute(...args, client));
+      }
+    }
 }
 
-// ================= BOT READY =================
+// ================= READY =================
 client.once(Events.ClientReady, async () => {
-  console.log(`✅ ${client.user.tag} olarak giriş yapıldı!`);
-
+  console.log(`✅ ${client.user.tag} Aktif!`);
   const rest = new REST({ version: "10" }).setToken(process.env.TOKEN);
   try {
     await rest.put(Routes.applicationCommands(client.user.id), { body: commands });
-    console.log("🚀 Slash komutları başarıyla senkronize edildi.");
+    console.log("🚀 Slash komutları güncellendi.");
   } catch (err) {
-    console.error("Komut yükleme hatası:", err);
+    console.error("Rest hatası:", err);
   }
 
   try {
     const currentUser = await noblox.setCookie(process.env.ROBLOX_COOKIE);
-    console.log(`🤖 Roblox API aktif: ${currentUser.UserName}`);
+    console.log(`🤖 Roblox: ${currentUser.UserName}`);
   } catch (err) {
-    console.error("Roblox Hatası:", err.message);
+    console.log("Roblox Hatası: Cookie geçersiz veya girilmemiş.");
   }
 });
 
-// ================= INTERACTION (YETKİ KONTROLÜ) =================
+// ================= INTERACTION (ERENSI YETKİLEME SİSTEMİ) =================
 client.on(Events.InteractionCreate, async interaction => {
   if (!interaction.isChatInputCommand()) return;
-
-  // DM kontrolü
-  if (!interaction.inGuild()) {
-    return interaction.reply({ content: "❌ Komutlar sadece sunucularda çalışır.", ephemeral: true });
-  }
 
   const command = client.commands.get(interaction.commandName);
   if (!command) return;
 
+  // Sadece sunucu içi kullanım
+  if (!interaction.inGuild()) {
+    return interaction.reply({ content: "❌ Bu komut sadece sunucularda kullanılabilir.", ephemeral: true });
+  }
+
   const member = interaction.member;
 
-  // --- 🛡️ ERENSI YETKİ TARAMA SİSTEMİ ---
-  
-  // 1. Kullanıcı Yetki Taraması (Rollerin içindeki yetkilere bakar)
+  // --- 🛡️ OTOMATİK ROL VE YETKİ TARAYICI ---
+
+  // 1. Kullanıcı Yetki Taraması (Owner olsan bile yetkin yoksa giremezsin)
   if (command.userPermissions && command.userPermissions.length > 0) {
-    const missingUserPerms = command.userPermissions.filter(perm => !member.permissions.has(perm));
+    const missingPerms = command.userPermissions.filter(perm => !member.permissions.has(perm));
     
-    if (missingUserPerms.length > 0) {
+    if (missingPerms.length > 0) {
       return interaction.reply({
-        content: `❌ Bu komutu kullanmak için şu yetkilere sahip bir rolün olmalı: \`${missingUserPerms.join(", ")}\``,
+        content: `❌ Bu komut için gerekli yetkiye sahip bir rolün bulunmuyor!\nEksik Yetki(ler): \`${missingPerms.join(", ")}\``,
         ephemeral: true
       });
     }
   }
 
-  // 2. Bot Yetki Taraması (Botun o işlemi yapmaya yetkisi var mı?)
+  // 2. Bot Yetki Taraması (Botun o role gücü yetiyor mu?)
   if (command.botPermissions && command.botPermissions.length > 0) {
     const missingBotPerms = command.botPermissions.filter(perm => !interaction.guild.members.me.permissions.has(perm));
 
     if (missingBotPerms.length > 0) {
       return interaction.reply({
-        content: `❌ Benim bu işlemi yapabilmem için şu yetkilere ihtiyacım var: \`${missingBotPerms.join(", ")}\``,
+        content: `❌ Benim bu komutu çalıştırmak için yetkim yetersiz: \`${missingBotPerms.join(", ")}\``,
         ephemeral: true
       });
     }
   }
 
-  // 3. Sadece Geliştirici Kontrolü (Opsiyonel)
-  if (command.developerOnly && interaction.user.id !== "SENIN_ID_BURAYA") {
-    return interaction.reply({ content: "❌ Bu komut sadece bot sahibine özeldir.", ephemeral: true });
-  }
-
-  // --- KOMUTU ÇALIŞTIR ---
+  // --- EXECUTE ---
   try {
     await command.execute(interaction, client);
   } catch (err) {
     console.error(err);
-    const errorMsg = { content: "❌ Komut çalışırken bir hata oluştu!", ephemeral: true };
-    if (interaction.replied || interaction.deferred) await interaction.followUp(errorMsg);
-    else await interaction.reply(errorMsg);
+    if (interaction.replied || interaction.deferred) {
+      await interaction.followUp({ content: "❌ Komut çalışırken teknik bir hata oluştu.", ephemeral: true });
+    } else {
+      await interaction.reply({ content: "❌ Komut çalışırken teknik bir hata oluştu.", ephemeral: true });
+    }
   }
 });
 
-// ================= WEB API & PORT =================
-app.get("/", (req, res) => res.send("Bot Aktif!"));
-app.listen(process.env.PORT || 3000, () => console.log("🌐 Web sunucusu hazır."));
+// ================= EXPRESS & ERROR =================
+app.get("/", (req, res) => res.send("Bot 7/24 Aktif"));
+app.listen(process.env.PORT || 3000);
 
-// ================= HATA YÖNETİMİ =================
-process.on('unhandledRejection', error => console.error('Hata (Promise):', error));
-process.on('uncaughtException', error => {
-  console.error('Kritik Hata (Exception):', error);
-  // Botu hemen kapatma, hatayı logla
-});
+process.on('unhandledRejection', error => console.error('Hata:', error));
+process.on('uncaughtException', error => console.error('Kritik Hata:', error));
 
 client.login(process.env.TOKEN);
