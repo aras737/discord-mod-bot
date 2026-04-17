@@ -1,20 +1,13 @@
-// ================= CORE =================
-const { QuickDB } = require("quick.db");
-const fs = require("fs");
-const path = require("path");
 require("dotenv").config();
 
-// ================= WEB =================
+const fs = require("fs");
+const path = require("path");
 const express = require("express");
 const session = require("express-session");
 const passport = require("passport");
 const DiscordStrategy = require("passport-discord").Strategy;
-const MemoryStore = require("memorystore")(session);
+const { QuickDB } = require("quick.db");
 
-const app = express();
-app.use(express.urlencoded({ extended: true }));
-
-// ================= DISCORD =================
 const {
   Client,
   Collection,
@@ -28,13 +21,19 @@ const {
 
 const noblox = require("noblox.js");
 
-// ================= LOG FORMAT =================
-const log = (...args) => {
-  const time = new Date().toLocaleTimeString();
-  console.log(`[${time}]`, ...args);
-};
+// ================= WEB =================
+const app = express();
+app.use(express.urlencoded({ extended: true }));
 
-// ================= PASSPORT =================
+app.use(session({
+  secret: "tfa_secret",
+  resave: false,
+  saveUninitialized: false
+}));
+
+app.use(passport.initialize());
+app.use(passport.session());
+
 passport.serializeUser((user, done) => done(null, user));
 passport.deserializeUser((obj, done) => done(null, obj));
 
@@ -47,19 +46,7 @@ passport.use(new DiscordStrategy({
   return done(null, profile);
 }));
 
-app.use(session({
-  secret: process.env.SESSION_SECRET || "tfa_secret",
-  resave: false,
-  saveUninitialized: false,
-  store: new MemoryStore({
-    checkPeriod: 86400000
-  })
-}));
-
-app.use(passport.initialize());
-app.use(passport.session());
-
-// ================= BOT =================
+// ================= DISCORD =================
 const client = new Client({
   intents: [
     GatewayIntentBits.Guilds,
@@ -70,11 +57,11 @@ const client = new Client({
   partials: [Partials.Channel]
 });
 
-client.db = new QuickDB();
 client.commands = new Collection();
+client.db = new QuickDB();
 const commands = [];
 
-// ================= YETKİ =================
+// 🔒 Yetkiler
 const ALLOWED_USERS = [
   "752639955049644034",
   "1389930042200559706"
@@ -87,100 +74,112 @@ const ALLOWED_ROLES = [
 
 // ================= KOMUT YÜKLE =================
 const commandsPath = path.join(__dirname, "commands");
-if (fs.existsSync(commandsPath)) {
-  const files = fs.readdirSync(commandsPath).filter(f => f.endsWith(".js"));
 
-  for (const file of files) {
+if (fs.existsSync(commandsPath)) {
+  const commandFiles = fs.readdirSync(commandsPath).filter(f => f.endsWith(".js"));
+
+  for (const file of commandFiles) {
     try {
-      const cmd = require(path.join(commandsPath, file));
-      if ("data" in cmd && "execute" in cmd) {
-        client.commands.set(cmd.data.name, cmd);
-        commands.push(cmd.data.toJSON());
-        log("📡 Komut yüklendi:", cmd.data.name);
+      const command = require(path.join(commandsPath, file));
+      if (command.data && command.execute) {
+        client.commands.set(command.data.name, command);
+        commands.push(command.data.toJSON());
+        console.log("📡 Komut yüklendi:", command.data.name);
       } else {
-        log("⚠️ Eksik komut:", file);
+        console.log("❌ Hatalı komut:", file);
       }
     } catch (err) {
-      log("❌ Komut hatası:", file, err.message);
+      console.log("❌ Komut hata:", file, err.message);
     }
   }
 }
 
 // ================= EVENT YÜKLE =================
 const eventsPath = path.join(__dirname, "events");
-if (fs.existsSync(eventsPath)) {
-  const files = fs.readdirSync(eventsPath).filter(f => f.endsWith(".js"));
 
-  for (const file of files) {
-    const event = require(path.join(eventsPath, file));
-    if (event.name) {
-      if (event.once) client.once(event.name, (...args) => event.execute(...args, client));
-      else client.on(event.name, (...args) => event.execute(...args, client));
-      log("📡 Event:", event.name);
+if (fs.existsSync(eventsPath)) {
+  const eventFiles = fs.readdirSync(eventsPath).filter(f => f.endsWith(".js"));
+
+  for (const file of eventFiles) {
+    try {
+      const event = require(path.join(eventsPath, file));
+      if (event.once) {
+        client.once(event.name, (...args) => event.execute(...args, client));
+      } else {
+        client.on(event.name, (...args) => event.execute(...args, client));
+      }
+      console.log("📡 Event:", event.name);
+    } catch (err) {
+      console.log("❌ Event hata:", file);
     }
   }
 }
 
 // ================= READY =================
 client.once(Events.ClientReady, async () => {
-  log(`✅ Bot aktif: ${client.user.tag}`);
+  console.log(`✅ ${client.user.tag} Aktif!`);
+
+  // 🟢 YEŞİL STATUS
+  client.user.setPresence({
+    status: "online",
+    activities: [
+      {
+        name: "TFA | Moderasyon",
+        type: 0
+      }
+    ]
+  });
 
   const rest = new REST({ version: "10" }).setToken(process.env.TOKEN);
 
   try {
-    await rest.put(Routes.applicationCommands(client.user.id), { body: commands });
-    log("🚀 Slash komutları güncellendi.");
+    await rest.put(Routes.applicationCommands(client.user.id), {
+      body: commands
+    });
+    console.log("🚀 Slash komutları yüklendi.");
   } catch (err) {
-    log("❌ Slash yükleme hatası:", err.message);
+    console.error("Komut yükleme hatası:", err.message);
   }
 
-  // Roblox (opsiyonel)
-  if (process.env.ROBLOX_COOKIE) {
-    try {
+  // Roblox fix
+  try {
+    if (process.env.ROBLOX_COOKIE) {
       const user = await noblox.setCookie(process.env.ROBLOX_COOKIE);
-      log(`🎮 Roblox giriş: ${user.UserName}`);
-    } catch {
-      log("⚠️ Roblox cookie geçersiz.");
+      console.log("Roblox giriş:", user.UserName);
+    } else {
+      console.log("⚠️ Roblox cookie yok.");
     }
-  } else {
-    log("⚠️ Roblox cookie yok (normal)");
+  } catch (err) {
+    console.log("⚠️ Roblox hata:", err.message);
   }
 });
 
-// ================= SLASH =================
+// ================= KOMUT ÇALIŞTIR =================
 client.on(Events.InteractionCreate, async interaction => {
   if (!interaction.isChatInputCommand()) return;
-
-  if (!interaction.inGuild()) {
-    return interaction.reply({
-      content: "❌ Sunucuda kullan.",
-      ephemeral: true
-    });
-  }
 
   const command = client.commands.get(interaction.commandName);
   if (!command) return;
 
-  let member;
-  try {
-    member = await interaction.guild.members.fetch(interaction.user.id);
-  } catch {
-    return interaction.reply({ content: "❌ Kullanıcı alınamadı", ephemeral: true });
+  const member = interaction.member;
+
+  // 🔥 FIX (CRASH ENGEL)
+  if (!member || !member.permissions) {
+    return interaction.reply({
+      content: "❌ Yetki kontrol hatası",
+      ephemeral: true
+    });
   }
 
   const hasUser = ALLOWED_USERS.includes(interaction.user.id);
+  const hasRole = member.roles?.cache?.some(r => ALLOWED_ROLES.includes(r.id));
 
-  const hasRole = member.roles.cache.some(r =>
-    ALLOWED_ROLES.includes(r.id)
-  );
+  // 🔥 ADMIN yetkisi de ekledik
+  const isAdmin = member.permissions.has(PermissionsBitField.Flags.Administrator);
 
-  const hasPerm =
-    member.permissions.has(PermissionsBitField.Flags.Administrator) ||
-    member.permissions.has(PermissionsBitField.Flags.ManageGuild);
-
-  if (!hasUser && !hasRole && !hasPerm) {
+  if (!hasUser && !hasRole && !isAdmin) {
     return interaction.reply({
-      content: "❌ Yetki yok",
+      content: "❌ Bu komutu kullanamazsın",
       ephemeral: true
     });
   }
@@ -188,7 +187,7 @@ client.on(Events.InteractionCreate, async interaction => {
   try {
     await command.execute(interaction, client);
   } catch (err) {
-    log("❌ Komut hata:", err.message);
+    console.error(err);
     if (interaction.replied || interaction.deferred) {
       interaction.followUp({ content: "❌ Hata oluştu", ephemeral: true });
     } else {
@@ -197,9 +196,9 @@ client.on(Events.InteractionCreate, async interaction => {
   }
 });
 
-// ================= WEB ROUTES =================
+// ================= WEB =================
 app.get("/", (req, res) => {
-  res.sendFile(path.join(__dirname, "index.html"));
+  res.sendFile(__dirname + "/index.html");
 });
 
 app.get("/login", passport.authenticate("discord"));
@@ -220,8 +219,7 @@ app.get("/api/user", (req, res) => {
   res.json({
     login: true,
     username: req.user.username,
-    avatar: `https://cdn.discordapp.com/avatars/${req.user.id}/${req.user.avatar}.png`,
-    guilds: req.user.guilds.filter(g => (g.permissions & 0x20) === 0x20)
+    avatar: `https://cdn.discordapp.com/avatars/${req.user.id}/${req.user.avatar}.png`
   });
 });
 
@@ -235,15 +233,15 @@ app.post("/api/log", (req, res) => {
 // ================= PORT =================
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
-  log("🌐 Panel aktif:", PORT);
+  console.log("🌐 Panel aktif:", PORT);
 });
 
-// ================= HATALAR =================
-process.on("unhandledRejection", e => log("Promise:", e));
-process.on("uncaughtException", e => {
-  log("Fatal:", e);
+// ================= HATA =================
+process.on("unhandledRejection", err => console.error("Promise:", err));
+process.on("uncaughtException", err => {
+  console.error("Crash:", err);
   process.exit(1);
 });
 
-// ================= LOGIN =================
+// ================= START =================
 client.login(process.env.TOKEN);
