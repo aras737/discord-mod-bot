@@ -1,22 +1,27 @@
-const { SlashCommandBuilder, EmbedBuilder } = require("discord.js");
+const { SlashCommandBuilder, EmbedBuilder, PermissionsBitField } = require("discord.js");
 
 module.exports = {
-  permissionLevel: "ADMINISTRATOR", // 🔹 Sadece yönetici yetkisine sahipler kullanabilir
+  // 🛡️ ERENSI SİSTEMİ İÇİN YETKİ TANIMI
+  // Burası boş kalırsa veya yanlış yazılırsa herkes kullanır!
+  userPermissions: [PermissionsBitField.Flags.Administrator], 
+  botPermissions: [PermissionsBitField.Flags.SendMessages, PermissionsBitField.Flags.EmbedLinks],
 
   data: new SlashCommandBuilder()
     .setName("rehber")
-    .setDescription("Sunucu rehberini gösterir."),
+    .setDescription("Sunucu rehberini gösterir.")
+    // Bu satır komutu Discord menüsünde yetkisi olmayana gizler:
+    .setDefaultMemberPermissions(PermissionsBitField.Flags.Administrator),
     
   async execute(interaction) {
     const embed = new EmbedBuilder()
-      .setTitle("Sunucu Rehberi")
+      .setTitle("🛡️ Sunucu Rehberi")
       .setDescription(
         "Aşağıda branşlarımızın ve departmanlarımızın Discord sunucuları yer almaktadır. " +
         "Linklere tıklayarak katılım sağlayabilirsiniz."
       )
       .addFields(
         {
-          name: "Branş Sunucuları",
+          name: "🎖️ Branş Sunucuları",
           value:
             "[Askeri İnzibat](https://discord.gg/xxx)\n" +
             "[Özel Harekat Komutanlığı](https://discord.gg/xxx)\n" +
@@ -26,7 +31,7 @@ module.exports = {
             "[Sınır Müfettişleri](https://discord.gg/xxx)\n",
         },
         {
-          name: "Departman Sunucuları",
+          name: "🏢 Departman Sunucuları",
           value:
             "[Moderatör Ekibi](https://discord.gg/xxx)\n" +
             "[Ordu Yönetimi](https://discord.gg/xxx)\n" +
@@ -36,14 +41,14 @@ module.exports = {
             "[Yetkili Akademisi](https://discord.gg/xxx)"
         },
         {
-          name: "Bilgilendirme",
+          name: "ℹ️ Bilgilendirme",
           value:
             "Sunucularımız bu şekildedir. Eğer Roblox gruplarına ulaşmak isterseniz [Buraya Tıklayın](https://www.roblox.com/group/33389098) ve ardından müttefikler kısmına basın. Roblox gruplarına bu şekilde ulaşabilirsiniz. İyi eğlenceler!"
         }
       )
       .setColor("Red")
       .setFooter({
-        text: "TAH Yönetim Kurulu Botu",
+        text: "TSA Yönetim Botu",
         iconURL: "https://i.imgur.com/file-2NMqhhvDaZuAgwjbGwEo1M.png"
       })
       .setTimestamp();
