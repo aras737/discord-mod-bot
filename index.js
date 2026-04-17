@@ -96,8 +96,6 @@ for (const file of eventFiles) {
     if (event.once) client.once(event.name, (...args) => event.execute(...args, client));
     else client.on(event.name, (...args) => event.execute(...args, client));
     console.log(`Olay yüklendi: ${event.name}`);
-  } else {
-    console.log(`Olay eksik veya hatalı: ${file}`);
   }
 }
 
@@ -137,25 +135,32 @@ client.on(Events.InteractionCreate, async interaction => {
   const command = client.commands.get(interaction.commandName);
   if (!command) return;
 
-  const member = interaction.member;
+  // 🔥 MEMBER FETCH (CRASH FIX)
+  let member;
+  try {
+    member = await interaction.guild.members.fetch(interaction.user.id);
+  } catch (err) {
+    console.error("Member fetch hatası:", err);
+    return interaction.reply({
+      content: "❌ Kullanıcı alınamadı.",
+      ephemeral: true
+    });
+  }
 
   // 🔒 Kullanıcı yetki
   const hasUserPermission = ALLOWED_USERS.includes(interaction.user.id);
 
-  // 🔒 Rol yetki (CRASH FIX)
-  let hasRolePermission = false;
+  // 🔒 Rol yetki
+  const hasRolePermission = member.roles.cache.some(role =>
+    ALLOWED_ROLES.includes(role.id)
+  );
 
-  if (member && member.roles && member.roles.cache) {
-    hasRolePermission = member.roles.cache.some(role =>
-      ALLOWED_ROLES.includes(role.id)
-    );
-  }
-
-  // 🔥 PERMISSION fallback (PRO)
+  // 🔥 Discord permission (PRO)
   const hasDiscordPermission =
     member.permissions.has(PermissionsBitField.Flags.Administrator) ||
     member.permissions.has(PermissionsBitField.Flags.ManageGuild);
 
+  // ❌ YETKİ KONTROL
   if (!hasUserPermission && !hasRolePermission && !hasDiscordPermission) {
     return interaction.reply({
       content: "❌ Yetki yok",
@@ -175,7 +180,7 @@ client.on(Events.InteractionCreate, async interaction => {
   }
 });
 
-// ================= WEB ROUTES =================
+// ================= WEB =================
 app.get("/", (req, res) => {
   res.sendFile(__dirname + "/index.html");
 });
@@ -207,7 +212,6 @@ app.post("/api/log", (req, res) => {
   if(!req.user) return res.json({ ok:false });
 
   client.db.set(`log_${req.body.guild}`, req.body.channel);
-
   res.json({ ok:true });
 });
 
