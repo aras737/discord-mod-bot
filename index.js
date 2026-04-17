@@ -62,7 +62,7 @@ const commands = [];
 
 // 🔒 Kullanıcı / Rol yetki
 const ALLOWED_USERS = [
-  "752639955049644034",
+  "1389930042200559706",
   "1389930042200559706"
 ];
 
